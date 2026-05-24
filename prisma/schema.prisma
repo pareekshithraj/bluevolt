@@ -1,0 +1,213 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Organization {
+  id           Int             @id @default(autoincrement())
+  name         String
+  slug         String          @unique
+  stores       Store[]
+  storeRoles   UserStoreRole[]
+  auditLogs    AuditLog[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+model Store {
+  id             Int             @id @default(autoincrement())
+  organization_id Int
+  name           String
+  slug           String
+  code           String          @unique
+  gstin          String?
+  address        String?
+  default_gst_percentage Float   @default(5)
+  auto_print_receipt Boolean     @default(true)
+  include_gst_breakdown_on_receipt Boolean @default(true)
+  enable_pos_dark_mode Boolean   @default(false)
+  organization   Organization    @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  products       Product[]
+  sales          Sales[]
+  suppliers      Supplier[]
+  purchases      PurchaseOrder[]
+  customers      Customer[]
+  storeRoles     UserStoreRole[]
+  auditLogs      AuditLog[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([organization_id, slug])
+}
+
+model UserStoreRole {
+  id               Int           @id @default(autoincrement())
+  user_id          Int
+  organization_id  Int
+  store_id         Int
+  role             String
+  active           Boolean       @default(true)
+  user             User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  organization     Organization  @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  store            Store         @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@unique([user_id, store_id])
+  @@index([store_id, active])
+}
+
+model Product {
+  id             Int        @id @default(autoincrement())
+  store_id       Int
+  name           String
+  barcode        String
+  price          Float
+  gst_percentage Float
+  stock          Int        @default(0)
+  store          Store      @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  saleItems      SaleItem[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@unique([store_id, barcode])
+  @@index([store_id, name])
+}
+
+model Sales {
+  id             Int        @id @default(autoincrement())
+  store_id       Int
+  bill_number    String
+  total_amount   Float
+  payment_method String
+  customer_id    Int?
+  store          Store      @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  customer       Customer?  @relation(fields: [customer_id], references: [id], onDelete: SetNull)
+  date           DateTime   @default(now())
+  saleItems      SaleItem[]
+
+  @@unique([store_id, bill_number])
+  @@index([store_id, date])
+}
+
+model SaleItem {
+  id         Int      @id @default(autoincrement())
+  sale_id    Int
+  product_id Int
+  quantity   Int
+  price      Float
+  sale       Sales    @relation(fields: [sale_id], references: [id], onDelete: Cascade)
+  product    Product  @relation(fields: [product_id], references: [id], onDelete: Restrict)
+}
+
+model User {
+  id          Int             @id @default(autoincrement())
+  name        String
+  username    String          @unique
+  role        String
+  password    String
+  status      String          @default("Active")
+  lastLogin   DateTime?
+  storeRoles  UserStoreRole[]
+  auditLogs   AuditLog[]
+  createdAt   DateTime        @default(now())
+}
+
+model AuditLog {
+  id               Int           @id @default(autoincrement())
+  organization_id  Int
+  store_id         Int?
+  actor_user_id    Int?
+  action           String
+  entity_type      String
+  entity_id        String?
+  metadata         Json?
+  organization     Organization  @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  store            Store?        @relation(fields: [store_id], references: [id], onDelete: SetNull)
+  actor            User?         @relation(fields: [actor_user_id], references: [id], onDelete: SetNull)
+  createdAt        DateTime      @default(now())
+
+  @@index([organization_id, createdAt])
+  @@index([store_id, createdAt])
+  @@index([actor_user_id, createdAt])
+}
+
+model Supplier {
+  id          Int             @id @default(autoincrement())
+  store_id    Int
+  name        String
+  contact     String
+  phone       String
+  email       String
+  category    String
+  active      Boolean         @default(true)
+  store       Store           @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  purchases   PurchaseOrder[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([store_id, name])
+}
+
+model PurchaseOrder {
+  id           Int       @id @default(autoincrement())
+  store_id     Int
+  po_number    String
+  supplier_id  Int
+  items_count  Int       @default(0)
+  total_amount Float     @default(0)
+  status       String    @default("Pending")
+  date         DateTime  @default(now())
+  store        Store     @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  supplier     Supplier  @relation(fields: [supplier_id], references: [id], onDelete: Restrict)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([store_id, po_number])
+  @@index([store_id, createdAt])
+}
+
+model Customer {
+  id           Int       @id @default(autoincrement())
+  store_id     Int
+  phone        String
+  name         String?
+  total_points Int       @default(0)
+  store        Store     @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  purchases    Sales[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([store_id, phone])
+  @@index([store_id, createdAt])
+}
+
+model ContactInquiry {
+  id           Int      @id @default(autoincrement())
+  firstName    String
+  lastName     String
+  email        String
+  organization String
+  interest     String
+  message      String?
+  source       String   @default("website")
+  createdAt    DateTime @default(now())
+
+  @@index([email])
+  @@index([createdAt])
+}
+
+model StudioProject {
+  id           String   @id
+  client       String
+  name         String
+  url          String
+  passwordHash String
+  status       String   @default("ACTIVE")
+  latency      String   @default("4.5ms")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

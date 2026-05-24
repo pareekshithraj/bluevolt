@@ -1,0 +1,198 @@
+.page {
+  min-height: 100vh;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  padding: 9rem 1.5rem 5rem;
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.eyebrow {
+  display: inline-block;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-light);
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  margin-bottom: 1.2rem;
+}
+
+.title {
+  font-size: clamp(2rem, 4.4vw, 3rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.8rem;
+}
+
+.subtitle {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text-secondary);
+}
+
+.meta {
+  margin-top: 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.section {
+  margin-top: 2.25rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-main);
+  border-radius: 12px;
+  padding: 1.35rem;
+}
+
+.section h2 {
+  margin: 0 0 0.8rem;
+  font-size: 1.15rem;
+}
+
+.section p,
+.section li {
+  color: var(--text-secondary);
+  font-size: 0.98rem;
+  line-height: 1.7;
+}
+
+.section ul {
+  margin: 0.6rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.notice {
+  margin-top: 2rem;
+  border-left: 4px solid var(--accent);
+  background: var(--accent-light);
+  padding: 0.9rem 1rem;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+}
+
+.preferenceCard {
+  margin-top: 2rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-main);
+  border-radius: 12px;
+  padding: 1.2rem;
+}
+
+.preferenceTitle {
+  margin: 0 0 0.55rem;
+  font-size: 1.1rem;
+}
+
+.preferenceText {
+  margin: 0 0 0.9rem;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.preferenceRowStatic {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  border-top: 1px solid var(--border-subtle);
+  padding: 0.8rem 0;
+}
+
+.preferenceLabel {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.92rem;
+}
+
+.preferenceHint {
+  margin: 0.2rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.preferenceTagOn {
+  font-size: 0.75rem;
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  padding: 0.22rem 0.6rem;
+  white-space: nowrap;
+}
+
+.checkboxLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+}
+
+.checkboxLabel input {
+  accent-color: var(--accent);
+}
+
+.preferenceActions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.8rem;
+}
+
+.buttonPrimary,
+.buttonSecondary {
+  border-radius: 8px;
+  padding: 0.55rem 0.85rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.buttonPrimary {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+}
+
+.buttonSecondary {
+  border: 1px solid var(--border-main);
+  background: white;
+  color: var(--text-primary);
+}
+
+.preferenceMessage {
+  margin: 0.7rem 0 0;
+  color: var(--accent);
+  font-size: 0.86rem;
+}
+
+.mailLink {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.mailLink:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .page {
+    padding: 7rem 1rem 4rem;
+  }
+
+  .section {
+    padding: 1rem;
+  }
+
+  .preferenceRowStatic {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

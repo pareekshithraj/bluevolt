@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Schools24 | Powering Schools. Empowering Students.</title>
+    <meta name="description"
+        content="Schools24 Technologies Pvt Ltd is an end-to-end school technology, infrastructure, and digital solutions company." />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="./style.css" />
+    <style>
+        /* Specific overrides/additions for this dense page */
+        .services-grid-dense {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: var(--space-md);
+            margin-top: var(--space-lg);
+        }
+
+        .dense-card {
+            padding: var(--space-md);
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: var(--radius-md);
+            transition: all var(--transition-normal);
+            backdrop-filter: blur(10px);
+        }
+
+        .dense-card:hover {
+            background: rgba(0, 240, 255, 0.05);
+            border-color: var(--color-primary);
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .dense-card-icon {
+            font-size: 2rem;
+            margin-bottom: var(--space-sm);
+            filter: drop-shadow(0 0 8px var(--color-primary));
+        }
+
+        .dense-card-title {
+            font-size: 1.25rem;
+            color: var(--color-heading);
+            margin-bottom: var(--space-xs);
+        }
+
+        .specialty-section {
+            background: linear-gradient(135deg, rgba(10, 10, 10, 0.8) 0%, rgba(18, 18, 18, 0.9) 100%);
+            border-top: 1px solid var(--color-border);
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .list-styled {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .list-styled li {
+            position: relative;
+            padding-left: 1.5rem;
+            margin-bottom: 0.5rem;
+            color: var(--color-text);
+        }
+
+        .list-styled li::before {
+            content: '→';
+            position: absolute;
+            left: 0;
+            color: var(--color-primary);
+            font-family: var(--font-heading);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Custom Cursor -->
+    <div class="cursor"></div>
+    <div class="cursor-follower"></div>
+
+    <!-- Ambient Background Orbs -->
+    <div class="ambient-orb orb-1"></div>
+    <div class="ambient-orb orb-2"></div>
+    <div class="ambient-orb orb-3"></div>
+
+    <!-- Navbar -->
+    <nav id="navbar" class="navbar">
+        <div class="container nav-container">
+            <a href="index.html" class="logo">
+                <div class="logo-image-container">
+                    <img src="./Assets/BlueVolt.png" alt="Bluevolt Logo" class="brand-logo" />
+                </div>
+            </a>
+            <div class="nav-links">
+                <a href="index.html#about" class="nav-link">About Bluevolt</a>
+                <a href="#about" class="nav-link">About Schools24</a>
+                <a href="#services" class="nav-link">Ecosystem</a>
+                <button id="theme-toggle" class="btn-small"
+                    style="cursor: none; padding: 0.5rem; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--color-border); background: var(--color-surface-glass); backdrop-filter: blur(10px); color: var(--color-heading);">
+                    <span class="theme-icon-light" style="display: block; font-size: 1.2rem;">🌞</span>
+                    <span class="theme-icon-dark" style="display: none; font-size: 1.2rem;">🌙</span>
+                </button>
+                <a href="#contact" class="btn btn-primary btn-small">Contact Us</a>
+            </div>
+            <button class="mobile-menu-btn" aria-label="Toggle menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </div>
+    </nav>
+
+    <main>
+        <!-- Hero Section -->
+        <section class="hero" style="min-height: 80vh;">
+            <div class="container hero-container">
+                <div class="hero-content reveal" style="max-width: 900px; text-align: center; margin: 0 auto;">
+                    <img src="./Assets/Schools24 icon (2).png" alt="Schools24 Technologies"
+                        style="max-height: 120px; margin: 0 auto var(--space-md); filter: drop-shadow(0 0 20px rgba(255,255,255,0.2));">
+                    <h1 class="hero-title" style="font-size: clamp(3rem, 6vw, 5rem);">Powering <span
+                            class="text-gradient">Schools</span>. Empowering Students.</h1>
+                    <p class="hero-subtitle">An end-to-end school technology, infrastructure, and digital solutions
+                        company.</p>
+                    <div class="hero-cta">
+                        <a href="#about" class="btn btn-primary">Discover the Ecosystem</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- About Company - Bento Grid style -->
+        <section id="about" class="section">
+            <div class="container">
+                <div class="section-header reveal text-center">
+                    <h2 class="section-title">What We Do</h2>
+                    <p class="section-description mx-auto">We partner with schools to modernize their operations,
+                        classrooms, digital identity, and institutional presence through a single integrated ecosystem.
+                    </p>
+                </div>
+
+                <div class="bento-grid">
+                    <div class="bento-item bento-large glass reveal tilt-card">
+                        <div class="bento-content">
+                            <div class="card-icon glow-icon">⚡</div>
+                            <h3 class="card-title">Powered by Schools24</h3>
+                            <p class="card-text">Once a school partners with us, we take complete responsibility for
+                                planning, implementation, and coordination — allowing schools to focus on education
+                                while we handle technology, infrastructure, and systems. You deal with one partner, one
+                                system, one bill.</p>
+                        </div>
+                    </div>
+
+                    <div class="bento-item glass reveal tilt-card" style="transition-delay: 0.1s;">
+                        <div class="bento-content">
+                            <div class="card-icon glow-icon">💡</div>
+                            <h3 class="card-title">Unified Ecosystem</h3>
+                            <p class="card-text">Software, infrastructure, and devices are fully integrated to work
+                                seamlessly together.</p>
+                        </div>
+                    </div>
+
+                    <div class="bento-item glass reveal tilt-card" style="transition-delay: 0.2s;">
+                        <div class="bento-content">
+                            <div class="card-icon glow-icon">🎓</div>
+                            <h3 class="card-title">Scalable Solutions</h3>
+                            <p class="card-text">Designed to be structured and school-friendly, suitable for State
+                                Board, CBSE, and integrated academic institutions.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Services Dense Grid -->
+        <section id="services" class="section bg-light">
+            <div class="container">
+                <div class="section-header reveal">
+                    <h2 class="section-title">Complete <span class="text-gradient">Solutions</span></h2>
+                    <p class="section-description">Combining software, hardware, infrastructure, academics, and branding
+                        under one umbrella.</p>
+                </div>
+
+                <div class="services-grid-dense">
+                    <div class="dense-card reveal">
+                        <div class="dense-card-icon">📱</div>
+                        <h3 class="dense-card-title">School Management Software</h3>
+                        <p class="card-text" style="font-size: 0.9rem;">Comprehensive operations via the properietary
+                            Schools24 App.</p>
+                    </div>
+                    <div class="dense-card reveal" style="transition-delay: 0.05s;">
+                        <div class="dense-card-icon">🖥️</div>
+                        <h3 class="dense-card-title">Smart Classroom Solutions</h3>
+                        <p class="card-text" style="font-size: 0.9rem;">Interactive Smart Boards & Smart TVs deployment.
+                        </p>
+                    </div>
+                    <div class="dense-card reveal" style="transition-delay: 0.1s;">
+                        <div class="dense-card-icon">📟</div>
+                        <h3 class="dense-card-title">Student Tablet Solutions</h3>
+                        <p class="card-text" style="font-size: 0.9rem;">Managed digital devices for 1-to-1 learning
+                            environments.</p>
+                    </div>
+                    <div class="dense-card reveal" style="transition-delay: 0.15s;">
+                        <div class="dense-card-icon">🛜</div>
+                        <h3 class="dense-card-title">Campus Wi-Fi & Networking</h3>
+                        <p class="card-text" style="font-size: 0.9rem;">Robust, secure, and high-speed infrastructure
+                            setup.</p>
+                    </div>
+                    <div class="dense-card reveal" style="transition-delay: 0.2s;">
+                        <div class="dense-card-icon">💻</div>
+                        <h3 class="dense-card-title">Computer Lab Solutions</h3>
+                        <p class="card-text" style="font-size: 0.9rem;">Complete hardware and networking for modern
+                            labs.</p>
+                    </div>
+                    <div class="dense-card reveal" style="transition-delay: 0.25s;">
+                        <div class="dense-card-icon">🔬</div>
+                        <h3 class="dense-card-title">Science & Mathematics Labs</h3>
+                        <p class="card-text" style="font-size: 0.9rem;">Curated equipment and setup for STEM subjects.
+                        </p>
+                    </div>
+                    <div class="dense-card reveal">
+                        <div class="dense-card-icon">💼</div>
+                        <h3 class="dense-card-title">Teacher & Admin Laptops</h3>
+                        <p class="card-text" style="font-size: 0.9rem;">Managed enterprise-grade devices for staff
+                            productivity.</p>
+                    </div>
+                    <div class="dense-card reveal" style="transition-delay: 0.05s;">
+                        <div class="dense-card-icon">🌐</div>
+                        <h3 class="dense-card-title">Website Design & Management</h3>
+                        <p class="card-text" style="font-size: 0.9rem;">Professional digital presence created and
+                            maintained.</p>
+                    </div>
+                    <div class="dense-card reveal" style="transition-delay: 0.1s;">
+                        <div class="dense-card-icon">📧</div>
+                        <h3 class="dense-card-title">Email & Digital Identity</h3>
+                        <p class="card-text" style="font-size: 0.9rem;">Official IDs and centralized directory
+                            solutions.</p>
+                    </div>
+                    <div class="dense-card reveal" style="transition-delay: 0.15s;">
+                        <div class="dense-card-icon">🤖</div>
+                        <h3 class="dense-card-title">AI & Productivity Tools</h3>
+                        <p class="card-text" style="font-size: 0.9rem;">Controlled, school-approved enablement of
+                            next-gen tools.</p>
+                    </div>
+                    <div class="dense-card reveal" style="transition-delay: 0.2s;">
+                        <div class="dense-card-icon">📚</div>
+                        <h3 class="dense-card-title">JEE & NEET Prep (MTG)</h3>
+                        <p class="card-text" style="font-size: 0.9rem;">Foundation & preparation books for competitive
+                            exams.</p>
+                    </div>
+                    <div class="dense-card reveal" style="transition-delay: 0.25s;">
+                        <div class="dense-card-icon">🎨</div>
+                        <h3 class="dense-card-title">Branding & Marketing</h3>
+                        <p class="card-text" style="font-size: 0.9rem;">Complete institutional branding and material
+                            design.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Specialty Features (Split Layout) -->
+        <section class="section specialty-section">
+            <div class="container"
+                style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-xl);">
+
+                <div class="reveal">
+                    <h3 class="service-title" style="font-size: 2rem;">Digital Identity & Productivity</h3>
+                    <p class="service-desc mb-md">All digital tools are configured for academic, responsible, and
+                        school-approved usage.</p>
+                    <ul class="list-styled">
+                        <li>Official student email IDs</li>
+                        <li>Google Workspace setup & management</li>
+                        <li>Centrally managed student digital identity</li>
+                        <li>Controlled access to AI tools</li>
+                    </ul>
+                </div>
+
+                <div class="reveal" style="transition-delay: 0.2s;">
+                    <h3 class="service-title" style="font-size: 2rem;">Branding & Online Presence</h3>
+                    <p class="service-desc mb-md">Ensuring a consistent, professional identity across physical and
+                        digital platforms.</p>
+                    <ul class="list-styled">
+                        <li>School signage and name boards</li>
+                        <li>Admission and marketing materials</li>
+                        <li>Printables and stationaries</li>
+                        <li>Official school website maintenance</li>
+                    </ul>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Pricing & Closing -->
+        <section class="section">
+            <div class="container" style="text-align: center; max-width: 800px;">
+                <div class="glass p-lg reveal tilt-card"
+                    style="padding: var(--space-xl) var(--space-md); border-color: var(--color-primary);">
+                    <h2 class="section-title mb-sm">Transparent <span class="text-gradient">Pricing</span></h2>
+                    <p class="card-text"
+                        style="font-size: 1.5rem; color: var(--color-heading); margin-bottom: var(--space-xs);">Software
+                        License: <strong><span class="text-gradient">₹1,000</span> per user / year</strong></p>
+                    <p class="card-text" style="color: var(--color-text);">Hardware, infrastructure, devices, and books
+                        are billed separately based on scope.</p>
+
+                    <div style="margin-top: var(--space-lg);">
+                        <a href="mailto:contact@schools24.in" class="btn btn-primary">Partner With Us</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer id="contact" class="footer">
+        <div class="container footer-container">
+            <div class="footer-brand">
+                <a href="index.html" class="logo footer-logo-container">
+                    <img src="./Assets/BlueVolt.png" alt="Bluevolt Logo" class="footer-brand-logo" />
+                </a>
+                <p class="footer-tagline">Parent company of Schools24.</p>
+            </div>
+            <div class="footer-links">
+                <h4>Schools24</h4>
+                <a href="#about">About Ecosystem</a>
+                <a href="#services">Solutions</a>
+                <a href="www.schools24.in">Visit Website</a>
+            </div>
+            <div class="footer-links">
+                <h4>Legal</h4>
+                <a href="#">Privacy Policy</a>
+                <a href="#">Terms of Service</a>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2026 Schools24 Technologies Pvt Ltd. A Bluevolt Group Company.</p>
+        </div>
+    </footer>
+
+    <script type="module" src="./main.js"></script>
+</body>
+
+</html>

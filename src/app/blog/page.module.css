@@ -1,0 +1,134 @@
+.page {
+  padding: 9.5rem 1.5rem 5rem;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(37, 99, 235, 0.1), transparent 45%),
+    radial-gradient(circle at 88% 10%, rgba(29, 78, 216, 0.08), transparent 40%),
+    var(--bg-base);
+}
+
+.hero {
+  max-width: 980px;
+  margin: 0 auto 2.5rem;
+  text-align: center;
+  padding: 2.2rem 1rem 1rem;
+}
+
+.eyebrow {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--accent);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  font-weight: 700;
+  padding: 0.35rem 0.75rem;
+}
+
+.title {
+  margin: 1.1rem 0 0;
+  font-size: clamp(2.1rem, 4.8vw, 3.4rem);
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+}
+
+.subtitle {
+  margin: 1rem auto 0;
+  max-width: 68ch;
+  color: var(--text-secondary);
+  font-size: clamp(1rem, 2vw, 1.18rem);
+  line-height: 1.75;
+}
+
+.gridSection {
+  max-width: 1160px;
+  margin: 0 auto;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-main);
+  border-radius: 14px;
+  padding: 1.3rem;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(37, 99, 235, 0.4);
+  box-shadow: var(--shadow-md);
+}
+
+.cardMeta {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.cardTitle {
+  margin: 0.75rem 0 0;
+  font-size: 1.26rem;
+  line-height: 1.35;
+}
+
+.cardTitle a {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.cardTitle a:hover {
+  color: var(--accent);
+}
+
+.cardDescription {
+  margin: 0.75rem 0 0;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.cardCta {
+  margin-top: auto;
+  padding-top: 1.05rem;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.cardCta:hover {
+  color: var(--accent-dark);
+}
+
+@media (max-width: 1024px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .page {
+    padding: 7.8rem 0.95rem 4rem;
+  }
+
+  .hero {
+    margin-bottom: 1.7rem;
+    padding-inline: 0.2rem;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

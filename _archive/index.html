@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bluevolt Groups | Educational & Technology Services</title>
+  <meta name="description"
+    content="Bluevolt Groups Private Limited provides premier educational support, skill development, digital learning platforms, and instructional design." />
+  <!-- Modern Typography: Outfit for Headings, Inter for Body -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="./style.css" />
+</head>
+
+<body>
+  <!-- Custom Cursor -->
+  <div class="cursor"></div>
+  <div class="cursor-follower"></div>
+
+  <!-- Ambient Background Orbs -->
+  <div class="ambient-orb orb-1"></div>
+  <div class="ambient-orb orb-2"></div>
+  <div class="ambient-orb orb-3"></div>
+
+  <!-- Navbar -->
+  <nav id="navbar" class="navbar">
+    <div class="container nav-container">
+      <a href="#" class="logo">
+        <div class="logo-image-container">
+          <img src="./Assets/BlueVolt.png" alt="Bluevolt Logo" class="brand-logo" />
+        </div>
+      </a>
+      <div class="nav-links">
+        <a href="#about" class="nav-link">About Us</a>
+        <a href="#services" class="nav-link">Services</a>
+        <a href="#brands" class="nav-link">Our Brands</a>
+        <button id="theme-toggle" class="btn-small"
+          style="cursor: none; padding: 0.5rem; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--color-border); background: var(--color-surface-glass); backdrop-filter: blur(10px); color: var(--color-heading);">
+          <span class="theme-icon-light" style="display: block; font-size: 1.2rem;">🌞</span>
+          <span class="theme-icon-dark" style="display: none; font-size: 1.2rem;">🌙</span>
+        </button>
+        <a href="#contact" class="btn btn-primary btn-small">Get in Touch</a>
+      </div>
+      <button class="mobile-menu-btn" aria-label="Toggle menu">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+  </nav>
+  <main>
+    <!-- Hero Section -->
+    <section id="hero" class="hero">
+      <div class="hero-background"></div>
+      <div class="container hero-container">
+        <div class="hero-content reveal">
+          <h1 class="hero-title">Empowering the Future with <span class="text-gradient">Education & Technology</span>
+          </h1>
+          <p class="hero-subtitle">Bluevolt Groups delivers premier educational support, skill development, and
+            cutting-edge EdTech solutions to transform learning experiences.</p>
+          <div class="hero-cta">
+            <a href="#services" class="btn btn-primary">Our Services</a>
+            <a href="#about" class="btn btn-secondary">Discover More</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- About Section - Bento Grid -->
+    <section id="about" class="section">
+      <div class="container">
+        <div class="section-header reveal">
+          <h2 class="section-title">About Bluevolt</h2>
+          <p class="section-description">We are dedicated to revolutionizing education through comprehensive support and
+            advanced digital platforms.</p>
+        </div>
+        <div class="bento-grid">
+          <!-- Main Bento Feature -->
+          <div class="bento-item bento-large glass reveal tilt-card">
+            <div class="bento-content">
+              <div class="card-icon glow-icon">📚</div>
+              <h3 class="card-title">Educational Excellence</h3>
+              <p class="card-text">Providing high-tier academic counseling, career guidance, and comprehensive training
+                to students and institutions globally.</p>
+            </div>
+          </div>
+
+          <!-- Secondary Features -->
+          <div class="bento-item glass reveal tilt-card" style="transition-delay: 0.1s;">
+            <div class="bento-content">
+              <div class="card-icon glow-icon">💻</div>
+              <h3 class="card-title">EdTech Innovation</h3>
+              <p class="card-text">Next-gen e-learning platforms, LMS, and digital content libraries.</p>
+            </div>
+          </div>
+
+          <div class="bento-item glass reveal tilt-card" style="transition-delay: 0.2s;">
+            <div class="bento-content">
+              <div class="card-icon glow-icon">🚀</div>
+              <h3 class="card-title">Skill Development</h3>
+              <p class="card-text">Masterclasses, workshops, and coaching in cutting-edge tech and commerce.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Services Section -->
+    <section id="services" class="section">
+      <div class="container">
+        <div class="section-header reveal">
+          <h2 class="section-title">Our <span class="text-gradient">Services</span></h2>
+          <p class="section-description">Comprehensive solutions tailored for optimal educational pathways and digital
+            transformation.</p>
+        </div>
+        <div class="services-list">
+          <div class="service-row reveal">
+            <div class="service-content">
+              <h3 class="service-title">Academic & Career Support</h3>
+              <p class="service-desc">We offer end-to-end educational support services including academic counseling,
+                training coordination, and examination support to ensure institutional and student success.</p>
+            </div>
+          </div>
+          <div class="service-row reverse reveal">
+            <div class="service-content">
+              <h3 class="service-title">Digital Publishing & Content</h3>
+              <p class="service-desc">Publishing journals, study materials, research publications, and dynamic
+                educational content in various formats—physical, electronic, and online.</p>
+            </div>
+          </div>
+          <div class="service-row reveal">
+            <div class="service-content">
+              <h3 class="service-title">Custom Software & Platforms</h3>
+              <p class="service-desc">Designing, maintaining, and developing computer programs, mobile applications, and
+                online assessment systems for commercial and educational purposes.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Brands Section -->
+    <section id="brands" class="section">
+      <div class="container">
+        <div class="section-header reveal">
+          <h2 class="section-title">Our <span class="text-gradient">Brands</span></h2>
+          <p class="section-description">Proud parent to innovative platforms driving the future of education.</p>
+        </div>
+        <div class="brands-grid">
+          <div class="brand-card glass reveal tilt-card">
+            <div class="brand-logo-container">
+              <img src="./Assets/Schools24 icon (2).png" alt="Schools24 Logo" class="schools24-logo">
+            </div>
+            <h3 class="brand-title">Schools24</h3>
+            <p class="brand-text" style="margin-bottom: var(--space-md);">A comprehensive school management and digital
+              learning ecosystem.</p>
+            <a href="schools24.html" class="btn btn-primary btn-small">View Profile</a>
+          </div>
+          <!-- More brands can be seamlessly added here -->
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer id="contact" class="footer">
+    <div class="container footer-container">
+      <div class="footer-brand">
+        <a href="#" class="logo footer-logo-container">
+          <img src="./Assets/BlueVolt.png" alt="Bluevolt Logo" class="footer-brand-logo" />
+        </a>
+        <p class="footer-tagline">Innovating learning, empowering minds.</p>
+      </div>
+      <div class="footer-links">
+        <h4>Company</h4>
+        <a href="#about">About</a>
+        <a href="#services">Services</a>
+        <a href="#">Careers</a>
+      </div>
+      <div class="footer-links">
+        <h4>Legal</h4>
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>&copy; 2026 Bluevolt Groups Private Limited. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script type="module" src="./main.js"></script>
+</body>
+
+</html>

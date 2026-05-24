@@ -1,0 +1,112 @@
+"use client";
+
+import Link from "next/link";
+import Image from "next/image";
+import { Menu, X } from "lucide-react";
+import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
+
+export default function Navbar() {
+    const [scrolled, setScrolled] = useState(false);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const pathname = usePathname();
+
+    useEffect(() => {
+        const handleScroll = () => {
+            if (window.scrollY > 30) {
+                setScrolled(true);
+            } else {
+                setScrolled(false);
+            }
+        };
+
+        window.addEventListener("scroll", handleScroll);
+        return () => window.removeEventListener("scroll", handleScroll);
+    }, []);
+
+    // Close mobile menu when switching to larger screen
+    useEffect(() => {
+        const handleResize = () => {
+            if (window.innerWidth >= 1100 && mobileMenuOpen) {
+                setMobileMenuOpen(false);
+            }
+        };
+        window.addEventListener("resize", handleResize);
+        return () => window.removeEventListener("resize", handleResize);
+    }, [mobileMenuOpen]);
+
+    return (
+        <header className={`navbar-fixed ${scrolled ? "scrolled" : ""}`}>
+            {/* Top Utility Bar (Minimal & Monospace) */}
+            <div className="top-utility-bar">
+                <div style={{ display: "flex", gap: "1.5rem", alignItems: "center" }}>
+                    <span>GLOBAL NODE ACCESS</span>
+                    <span style={{ color: "rgba(255,255,255,0.1)" }}>/</span>
+                    <Link href="/contact" style={{ color: "inherit", textDecoration: "none", transition: "color 0.2s" }}>
+                        BOARD CONTACT
+                    </Link>
+                </div>
+                <div style={{ display: "flex", gap: "1.5rem" }}>
+                    <span>BLUEVOLT GROUPS PVT. LTD.</span>
+                </div>
+            </div>
+
+            {/* Main Navigation Tier */}
+            <div className="navbar-container-inner">
+                <Link href="/" className="navbar-logo" style={{ display: "flex", alignItems: "center", textDecoration: "none" }}>
+                    <Image 
+                        src="/Assets/Logos/BLUEVOLT.png" 
+                        alt="BLUEVOLT GROUPS Logo" 
+                        width={220} 
+                        height={48} 
+                        style={{ objectFit: "contain", height: "44px", width: "auto" }} 
+                        priority 
+                        unoptimized 
+                    />
+                </Link>
+
+                {/* Mobile Menu Toggle Button */}
+                <button
+                    className="mobile-menu-toggle"
+                    onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                    aria-label="Toggle menu"
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "white" }}
+                >
+                    {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+                </button>
+
+                <div className={`nav-links-wrapper ${mobileMenuOpen ? "open" : ""}`}>
+                    <nav className="nav-links">
+                        <Link href="https://schools24.in" target="_blank" className="nav-link-corporate" onClick={() => setMobileMenuOpen(false)}>
+                            Schools24
+                        </Link>
+                        <Link href="https://stores24.bluevolt.group" target="_blank" className="nav-link-corporate" onClick={() => setMobileMenuOpen(false)}>
+                            Stores24
+                        </Link>
+                        <Link href="/services" className="nav-link-corporate" onClick={() => setMobileMenuOpen(false)}>
+                            Services
+                        </Link>
+                        <Link href="/careers" className="nav-link-corporate" onClick={() => setMobileMenuOpen(false)}>
+                            Careers
+                        </Link>
+                        <Link href="/blog" className="nav-link-corporate" onClick={() => setMobileMenuOpen(false)}>
+                            Blog
+                        </Link>
+                        <Link href="/studio" className="nav-link-corporate" onClick={() => setMobileMenuOpen(false)}>
+                            Studio
+                        </Link>
+                        <Link href="/about" className="nav-link-corporate" onClick={() => setMobileMenuOpen(false)}>
+                            About
+                        </Link>
+                    </nav>
+
+                    <div>
+                        <Link href="/contact" className="btn-launch" onClick={() => setMobileMenuOpen(false)}>
+                            Inquire
+                        </Link>
+                    </div>
+                </div>
+            </div>
+        </header>
+    );
+}

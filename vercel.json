@@ -1,0 +1,281 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "rewrites": [
+    {
+      "source": "/assets/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "lifeos.bluevolt.group"
+        }
+      ],
+      "destination": "/lifeos/assets/:path*"
+    },
+    {
+      "source": "/favicon.ico",
+      "has": [
+        {
+          "type": "host",
+          "value": "lifeos.bluevolt.group"
+        }
+      ],
+      "destination": "/lifeos/favicon.ico"
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "lifeos.bluevolt.group"
+        }
+      ],
+      "destination": "/lifeos/index.html"
+    },
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "lifeos.bluevolt.group"
+        }
+      ],
+      "destination": "/lifeos/index.html"
+    },
+    {
+      "source": "/assets/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "vmart.bluevolt.group"
+        }
+      ],
+      "destination": "/vmart/assets/:path*"
+    },
+    {
+      "source": "/vite.svg",
+      "has": [
+        {
+          "type": "host",
+          "value": "vmart.bluevolt.group"
+        }
+      ],
+      "destination": "/vmart/vite.svg"
+    },
+    {
+      "source": "/manifest.webmanifest",
+      "has": [
+        {
+          "type": "host",
+          "value": "vmart.bluevolt.group"
+        }
+      ],
+      "destination": "/vmart/manifest.webmanifest"
+    },
+    {
+      "source": "/sw.js",
+      "has": [
+        {
+          "type": "host",
+          "value": "vmart.bluevolt.group"
+        }
+      ],
+      "destination": "/vmart/sw.js"
+    },
+    {
+      "source": "/firebase-messaging-sw.js",
+      "has": [
+        {
+          "type": "host",
+          "value": "vmart.bluevolt.group"
+        }
+      ],
+      "destination": "/vmart/firebase-messaging-sw.js"
+    },
+    {
+      "source": "/workbox-:hash.js",
+      "has": [
+        {
+          "type": "host",
+          "value": "vmart.bluevolt.group"
+        }
+      ],
+      "destination": "/vmart/workbox-:hash.js"
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "vmart.bluevolt.group"
+        }
+      ],
+      "destination": "/vmart/index.html"
+    },
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "vmart.bluevolt.group"
+        }
+      ],
+      "destination": "/vmart/index.html"
+    },
+    {
+      "source": "/assets/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "vemgalmart.bluevolt.group"
+        }
+      ],
+      "destination": "/vmart/assets/:path*"
+    },
+    {
+      "source": "/vite.svg",
+      "has": [
+        {
+          "type": "host",
+          "value": "vemgalmart.bluevolt.group"
+        }
+      ],
+      "destination": "/vmart/vite.svg"
+    },
+    {
+      "source": "/manifest.webmanifest",
+      "has": [
+        {
+          "type": "host",
+          "value": "vemgalmart.bluevolt.group"
+        }
+      ],
+      "destination": "/vmart/manifest.webmanifest"
+    },
+    {
+      "source": "/sw.js",
+      "has": [
+        {
+          "type": "host",
+          "value": "vemgalmart.bluevolt.group"
+        }
+      ],
+      "destination": "/vmart/sw.js"
+    },
+    {
+      "source": "/firebase-messaging-sw.js",
+      "has": [
+        {
+          "type": "host",
+          "value": "vemgalmart.bluevolt.group"
+        }
+      ],
+      "destination": "/vmart/firebase-messaging-sw.js"
+    },
+    {
+      "source": "/workbox-:hash.js",
+      "has": [
+        {
+          "type": "host",
+          "value": "vemgalmart.bluevolt.group"
+        }
+      ],
+      "destination": "/vmart/workbox-:hash.js"
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "vemgalmart.bluevolt.group"
+        }
+      ],
+      "destination": "/vmart/index.html"
+    },
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "vemgalmart.bluevolt.group"
+        }
+      ],
+      "destination": "/vmart/index.html"
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "stores24.bluevolt.group"
+        }
+      ],
+      "destination": "/stores24"
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "stores24.bluevolt.in"
+        }
+      ],
+      "destination": "/stores24"
+    },
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "stores24.bluevolt.group"
+        }
+      ],
+      "destination": "/stores24/:path*"
+    },
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "stores24.bluevolt.in"
+        }
+      ],
+      "destination": "/stores24/:path*"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "stores24.bluevolt.in"
+        }
+      ],
+      "destination": "https://stores24.bluevolt.group/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/stores24/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "bluevolt.group"
+        }
+      ],
+      "destination": "https://stores24.bluevolt.group/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/stores24/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "bluevolt.in"
+        }
+      ],
+      "destination": "https://stores24.bluevolt.group/:path*",
+      "permanent": true
+    }
+  ]
+}

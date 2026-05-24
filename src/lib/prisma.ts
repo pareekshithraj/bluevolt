@@ -12,7 +12,7 @@ if (!databaseUrl) {
   throw new Error("DATABASE_URL is not set");
 }
 
-// Correctly initialize a node-postgres Pool for the PrismaPg adapter
+// Correctly initialize node-postgres Pool for standard adapter-pg
 const pool = new Pool({ connectionString: databaseUrl });
 const adapter = new PrismaPg(pool);
 

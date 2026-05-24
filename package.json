@@ -7,6 +7,7 @@
     "build": "prisma generate && rimraf .next && next build",
     "start": "next start",
     "lint": "eslint",
+    "db:sync": "prisma db execute --file prisma/migrations/0002_control_plane_and_studio_project/migration.sql",
     "seed:stores24": "node scripts/seed-stores24.mjs",
     "test:tenancy": "node --import dotenv/config --test tests/*.test.mjs"
   },

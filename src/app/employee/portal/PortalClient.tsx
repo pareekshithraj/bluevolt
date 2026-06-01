@@ -543,9 +543,13 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     if (!trimmed) return "";
     const digits = trimmed.replace(/\D/g, "");
     if (!digits) return trimmed;
-    if (digits.length === 10 && digits.startsWith("11")) return `011-${digits.slice(2)}`;
-    if (digits.length === 11 && digits.startsWith("0")) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
-    if (digits.length === 12 && digits.startsWith("91")) return `+91 ${digits.slice(2, 7)} ${digits.slice(7)}`;
+    if (digits.length === 10 && digits.startsWith("11")) return `011-${digits.slice(2, 6)} ${digits.slice(6)}`;
+    if (digits.length === 11 && digits.startsWith("0")) return `${digits.slice(0, 3)}-${digits.slice(3, 7)} ${digits.slice(7)}`;
+    if (digits.length === 12 && digits.startsWith("91")) {
+      const national = digits.slice(2);
+      if (national.startsWith("11")) return `+91 11 ${national.slice(2, 6)} ${national.slice(6)}`;
+      return `+91 ${national.slice(0, 5)} ${national.slice(5)}`;
+    }
     if (digits.length === 10 && /^[6-9]/.test(digits)) return `${digits.slice(0, 5)} ${digits.slice(5)}`;
     return trimmed;
   };

@@ -992,6 +992,7 @@
   grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   font-family: Arial, Helvetica, sans-serif;
   letter-spacing: 0;
+  overflow: hidden;
 }
 
 .sheetAppHeader {
@@ -1279,10 +1280,13 @@
 .sheetGridShell {
   max-height: none;
   min-height: 0;
-  height: 100%;
-  overflow: auto;
+  height: calc(100dvh - 188px);
+  max-height: calc(100dvh - 188px);
+  overflow-x: auto;
+  overflow-y: scroll;
   background: #ffffff;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
 }
 
 .googleSheetGrid {
@@ -1690,6 +1694,11 @@
 
   .sheetFormulaInput {
     min-height: 38px;
+  }
+
+  .sheetGridShell {
+    height: calc(100dvh - 230px);
+    max-height: calc(100dvh - 230px);
   }
 
   .googleSheetGrid th,

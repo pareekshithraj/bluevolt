@@ -23,6 +23,7 @@
 # misc
 .DS_Store
 *.pem
+.bluevolt-employee-store.json
 
 # debug
 npm-debug.log*

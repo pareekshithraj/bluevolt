@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeSession, hasEmployeeRole } from "@/lib/employee/session";
 
@@ -29,6 +31,22 @@ function employeeCode(id: number) {
   return `BV-${String(id).padStart(5, "0")}`;
 }
 
+async function localEmployeeById(id: number) {
+  try {
+    const raw = await fs.readFile(path.join(process.cwd(), ".bluevolt-employee-store.json"), "utf8");
+    const store = JSON.parse(raw) as { users?: any[] };
+    const user = store.users?.find((employee) => employee.id === id);
+    if (!user) return null;
+    return {
+      ...user,
+      employmentStart: user.employmentStart ? new Date(user.employmentStart) : null,
+      employmentEnd: user.employmentEnd ? new Date(user.employmentEnd) : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(request: NextRequest) {
   const session = await getEmployeeSession();
   if (!session) return new NextResponse("Forbidden", { status: 403 });
@@ -36,7 +54,12 @@ export async function GET(request: NextRequest) {
   const employeeId = Number(request.nextUrl.searchParams.get("employeeId"));
   if (!Number.isFinite(employeeId)) return new NextResponse("Invalid employee", { status: 400 });
 
-  const employee = await prisma.employeeUser.findUnique({ where: { id: employeeId } });
+  let employee: Awaited<ReturnType<typeof prisma.employeeUser.findUnique>> | Awaited<ReturnType<typeof localEmployeeById>> = null;
+  try {
+    employee = await prisma.employeeUser.findUnique({ where: { id: employeeId } });
+  } catch {
+    employee = await localEmployeeById(employeeId);
+  }
   if (!employee) return new NextResponse("Employee not found", { status: 404 });
 
   if (String(employee.id) !== session.userId && !hasEmployeeRole(session, ["admin", "hr"])) {

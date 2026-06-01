@@ -494,6 +494,10 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     return `mailto:${user.email}?subject=${subject}&body=${body}`;
   };
 
+  const idCardUrlFor = (user: EmployeeListItem, download = false) => (
+    `/api/employee/id-card?employeeId=${user.id}${download ? "&download=1" : ""}`
+  );
+
   const loadCrmSheetFile = async (file?: File) => {
     if (!file) return;
     setError("");
@@ -643,6 +647,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 <button className={styles.button} type="button" onClick={() => openPortalTab("ops")}>Open tasks</button>
                 {data.capabilities.canUseCrm && <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("crm")}>Open CRM</button>}
                 <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("resources")}>Resources</button>
+                {currentEmployee && <a className={styles.ghostButton} href={idCardUrlFor(currentEmployee)} target="_blank" rel="noopener noreferrer">My ID card</a>}
               </div>
             </div>
             <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}><h2 className={styles.cardTitle}>Open Tasks</h2><span className={styles.metricValue}>{openTasks.length}</span><p className={styles.muted}>{blockedTasks.length} blocked, {dueSoonTasks.length} due soon.</p></div>
@@ -1591,6 +1596,8 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   <div className={styles.toolbar}>
                     <a className={styles.ghostButton} href={letterUrlFor(user)} target="_blank" rel="noopener noreferrer">Open letter</a>
                     <a className={styles.ghostButton} href={mailtoFor(user)}>Send letter email</a>
+                    <a className={styles.ghostButton} href={idCardUrlFor(user)} target="_blank" rel="noopener noreferrer">Open ID card</a>
+                    <a className={styles.ghostButton} href={idCardUrlFor(user, true)}>Download ID card</a>
                   </div>
                 </div>
               ))}</div>

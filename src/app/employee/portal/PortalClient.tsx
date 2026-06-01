@@ -6,7 +6,6 @@ import { Bell, Briefcase, CalendarDays, ClipboardList, Clock3, Code2, FileText, 
 import {
   clockInEmployee,
   clockOutEmployee,
-  addCrmSheetRows,
   approveCrmSheet,
   deleteEmployeeEntity,
   getEmployeePortalData,
@@ -118,6 +117,13 @@ function values(form: HTMLFormElement) {
 
 type SaveHandler = (payload: any) => Promise<{ success: boolean; error?: string }>;
 type PortalTab = (typeof tabs)[number]["id"];
+type SelectedCrmCell = {
+  rowId: number;
+  rowIndex: number;
+  column: string;
+  columnIndex: number;
+  value: string;
+};
 
 type DateValue = string | Date | null | undefined;
 
@@ -218,7 +224,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const [crmPanel, setCrmPanel] = useState<"none" | "source" | "record">("none");
   const [activeCrmSheetId, setActiveCrmSheetId] = useState<number | null>(null);
   const [selectedCrmRowId, setSelectedCrmRowId] = useState<number | null>(null);
-  const [crmRowSearch, setCrmRowSearch] = useState("");
+  const [selectedCrmCell, setSelectedCrmCell] = useState<SelectedCrmCell | null>(null);
   const [clockOverride, setClockOverride] = useState<"working" | "off" | "">("");
   const [clockSaving, setClockSaving] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -226,7 +232,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
 
   useEffect(() => {
     setSelectedCrmRowId(null);
-    setCrmRowSearch("");
+    setSelectedCrmCell(null);
   }, [activeCrmSheetId]);
 
   const visibleTabs = useMemo(() => tabs.filter((item) => {
@@ -281,6 +287,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const upcomingMeetings = data.meetings.filter((meeting) => new Date(meeting.startsAt).getTime() >= Date.now()).slice(0, 4);
   const recentResources = data.resources.slice(0, 4);
   const activeCrmSheet = activeCrmSheetId ? data.crmSheets.find((sheet) => sheet.id === activeCrmSheetId) : null;
+  const canEditCrmSheet = data.session.role === "super_admin";
   const currentUserId = Number(data.session.userId);
   const currentEmployee = employees.find((user) => user.id === currentUserId);
   const activeAttendance = data.attendance.find((entry) => entry.employeeId === currentUserId && entry.loginAt && !entry.logoutAt);
@@ -438,6 +445,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   };
 
   const handleCellChange = (rowId: number, colName: string, newValue: string) => {
+    if (!canEditCrmSheet) return;
     setData(prev => {
         const crmSheets = [...prev.crmSheets];
         const sheetIndex = crmSheets.findIndex(s => s.id === activeCrmSheetId);
@@ -522,6 +530,29 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     }
     return value;
   };
+
+  const cellReference = (rowIndex: number, columnIndex: number) => `${columnName(columnIndex)}${rowIndex + 2}`;
+
+  const isPhoneColumn = (column: string) => {
+    const value = column.toLowerCase();
+    return value.includes("phone") || value.includes("mobile") || value.includes("contact number") || value.includes("call number");
+  };
+
+  const formatPhoneValue = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    const digits = trimmed.replace(/\D/g, "");
+    if (!digits) return trimmed;
+    if (digits.length === 10 && digits.startsWith("11")) return `011-${digits.slice(2)}`;
+    if (digits.length === 11 && digits.startsWith("0")) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    if (digits.length === 12 && digits.startsWith("91")) return `+91 ${digits.slice(2, 7)} ${digits.slice(7)}`;
+    if (digits.length === 10 && /^[6-9]/.test(digits)) return `${digits.slice(0, 5)} ${digits.slice(5)}`;
+    return trimmed;
+  };
+
+  const displayCellValue = (column: string, value: string) => (
+    isPhoneColumn(column) ? formatPhoneValue(value) : value
+  );
 
   const rowData = (row: PortalData["crmSheets"][number]["rows"][number]) => {
     if (!row.data) return {};
@@ -790,19 +821,23 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
             <div className={`${styles.card} ${styles.span12} ${styles.crmCommandBar}`}>
               <div>
                 <h2 className={styles.cardTitle}>CRM Sheets</h2>
-                <p className={styles.muted}>Open a source list, work it like a sheet, and mark each row by call outcome.</p>
+                <p className={styles.muted}>{canEditCrmSheet ? "Open a source list, work it like a sheet, and mark each row by call outcome." : "Open approved source lists in read-only mode."}</p>
               </div>
               <div className={styles.toolbar}>
-                <button className={styles.button} type="button" onClick={() => { setActiveCrmSheetId(null); setCrmPanel(crmPanel === "source" ? "none" : "source"); }}>Import / request sheet</button>
-                <button className={styles.ghostButton} type="button" onClick={() => { setActiveCrmSheetId(null); setCrmPanel(crmPanel === "record" ? "none" : "record"); }}>Add CRM card</button>
+                {canEditCrmSheet && (
+                  <>
+                    <button className={styles.button} type="button" onClick={() => { setActiveCrmSheetId(null); setCrmPanel(crmPanel === "source" ? "none" : "source"); }}>Import sheet</button>
+                    <button className={styles.ghostButton} type="button" onClick={() => { setActiveCrmSheetId(null); setCrmPanel(crmPanel === "record" ? "none" : "record"); }}>Add CRM card</button>
+                  </>
+                )}
                 {activeCrmSheet && <button className={styles.ghostButton} type="button" onClick={() => setActiveCrmSheetId(null)}>Back to list</button>}
               </div>
             </div>
 
-            {!activeCrmSheet && crmPanel === "source" && (
+            {!activeCrmSheet && canEditCrmSheet && crmPanel === "source" && (
               <form className={`${styles.card} ${styles.span12} ${styles.formGrid}`} onSubmit={submit(saveCrmSheetRequest, () => setCrmPanel("none"))}>
                 <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Create / Import CRM Sheet</h2>
-                <p className={`${styles.muted} ${styles.fieldWide}`}>Upload or paste your Excel/CSV data directly. The sheet will be created and sent for approval automatically.</p>
+                <p className={`${styles.muted} ${styles.fieldWide}`}>Upload or paste Excel/CSV data. Only super admin can create or change sheets.</p>
                 <Field label="Sheet Title" name="title" placeholder="e.g. May leads - Bengaluru" required wide />
                 <input type="hidden" name="sourceName" value="Imported Data" />
                 <input type="hidden" name="ownerRole" value={data.session.role} />
@@ -820,7 +855,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               </form>
             )}
 
-            {!activeCrmSheet && crmPanel === "record" && (
+            {!activeCrmSheet && canEditCrmSheet && crmPanel === "record" && (
               <form className={`${styles.card} ${styles.span12} ${styles.formGrid}`} onSubmit={submit(saveCrmRecord, () => setCrmPanel("none"))}>
                 <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Add CRM Card</h2>
                 <Field label="Company" name="company" required />
@@ -850,7 +885,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                     </div>
                     <span className={styles.pill}>{data.crmSheets.length} sheets</span>
                   </div>
-                  <div className={styles.sheetList}>{data.crmSheets.length === 0 ? <div className={styles.emptyState}>No sheets yet. Use Import / request sheet above.</div> : data.crmSheets.map((sheet) => {
+                  <div className={styles.sheetList}>{data.crmSheets.length === 0 ? <div className={styles.emptyState}>No sheets yet{canEditCrmSheet ? ". Use Import sheet above." : "."}</div> : data.crmSheets.map((sheet) => {
                     const totalRows = sheet.rows.length;
                     const doneRows = sheet.rows.filter((row) => row.status === "Done").length;
                     const percent = totalRows ? Math.round((doneRows / totalRows) * 100) : 0;
@@ -898,15 +933,12 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               const doneRows = activeCrmSheet.rows.filter((row) => row.status === "Done").length;
               const callbackRows = activeCrmSheet.rows.filter((row) => row.status === "Callback").length;
               const openRows = activeCrmSheet.rows.filter((row) => row.status === "Open").length;
-              const visibleRows = activeCrmSheet.rows.filter(row => {
-                if (!crmRowSearch) return true;
-                const searchLower = crmRowSearch.toLowerCase();
-                const cells = rowData(row);
-                return Object.values(cells).some(val => String(val).toLowerCase().includes(searchLower)) || row.status.toLowerCase().includes(searchLower);
-              });
-              const sheetRows = visibleRows.length > 0 ? visibleRows : activeCrmSheet.rows;
+              const sheetRows = activeCrmSheet.rows;
               const selectedCrmRow = sheetRows.find((row) => row.id === selectedCrmRowId) || sheetRows[0] || null;
-              const canMarkRows = data.capabilities.canUpdateCrmSheetRows && !activeCrmSheet.locked && Boolean(selectedCrmRow);
+              const canMarkRows = canEditCrmSheet && data.capabilities.canUpdateCrmSheetRows && !activeCrmSheet.locked && Boolean(selectedCrmRow);
+              const selectedReference = selectedCrmCell ? cellReference(selectedCrmCell.rowIndex, selectedCrmCell.columnIndex) : "A1";
+              const selectedValue = selectedCrmCell ? selectedCrmCell.value : "";
+              const blankRowCount = Math.max(80 - sheetRows.length, 30);
               const markSelectedRow = (status: string) => {
                 if (!selectedCrmRow || !canMarkRows) return;
                 handleUpdateCrmRowStatus(selectedCrmRow.id, status);
@@ -922,16 +954,15 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                       <div className={styles.sheetSubTitle}>{activeCrmSheet.sourceName || "BlueVolt CRM source"} - {doneRows}/{totalRows} done</div>
                     </div>
                     <div className={styles.sheetHeaderActions}>
-                      <input className={styles.sheetSearch} value={crmRowSearch} onChange={(e) => setCrmRowSearch(e.target.value)} placeholder="Search rows" />
                       <span className={activeCrmSheet.status === "Approved" ? `${styles.sheetStatusPill} ${styles.sheetStatusApproved}` : styles.sheetStatusPill}>{activeCrmSheet.status}{activeCrmSheet.locked ? " / Locked" : ""}</span>
-                      <button className={styles.sheetShareButton} type="button">Share</button>
-                      {data.capabilities.canManage && activeCrmSheet.status === "Pending" && (
+                      {!canEditCrmSheet && <span className={styles.sheetStatusPill}>Read only</span>}
+                      {canEditCrmSheet && activeCrmSheet.status === "Pending" && (
                         <>
                           <button className={styles.sheetToolbarButton} type="button" onClick={() => runAction(() => approveCrmSheet({ id: activeCrmSheet.id.toString(), status: "Approved" }))}>Approve</button>
                           <button className={styles.sheetToolbarButton} type="button" onClick={() => runAction(() => approveCrmSheet({ id: activeCrmSheet.id.toString(), status: "Rejected" }))}>Reject</button>
                         </>
                       )}
-                      {data.capabilities.canManage && (
+                      {canEditCrmSheet && (
                         <button className={styles.sheetToolbarButton} type="button" onClick={() => {
                           if (confirm("Are you sure you want to delete this sheet and all its rows?")) {
                             setActiveCrmSheetId(null);
@@ -943,28 +974,30 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   </div>
                   <div className={styles.sheetMarkingToolbar}>
                     <div className={styles.sheetMarkSummary}>
-                      <strong>Mark selected row</strong>
+                      <strong>{canEditCrmSheet ? "Mark selected row" : "Selected row"}</strong>
                       <span>{selectedCrmRow ? `Row ${sheetRows.findIndex((row) => row.id === selectedCrmRow.id) + 2}: ${selectedCrmRow.status}` : "Select a row in the sheet"}</span>
                     </div>
-                    <div className={styles.sheetMarkButtons}>
-                      {[
-                        { status: "Open", label: "Open" },
-                        { status: "Done", label: "Done" },
-                        { status: "Callback", label: "Callback" },
-                        { status: "Not Interested", label: "Not Interested" },
-                        { status: "Invalid", label: "Invalid" },
-                      ].map((item) => (
-                        <button
-                          className={`${styles.sheetMarkButton} ${item.status === "Done" ? styles.sheetMarkDone : item.status === "Callback" ? styles.sheetMarkCallback : item.status === "Not Interested" ? styles.sheetMarkNotInterested : item.status === "Invalid" ? styles.sheetMarkInvalid : ""}`}
-                          key={item.status}
-                          type="button"
-                          onClick={() => markSelectedRow(item.status)}
-                          disabled={!canMarkRows}
-                        >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
+                    {canEditCrmSheet && (
+                      <div className={styles.sheetMarkButtons}>
+                        {[
+                          { status: "Open", label: "Open" },
+                          { status: "Done", label: "Done" },
+                          { status: "Callback", label: "Callback" },
+                          { status: "Not Interested", label: "Not Interested" },
+                          { status: "Invalid", label: "Invalid" },
+                        ].map((item) => (
+                          <button
+                            className={`${styles.sheetMarkButton} ${item.status === "Done" ? styles.sheetMarkDone : item.status === "Callback" ? styles.sheetMarkCallback : item.status === "Not Interested" ? styles.sheetMarkNotInterested : item.status === "Invalid" ? styles.sheetMarkInvalid : ""}`}
+                            key={item.status}
+                            type="button"
+                            onClick={() => markSelectedRow(item.status)}
+                            disabled={!canMarkRows}
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <div className={styles.sheetStatusStats}>
                       <span>{openRows} open</span>
                       <span>{callbackRows} callback</span>
@@ -973,17 +1006,9 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   </div>
 
                   <div className={styles.sheetFormulaRow}>
-                    <span>A1</span>
-                    <span>ƒx</span>
-                    {activeCrmSheet.status === "Approved" ? (
-                      <form className={styles.sheetInlineAddForm} onSubmit={submit(addCrmSheetRows)}>
-                        <input type="hidden" name="sheetId" value={activeCrmSheet.id} />
-                        <input className={styles.sheetFormulaInput} name="pasteData" placeholder="Paste Excel/CSV rows here, just like Google Sheets" />
-                        <button className={styles.sheetToolbarButton} type="submit">Add rows</button>
-                      </form>
-                    ) : (
-                      <input className={styles.sheetFormulaInput} readOnly value="Sheet is locked until approval" />
-                    )}
+                    <span>{selectedReference}</span>
+                    <span>fx</span>
+                    <input className={styles.sheetFormulaInput} readOnly value={selectedValue} placeholder="Select a cell to preview its value" />
                   </div>
 
                   <div className={styles.sheetGridShell}>
@@ -1005,7 +1030,11 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                             <tr key={`blank-${rowIndex}`}>
                               <td className={styles.sheetRowNumber}>{rowIndex + 2}</td>
                               {["Status", ...columns].map((column, colIndex) => (
-                                <td className={rowIndex === 0 && colIndex === 0 ? styles.sheetSelectedCell : ""} key={`${rowIndex}-${column}`}></td>
+                                <td
+                                  className={(selectedCrmCell?.rowId === 0 && selectedCrmCell.rowIndex === rowIndex && selectedCrmCell.column === column) || (!selectedCrmCell && rowIndex === 0 && colIndex === 0) ? styles.sheetSelectedCell : ""}
+                                  key={`${rowIndex}-${column}`}
+                                  onClick={() => setSelectedCrmCell({ rowId: 0, rowIndex, column, columnIndex: colIndex, value: "" })}
+                                ></td>
                               ))}
                             </tr>
                           ))
@@ -1015,39 +1044,78 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                             return (
                               <tr className={`${rowTint(row.status)} ${selectedCrmRow?.id === row.id ? styles.sheetSelectedRow : ""}`} key={row.id} onClick={() => setSelectedCrmRowId(row.id)}>
                                 <td className={styles.sheetRowNumber}>{rowIndex + 2}</td>
-                                <td>
+                                <td className={selectedCrmCell?.rowId === row.id && selectedCrmCell.column === "Status" ? styles.sheetSelectedCell : ""} onClick={() => {
+                                  setSelectedCrmRowId(row.id);
+                                  setSelectedCrmCell({ rowId: row.id, rowIndex, column: "Status", columnIndex: 0, value: row.status });
+                                }}>
                                   <div className={styles.statusCell}>
                                     <span className={styles.pill}>{row.status}</span>
                                   </div>
                                 </td>
-                                {columns.map((column) => (
-                                  <td key={`${row.id}-${column}`}>
-                                    {activeCrmSheet.locked ? (
-                                      <div>{cells[column] || ""}</div>
+                                {columns.map((column, colIndex) => {
+                                  const rawValue = cells[column] || "";
+                                  const shownValue = displayCellValue(column, rawValue);
+                                  const columnIndex = colIndex + 1;
+                                  return (
+                                  <td className={selectedCrmCell?.rowId === row.id && selectedCrmCell.column === column ? styles.sheetSelectedCell : ""} key={`${row.id}-${column}`}>
+                                    {activeCrmSheet.locked || !canEditCrmSheet ? (
+                                      <div
+                                        className={styles.sheetCellReadOnly}
+                                        onClick={() => {
+                                          setSelectedCrmRowId(row.id);
+                                          setSelectedCrmCell({ rowId: row.id, rowIndex, column, columnIndex, value: shownValue });
+                                        }}
+                                      >
+                                        {shownValue}
+                                      </div>
                                     ) : (
                                       <input 
                                         className={styles.sheetCellInput}
                                         type="text" 
-                                        defaultValue={cells[column] || ""}
+                                        defaultValue={shownValue}
+                                        onFocus={() => {
+                                          setSelectedCrmRowId(row.id);
+                                          setSelectedCrmCell({ rowId: row.id, rowIndex, column, columnIndex, value: shownValue });
+                                        }}
+                                        onChange={(e) => {
+                                          setSelectedCrmCell({ rowId: row.id, rowIndex, column, columnIndex, value: displayCellValue(column, e.target.value) });
+                                        }}
                                         onBlur={(e) => {
-                                          if (e.target.value !== (cells[column] || "")) {
-                                            handleCellChange(row.id, column, e.target.value);
+                                          const nextValue = displayCellValue(column, e.target.value);
+                                          if (nextValue !== shownValue) {
+                                            handleCellChange(row.id, column, nextValue);
                                           }
                                         }}
                                       />
                                     )}
                                   </td>
-                                ))}
+                                );})}
                               </tr>
                             );
                           })
                         )}
+                        {Array.from({ length: blankRowCount }).map((_, blankIndex) => (
+                          <tr key={`blank-after-${blankIndex}`}>
+                            <td className={styles.sheetRowNumber}>{sheetRows.length + blankIndex + 2}</td>
+                            {["Status", ...columns].map((column, colIndex) => (
+                              <td
+                                className={selectedCrmCell?.rowId === 0 && selectedCrmCell.rowIndex === sheetRows.length + blankIndex && selectedCrmCell.column === column ? styles.sheetSelectedCell : ""}
+                                key={`blank-after-${blankIndex}-${column}`}
+                                onClick={() => setSelectedCrmCell({
+                                  rowId: 0,
+                                  rowIndex: sheetRows.length + blankIndex,
+                                  column,
+                                  columnIndex: colIndex,
+                                  value: "",
+                                })}
+                              ></td>
+                            ))}
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>
                   <div className={styles.sheetBottomBar}>
-                    <button type="button">+</button>
-                    <button type="button">☰</button>
                     <span className={styles.sheetTab}>Sheet1</span>
                   </div>
                 </div>

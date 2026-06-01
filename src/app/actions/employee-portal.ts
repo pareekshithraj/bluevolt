@@ -43,6 +43,23 @@ function numberValue(value?: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function isPhoneColumn(column: string): boolean {
+  const value = column.toLowerCase();
+  return value.includes("phone") || value.includes("mobile") || value.includes("contact number") || value.includes("call number");
+}
+
+function normalizePhoneValue(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const digits = trimmed.replace(/\D/g, "");
+  if (!digits) return trimmed;
+  if (digits.length === 10 && digits.startsWith("11")) return `011-${digits.slice(2)}`;
+  if (digits.length === 11 && digits.startsWith("0")) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  if (digits.length === 12 && digits.startsWith("91")) return `+91 ${digits.slice(2, 7)} ${digits.slice(7)}`;
+  if (digits.length === 10 && /^[6-9]/.test(digits)) return `${digits.slice(0, 5)} ${digits.slice(5)}`;
+  return trimmed;
+}
+
 function parseSheetText(value?: string): { columns: string[]; rows: Record<string, string>[] } {
   const lines = (value || "")
     .split(/\r?\n/)
@@ -59,7 +76,10 @@ function parseSheetText(value?: string): { columns: string[]; rows: Record<strin
   const columns = parseLine(lines[0]).map((column, index) => column || `Column ${index + 1}`);
   const rows = lines.slice(1).map((line) => {
     const cells = parseLine(line);
-    return Object.fromEntries(columns.map((column, index) => [column, cells[index] || ""]));
+    return Object.fromEntries(columns.map((column, index) => {
+      const cell = cells[index] || "";
+      return [column, isPhoneColumn(column) ? normalizePhoneValue(cell) : cell];
+    }));
   });
   return { columns, rows };
 }
@@ -241,6 +261,7 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
   const { session, user } = await requireEmployee();
   const canManage = hasEmployeeRole(session, ["admin", "hr"]);
   const canUseCrm = hasEmployeeRole(session, ["sales", "content"]);
+  const canEditCrm = session.role === "super_admin";
   const canManagePayroll = hasEmployeeRole(session, ["admin", "hr"]);
   const now = new Date();
 
@@ -372,8 +393,9 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
     capabilities: {
       canManage,
       canUseCrm,
-      canRequestCrmSource: true,
-      canUpdateCrmSheetRows: hasEmployeeRole(session, ["sales", "content", "admin", "hr"]),
+      canRequestCrmSource: canEditCrm,
+      canUpdateCrmSheetRows: canEditCrm,
+      canManageCrmSheets: canEditCrm,
       canManageApplicants: hasEmployeeRole(session, ["admin", "hr"]),
       canManageResources: hasEmployeeRole(session, ["admin", "hr", "operations", "content"]),
       canScheduleMeetings: hasEmployeeRole(session, ["admin", "hr", "sales"]),
@@ -513,8 +535,8 @@ export async function saveCrmRecord(input: {
   notes?: string;
 }) {
   const { session } = await requireEmployee();
-  if (!hasEmployeeRole(session, ["sales", "content"])) {
-    return { success: false, error: "CRM is available to sales, content, admin, and super admin roles." };
+  if (session.role !== "super_admin") {
+    return { success: false, error: "Only super admin can edit CRM records." };
   }
 
   await prisma.employeeCrmRecord.create({
@@ -538,6 +560,9 @@ export async function saveCrmSheetRequest(input: {
   pasteData?: string;
 }) {
   const { session, user } = await requireEmployee();
+  if (session.role !== "super_admin") {
+    return { success: false, error: "Only super admin can create CRM sheets." };
+  }
   const parsed = parseSheetText(input.pasteData);
   const sheet = await prisma.employeeCrmSheet.create({
     data: {
@@ -584,8 +609,8 @@ export async function saveCrmSheetRequest(input: {
 
 export async function approveCrmSheet(input: { id: string; status: string }) {
   const { session } = await requireEmployee();
-  if (!hasEmployeeRole(session, ["admin", "hr"])) {
-    return { success: false, error: "Only HR/admin can approve CRM source sheets." };
+  if (session.role !== "super_admin") {
+    return { success: false, error: "Only super admin can approve CRM source sheets." };
   }
   const status = input.status === "Rejected" ? "Rejected" : "Approved";
   const sheet = await prisma.employeeCrmSheet.update({
@@ -614,11 +639,12 @@ export async function approveCrmSheet(input: { id: string; status: string }) {
 
 export async function addCrmSheetRows(input: { sheetId: string; pasteData: string }) {
   const { session, user } = await requireEmployee();
+  if (session.role !== "super_admin") {
+    return { success: false, error: "Only super admin can add CRM sheet rows." };
+  }
   const sheet = await prisma.employeeCrmSheet.findUnique({ where: { id: Number(input.sheetId) }, include: { rows: { orderBy: { rowNumber: "desc" }, take: 1 } } });
   if (!sheet) return { success: false, error: "Sheet not found." };
   if (sheet.locked || sheet.status !== "Approved") return { success: false, error: "This sheet is locked until admin approval." };
-  const canEdit = hasEmployeeRole(session, ["admin", "hr"]) || sheet.requestedBy === user.id || sheet.ownerRole === session.role || visibleToRole(sheet.audienceRoles, session.role);
-  if (!canEdit) return { success: false, error: "You do not have access to update this sheet." };
   const parsed = parseSheetText(input.pasteData);
   const start = sheet.rows[0]?.rowNumber || 0;
   if (parsed.rows.length === 0) return { success: false, error: "Paste at least one data row." };
@@ -641,8 +667,8 @@ export async function updateCrmSheetRowStatus(input: {
   reason?: string;
 }) {
   const { session } = await requireEmployee();
-  if (!hasEmployeeRole(session, ["sales", "content", "admin", "hr"])) {
-    return { success: false, error: "Only sales/content/admin roles can mark CRM sheet rows." };
+  if (session.role !== "super_admin") {
+    return { success: false, error: "Only super admin can mark CRM sheet rows." };
   }
   const status = ["Open", "Done", "Callback", "Not Interested", "Invalid"].includes(input.status) ? input.status : "Open";
   await prisma.employeeCrmSheetRow.update({
@@ -1139,13 +1165,13 @@ export async function updateCrmSheetRowData(input: {
   data: Record<string, string>;
 }) {
   const { session } = await requireEmployee();
-  if (!hasEmployeeRole(session, ["sales", "content", "admin", "hr"])) {
-    return { success: false, error: "Access denied." };
+  if (session.role !== "super_admin") {
+    return { success: false, error: "Only super admin can edit CRM sheet cells." };
   }
   const row = await prisma.employeeCrmSheetRow.findUnique({ where: { id: Number(input.rowId) }, include: { sheet: true } });
   if (!row) return { success: false, error: "Row not found." };
   
-  if (row.sheet.locked && !hasEmployeeRole(session, ["admin", "hr"])) {
+  if (row.sheet.locked) {
     return { success: false, error: "Sheet is locked." };
   }
 
@@ -1162,6 +1188,9 @@ export async function deleteEmployeeEntity(input: {
   id: string;
 }) {
   const { session } = await requireEmployee();
+  if (["crm", "crmSheet"].includes(input.entityType) && session.role !== "super_admin") {
+    return { success: false, error: "Only super admin can delete CRM records." };
+  }
   if (!hasEmployeeRole(session, ["admin", "hr"])) {
     return { success: false, error: "Only HR/admin roles can delete records." };
   }

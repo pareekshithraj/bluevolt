@@ -773,36 +773,33 @@ export async function clockInEmployee() {
   const endOfDay = new Date(startOfDay);
   endOfDay.setHours(23, 59, 59, 999);
 
-  const existing = await prisma.employeeAttendance.findFirst({
+  const openSession = await prisma.employeeAttendance.findFirst({
     where: {
       employeeId: user.id,
       workDate: { gte: startOfDay, lte: endOfDay },
+      loginAt: { not: null },
+      logoutAt: null,
+    },
+    orderBy: { loginAt: "desc" },
+  });
+
+  if (openSession) {
+    return { success: false, error: "You are already checked in. Check out before starting another session." };
+  }
+
+  const created = await prisma.employeeAttendance.create({
+    data: {
+      employeeId: user.id,
+      employeeName: user.name,
+      workDate: startOfDay,
+      loginAt: now,
+      status: "Present",
+      notes: "Work session started from portal.",
     },
   });
 
-  if (existing?.loginAt) {
-    return { success: false, error: "You are already clocked in for today." };
-  }
-
-  if (existing) {
-    await prisma.employeeAttendance.update({
-      where: { id: existing.id },
-      data: { loginAt: now, status: "Present" },
-    });
-  } else {
-    await prisma.employeeAttendance.create({
-      data: {
-        employeeId: user.id,
-        employeeName: user.name,
-        workDate: startOfDay,
-        loginAt: now,
-        status: "Present",
-      },
-    });
-  }
-
   await prisma.employeeUser.update({ where: { id: user.id }, data: { lastSeenAt: now } });
-  await logEmployeeAudit({ actorId: user.id, actorName: session.name, action: "attendance.clock_in", entityType: "attendance" });
+  await logEmployeeAudit({ actorId: user.id, actorName: session.name, action: "attendance.clock_in", entityType: "attendance", entityId: created.id.toString() });
   revalidatePath("/employee/portal");
   return { success: true };
 }
@@ -815,23 +812,27 @@ export async function clockOutEmployee() {
   const endOfDay = new Date(startOfDay);
   endOfDay.setHours(23, 59, 59, 999);
 
-  const existing = await prisma.employeeAttendance.findFirst({
+  const openSession = await prisma.employeeAttendance.findFirst({
     where: {
       employeeId: user.id,
       workDate: { gte: startOfDay, lte: endOfDay },
+      loginAt: { not: null },
+      logoutAt: null,
     },
+    orderBy: { loginAt: "desc" },
   });
 
-  if (!existing?.loginAt) {
+  if (!openSession?.loginAt) {
     return { success: false, error: "Clock in before clocking out." };
   }
 
-  const totalHours = Math.max(0, (now.getTime() - existing.loginAt.getTime()) / (1000 * 60 * 60));
+  const totalHours = Math.max(0, (now.getTime() - openSession.loginAt.getTime()) / (1000 * 60 * 60));
   await prisma.employeeAttendance.update({
-    where: { id: existing.id },
+    where: { id: openSession.id },
     data: { logoutAt: now, totalHours: Number(totalHours.toFixed(2)) },
   });
-  await logEmployeeAudit({ actorId: user.id, actorName: session.name, action: "attendance.clock_out", entityType: "attendance", entityId: existing.id.toString() });
+  await prisma.employeeUser.update({ where: { id: user.id }, data: { lastSeenAt: now } });
+  await logEmployeeAudit({ actorId: user.id, actorName: session.name, action: "attendance.clock_out", entityType: "attendance", entityId: openSession.id.toString() });
   revalidatePath("/employee/portal");
   return { success: true };
 }

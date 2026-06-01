@@ -291,8 +291,8 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
       : Promise.resolve([]),
     ["dashboard", "ops"].includes(activeTab)
       ? (canManage
-        ? prisma.employeeAttendance.findMany({ orderBy: [{ workDate: "desc" }, { createdAt: "desc" }], take: 80 })
-        : prisma.employeeAttendance.findMany({ where: { employeeId: user.id }, orderBy: [{ workDate: "desc" }, { createdAt: "desc" }], take: 40 }))
+        ? prisma.employeeAttendance.findMany({ orderBy: [{ workDate: "desc" }, { createdAt: "desc" }], take: 500 })
+        : prisma.employeeAttendance.findMany({ where: { employeeId: user.id }, orderBy: [{ workDate: "desc" }, { createdAt: "desc" }], take: 120 }))
       : Promise.resolve([]),
     activeTab === "ops"
       ? (canManage

@@ -172,6 +172,10 @@ function formatPortalNumber(value: number) {
   return portalNumberFormatter.format(value);
 }
 
+function formatWorkHours(value: number) {
+  return `${value.toFixed(2)} hrs`;
+}
+
 function mergePortalData(previous: PortalData, incoming: PortalData, activeTab: PortalTab): PortalData {
   return {
     ...previous,
@@ -206,6 +210,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const [sortResources, setSortResources] = useState("newest");
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [employeeTypeFilter, setEmployeeTypeFilter] = useState("all");
+  const [workHoursEmployeeId, setWorkHoursEmployeeId] = useState("");
   const [resourceTypeFilter, setResourceTypeFilter] = useState("all");
   const [notice, setNotice] = useState("");
   const [crmSheetPaste, setCrmSheetPaste] = useState("");
@@ -281,6 +286,14 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const activeAttendance = data.attendance.find((entry) => entry.employeeId === currentUserId && entry.loginAt && !entry.logoutAt);
   const isWorking = clockOverride ? clockOverride === "working" : Boolean(activeAttendance);
   const recentAttendance = data.attendance.slice(0, data.capabilities.canManage ? 12 : 6);
+  const selectedHoursEmployeeId = Number(workHoursEmployeeId || currentUserId);
+  const selectedHoursEmployee = employees.find((user) => user.id === selectedHoursEmployeeId) || currentEmployee;
+  const teamWorkHours = data.attendance.reduce((total, entry) => total + Number(entry.totalHours || 0), 0);
+  const selectedEmployeeWorkHours = data.attendance
+    .filter((entry) => entry.employeeId === selectedHoursEmployeeId)
+    .reduce((total, entry) => total + Number(entry.totalHours || 0), 0);
+  const completedSessions = data.attendance.filter((entry) => entry.logoutAt).length;
+  const selectedEmployeeSessions = data.attendance.filter((entry) => entry.employeeId === selectedHoursEmployeeId).length;
 
   const submit = (handler: SaveHandler, onSuccessOptimistic?: () => void) => (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -601,6 +614,41 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
             <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}><h2 className={styles.cardTitle}>Hot Leads</h2><span className={styles.metricValue}>{hotLeads.length}</span><p className={styles.muted}>High priority sales/content opportunities.</p></div>
             <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}><h2 className={styles.cardTitle}>Upcoming Meets</h2><span className={styles.metricValue}>{upcomingMeetings.length}</span><p className={styles.muted}>Visible scheduled sessions.</p></div>
             <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}><h2 className={styles.cardTitle}>Team Online</h2><span className={styles.metricValue}>{onlineEmployees}</span><p className={styles.muted}>{workingEmployees} inside work window.</p></div>
+            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}><h2 className={styles.cardTitle}>Total Employees</h2><span className={styles.metricValue}>{employees.length}</span><p className={styles.muted}>{employees.filter((user) => user.employeeType === "Intern").length} interns, {employees.filter((user) => user.status === "Active").length} active.</p></div>
+
+            <div className={`${styles.card} ${styles.span9}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>Work Hours Overview</h2>
+                  <p className={styles.muted}>{data.capabilities.canManage ? "Full-team and employee-wise completed work sessions." : "Your completed work sessions."}</p>
+                </div>
+                {data.capabilities.canManage && (
+                  <select className={styles.select} style={{ maxWidth: 260 }} value={workHoursEmployeeId} onChange={(event) => setWorkHoursEmployeeId(event.target.value)}>
+                    <option value="">Me: {data.session.name}</option>
+                    {employeeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                )}
+              </div>
+              <div className={styles.quickGrid}>
+                {data.capabilities.canManage && (
+                  <div className={styles.row}>
+                    <span className={styles.label}>Full team hours</span>
+                    <strong>{formatWorkHours(teamWorkHours)}</strong>
+                    <p className={styles.muted}>{completedSessions} completed sessions loaded.</p>
+                  </div>
+                )}
+                <div className={styles.row}>
+                  <span className={styles.label}>{selectedHoursEmployee?.name || data.session.name}</span>
+                  <strong>{formatWorkHours(selectedEmployeeWorkHours)}</strong>
+                  <p className={styles.muted}>{selectedEmployeeSessions} sessions in history.</p>
+                </div>
+                <div className={styles.row}>
+                  <span className={styles.label}>Currently working</span>
+                  <strong>{data.attendance.filter((entry) => entry.loginAt && !entry.logoutAt).length}</strong>
+                  <p className={styles.muted}>Live check-ins across visible records.</p>
+                </div>
+              </div>
+            </div>
 
             <div className={`${styles.card} ${styles.span12}`}>
               <div className={styles.sectionHeader}>

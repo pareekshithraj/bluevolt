@@ -2,11 +2,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import Reveal from "@/components/Reveal";
-import InfrastructureGlobe from "@/components/InfrastructureGlobeDynamic";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import FuturisticHero3DWrapper from "@/components/FuturisticHero3DWrapper";
 import FloatingHeroWindows from "@/components/FloatingHeroWindows";
+import StatsSection from "@/components/StatsSection";
 
 export default async function Home() {
   const host = (await headers()).get("host")?.toLowerCase() ?? "";
@@ -18,77 +18,97 @@ export default async function Home() {
   }
 
   return (
-    <main className="premium-dark-mode">
+    <main>
       
       {/* --- PREMIUM LUXURY HERO SECTION --- */}
-      <div className="hero-wrapper">
-        {/* Firebase Studio Inspired Warm Ambient Backlights (Massive Sunset Orange & Hot Purple) */}
-        <div className="glow-blob glow-blob-firebase-left glow-blob-animated-1" style={{ width: "1100px", height: "900px", bottom: "-300px", left: "-200px", opacity: 0.95 }} />
-        <div className="glow-blob glow-blob-firebase-right glow-blob-animated-2" style={{ width: "1000px", height: "900px", bottom: "-300px", right: "-150px", opacity: 0.9 }} />
-        <div className="glow-blob glow-blob-neonblue glow-blob-animated-1" style={{ width: "700px", height: "700px", top: "-200px", left: "20%", opacity: 0.4 }} />
-
-        <FuturisticHero3DWrapper />
-        <div className="structural-grid-overlay"></div>
+      <div className="hero-wrapper" style={{ padding: "10rem 4rem 6rem" }}>
+        
         <div className="hero-vignette-editorial"></div>
 
         <section className="hero">
+          {/* Centered SaaS Hero Layout (inspired by Untitled UI) */}
           <div className="hero-layout-centered">
-            <Reveal delay={0.1}>
-              <div className="editorial-header-mono" style={{ justifyContent: "center", alignItems: "center", gap: "0.6rem" }}>
-                <span style={{ display: "inline-block", width: "7px", height: "7px", backgroundColor: "#00ff66", borderRadius: "50%", boxShadow: "0 0 10px #00ff66" }}></span>
-                <span className="mono-tag" style={{ color: "#00ff66", fontWeight: 600 }}>SYSTEM: ACTIVE</span>
-                <span style={{ color: "rgba(255,255,255,0.15)" }}>/</span>
-                <span className="mono-tag">NODE: BV_GROUPS_MAIN</span>
-              </div>
-            </Reveal>
+            
+            {/* Centered SaaS Copywriting & Action Buttons */}
+            <div className="hero-text-container" style={{ textAlign: "center", padding: 0, background: "transparent", backdropFilter: "none", margin: "0 auto 4rem auto", maxWidth: "800px" }}>
+              <Reveal delay={0.1}>
+                <div style={{ marginBottom: "1.5rem", display: "flex", justifyContent: "center" }}>
+                  <span style={{ 
+                    display: "inline-flex", 
+                    alignItems: "center", 
+                    gap: "0.5rem", 
+                    borderRadius: "9999px", 
+                    padding: "0.45rem 1.25rem", 
+                    border: "1px solid var(--border-main)", 
+                    background: "var(--bg-secondary)", 
+                    fontSize: "0.82rem", 
+                    color: "var(--text-secondary)", 
+                    fontWeight: 500,
+                    letterSpacing: "0.02em", 
+                    backdropFilter: "blur(10px)",
+                    WebkitBackdropFilter: "blur(10px)"
+                  }}>
+                    <span style={{ color: "#f59e0b" }}>✨</span> Introducing BlueVolt Studio
+                  </span>
+                </div>
+              </Reveal>
 
-            <Reveal delay={0.2}>
-              <h1 className="editorial-h1" style={{ textAlign: "center", textWrap: "balance", fontWeight: 700, position: "relative", zIndex: 30 }}>
-                The full <span className="tech-code-badge">&#123;&#125;</span> stack
-                <br />
-                school workspace
-              </h1>
-            </Reveal>
+              <Reveal delay={0.2}>
+                <h1 className="editorial-h1" style={{ textAlign: "center", textWrap: "balance", fontWeight: 800, lineHeight: 1.05, marginBottom: "1.5rem", color: "var(--text-primary)" }}>
+                  The workspace for
+                  <br />
+                  <span style={{ color: "#635bff" }}>next-gen schools.</span>
+                </h1>
+              </Reveal>
 
-            <Reveal delay={0.3}>
-              <p className="editorial-p" style={{ textAlign: "center", margin: "0 auto 4rem auto", position: "relative", zIndex: 30 }}>
-                Firebase Studio accelerates your entire development lifecycle with AI agents. Build backends, front ends, and mobile apps, all in one place.
-              </p>
-            </Reveal>
+              <Reveal delay={0.3}>
+                <p className="editorial-p" style={{ textAlign: "center", margin: "0 auto 2.5rem auto", maxWidth: "650px", fontSize: "1.15rem", lineHeight: 1.6, color: "var(--text-secondary)" }}>
+                  BlueVolt Studio is the unified workspace built for modern school operations, learning ecosystems, and campus management. Drive institution growth all in one place.
+                </p>
+              </Reveal>
 
-            <Reveal delay={0.4}>
-              <div className="editorial-cta-row" style={{ justifyContent: "center", marginBottom: "6rem", position: "relative", zIndex: 30 }}>
-                <Link href="/studio" className="firebase-btn-primary">
-                  Open BlueVolt Studio
-                </Link>
-                <Link href="/contact" className="firebase-btn-secondary">
-                  Board Inquiry
-                </Link>
-              </div>
-            </Reveal>
+              <Reveal delay={0.4} width="100%">
+                <div className="editorial-cta-row" style={{ justifyContent: "center", gap: "1.5rem", width: "100%", display: "flex", alignItems: "center" }}>
+                  <Link href="/studio" className="firebase-btn-primary btn-pill">
+                    Open BlueVolt Studio
+                  </Link>
+                  <Link href="/contact" className="firebase-btn-secondary btn-pill">
+                    Board Inquiry
+                  </Link>
+                </div>
+              </Reveal>
+            </div>
 
-            {/* Cascading floating windows container centered directly below CTA buttons */}
+
+
+          </div>
+
+          {/* Full-width Product Showcase Cascading Windows */}
+          <div style={{ marginTop: "4rem", position: "relative", zIndex: 10 }}>
             <Reveal delay={0.5} width="100%">
               <FloatingHeroWindows />
             </Reveal>
           </div>
+
         </section>
       </div>
 
+      {/* --- ANIMATED STATS METRICS BAR --- */}
+      <StatsSection />
 
-      {/* --- EDITORIAL CAPABILITIES SECTION --- */}
-      <section className="editorial-section" id="capabilities" style={{ overflow: "hidden" }}>
-        {/* Dynamic Warm Ambient Backlights */}
-        <div className="glow-blob glow-blob-solar glow-blob-animated-2" style={{ width: "950px", height: "950px", top: "20%", left: "55%", transform: "translate(-50%, -50%)", opacity: 0.9 }} />
-        <div className="glow-blob glow-blob-cyberpink glow-blob-animated-1" style={{ width: "750px", height: "750px", bottom: "-200px", left: "-150px", opacity: 0.75 }} />
-
-        <div className="section-structural-title">
+      {/* --- EDITORIAL CAPABILITIES SECTION: SOLID PURPLE THEME --- */}
+      <section className="capabilities-purple-section" id="capabilities" style={{ overflow: "hidden" }}>
+        
+        <div className="section-structural-title" style={{ textAlign: "center", display: "block", marginBottom: "5rem" }}>
           <Reveal delay={0.1}>
-            <h2>Operational Capabilities</h2>
+            <span className="mono-tag" style={{ color: "rgba(255, 255, 255, 0.7)", letterSpacing: "0.15em" }}>OPERATIONAL UTILITIES</span>
           </Reveal>
           <Reveal delay={0.2}>
-            <p>
-              BLUEVOLT GROUPS operates at the convergence of high-availability enterprise services and scalable micro-architectures. We build platforms that optimize human capital and automate multi-tenant structures.
+            <h2 style={{ fontSize: "clamp(2rem, 5vw, 3.5rem)", fontWeight: 700, margin: "1rem 0" }}>Innovative Solutions</h2>
+          </Reveal>
+          <Reveal delay={0.3}>
+            <p style={{ margin: "0 auto", maxWidth: "600px" }}>
+              Clean, intuitive, and secure campus utilities designed to simplify administration and student management workflows.
             </p>
           </Reveal>
         </div>
@@ -97,43 +117,52 @@ export default async function Home() {
           
           {/* Capability 1 */}
           <Reveal delay={0.2} width="100%">
-            <div className="bento-item">
+            <div className="bento-item" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
               <div className="bento-content">
                 <div className="bento-index">[ 01 ]</div>
-                <h3 className="card-title">Global Architecture</h3>
+                <h3 className="card-title">Unified Records</h3>
                 <p className="card-text">
-                  Distributing and managing data streams across low-latency edge zones. Our platforms synchronize operations globally with microsecond precision.
+                  Synchronize student profiles, academic grading, and staff records across multiple locations in a single central database.
                 </p>
               </div>
-              <div className="mono-tag" style={{ marginTop: '2rem' }}>CAP.01 / GLOBAL</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "2rem" }}>
+                <div className="mono-tag" style={{ color: "#635bff" }}>CAP.01 / RECORDS</div>
+                <div className="bento-arrow-btn">↗</div>
+              </div>
             </div>
           </Reveal>
 
           {/* Capability 2 */}
           <Reveal delay={0.3} width="100%">
-            <div className="bento-item">
+            <div className="bento-item" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
               <div className="bento-content">
                 <div className="bento-index">[ 02 ]</div>
-                <h3 className="card-title">Deterministic Integrity</h3>
+                <h3 className="card-title">Granular Security</h3>
                 <p className="card-text">
-                  Replacing speculative analytics with rule-level certainty. We guarantee zero compromise in critical multi-tenant data pipelines and secure systems.
+                  Bank-grade data encryption and custom role-based permissions ensure student profiles and financial statements stay private and secure.
                 </p>
               </div>
-              <div className="mono-tag" style={{ marginTop: '2rem' }}>CAP.02 / SECURITY</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "2rem" }}>
+                <div className="mono-tag" style={{ color: "#635bff" }}>CAP.02 / SECURITY</div>
+                <div className="bento-arrow-btn">↗</div>
+              </div>
             </div>
           </Reveal>
 
           {/* Capability 3 */}
           <Reveal delay={0.4} width="100%">
-            <div className="bento-item">
+            <div className="bento-item" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
               <div className="bento-content">
                 <div className="bento-index">[ 03 ]</div>
-                <h3 className="card-title">High-Velocity Operations</h3>
+                <h3 className="card-title">Automated Invoicing</h3>
                 <p className="card-text">
-                  Accelerating workflow automation and enterprise supply logistics. Removing operational latency to drive rapid structural execution.
+                  Generate digital fee notices, track monthly late payments, and deliver receipts to parents instantly.
                 </p>
               </div>
-              <div className="mono-tag" style={{ marginTop: '2rem' }}>CAP.03 / VELOCITY</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "2rem" }}>
+                <div className="mono-tag" style={{ color: "#635bff" }}>CAP.03 / FINANCE</div>
+                <div className="bento-arrow-btn">↗</div>
+              </div>
             </div>
           </Reveal>
 
@@ -141,129 +170,86 @@ export default async function Home() {
       </section>
 
 
-      {/* --- GEOSPATIAL INFRASTRUCTURE MAP --- */}
-      <InfrastructureGlobe />
 
 
-      {/* --- ECOSYSTEM PRODUCTS SECTION --- */}
-      <section className="editorial-section" id="ecosystem" style={{ borderBottom: 'none', paddingBottom: '12rem', overflow: 'hidden' }}>
-        {/* Warm Ambient Glowing Nebulae */}
-        <div className="glow-blob glow-blob-sunset glow-blob-animated-1" style={{ width: "1050px", height: "1050px", bottom: "-350px", left: "-200px", opacity: 0.95 }} />
-        <div className="glow-blob glow-blob-solar glow-blob-animated-2" style={{ width: "900px", height: "900px", top: "-150px", right: "-250px", opacity: 0.8 }} />
-        <div className="glow-blob glow-blob-neonblue glow-blob-animated-1" style={{ width: "650px", height: "650px", top: "35%", left: "25%", opacity: 0.45 }} />
 
-        <div className="section-structural-title">
+      {/* --- ECOSYSTEM PRODUCTS SECTION: TRUST STRIP FASHION --- */}
+      <section className="logo-strip-section" id="ecosystem">
+        <div className="logo-strip-title">
           <Reveal delay={0.1}>
-            <h2>The Ecosystem</h2>
-          </Reveal>
-          <Reveal delay={0.2}>
-            <p>
-              Our proprietary platforms are engineered as decoupled digital ecosystems. Functioning in harmony, they establish the foundation for modern academic institutions and intelligent commerce.
-            </p>
+            <span>Trusted & Powered by Leading Institutions</span>
           </Reveal>
         </div>
 
-        {/* Product Cards Container */}
-        <div className="ecosystem-container">
+        <div className="logo-strip-row">
           
           {/* BlueVolt */}
-          <Reveal delay={0.1} width="100%">
-            <a 
-              href="/about" 
-              className="ecosystem-card-minimal"
-            >
-              <div className="grayscale-logo-container">
-                <Image 
-                  src="/Assets/Logos/BLUEVOLT.png" 
-                  alt="BlueVolt Logo" 
-                  width={280} 
-                  height={70} 
-                  style={{ objectFit: 'contain', width: '100%', height: '100%', maxWidth: '300px', maxHeight: '72px', display: 'block', margin: '0 auto' }} 
-                  unoptimized 
-                />
-              </div>
+          <Reveal delay={0.1}>
+            <a href="/about" className="logo-strip-item">
+              <Image 
+                src="/Assets/Logos/BLUEVOLT.png" 
+                alt="BlueVolt Logo" 
+                width={200} 
+                height={55} 
+                style={{ objectFit: 'contain', width: 'auto', height: '72px' }} 
+                unoptimized 
+              />
             </a>
           </Reveal>
 
           {/* Schools24 */}
-          <Reveal delay={0.2} width="100%">
-            <a 
-              href="https://schools24.in" 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              className="ecosystem-card-minimal"
-            >
-              <div className="grayscale-logo-container">
-                <Image 
-                  src="/Assets/Logos/SCHOOLS24.png" 
-                  alt="Schools24 Logo" 
-                  width={280} 
-                  height={70} 
-                  style={{ objectFit: 'contain', width: '100%', height: '100%', maxWidth: '300px', maxHeight: '72px', display: 'block', margin: '0 auto' }} 
-                  unoptimized 
-                />
-              </div>
+          <Reveal delay={0.2}>
+            <a href="https://schools24.in" target="_blank" rel="noopener noreferrer" className="logo-strip-item">
+              <Image 
+                src="/Assets/Logos/SCHOOLS24.png" 
+                alt="Schools24 Logo" 
+                width={200} 
+                height={55} 
+                style={{ objectFit: 'contain', width: 'auto', height: '72px' }} 
+                unoptimized 
+              />
             </a>
           </Reveal>
 
           {/* Stores24 */}
-          <Reveal delay={0.3} width="100%">
-            <a 
-              href="https://stores24.bluevolt.group" 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              className="ecosystem-card-minimal"
-            >
-              <div className="grayscale-logo-container">
-                <Image 
-                  src="/Assets/Logos/STORES24.png" 
-                  alt="Stores24 Logo" 
-                  width={280} 
-                  height={70} 
-                  style={{ objectFit: 'contain', width: '100%', height: '100%', maxWidth: '300px', maxHeight: '72px', display: 'block', margin: '0 auto' }} 
-                  unoptimized 
-                />
-              </div>
+          <Reveal delay={0.3}>
+            <a href="https://stores24.bluevolt.group" target="_blank" rel="noopener noreferrer" className="logo-strip-item">
+              <Image 
+                src="/Assets/Logos/STORES24.png" 
+                alt="Stores24 Logo" 
+                width={200} 
+                height={55} 
+                style={{ objectFit: 'contain', width: 'auto', height: '72px' }} 
+                unoptimized 
+              />
             </a>
           </Reveal>
 
           {/* Events24 */}
-          <Reveal delay={0.4} width="100%">
-            <a 
-              href="/products/events24" 
-              className="ecosystem-card-minimal"
-            >
-              <div className="grayscale-logo-container">
-                <Image 
-                  src="/Assets/Logos/EVENTS24.png" 
-                  alt="Events24 Logo" 
-                  width={280} 
-                  height={70} 
-                  style={{ objectFit: 'contain', width: '100%', height: '100%', maxWidth: '300px', maxHeight: '72px', display: 'block', margin: '0 auto' }} 
-                  unoptimized 
-                />
-              </div>
+          <Reveal delay={0.4}>
+            <a href="/products/events24" className="logo-strip-item">
+              <Image 
+                src="/Assets/Logos/EVENTS24.png" 
+                alt="Events24 Logo" 
+                width={200} 
+                height={55} 
+                style={{ objectFit: 'contain', width: 'auto', height: '72px' }} 
+                unoptimized 
+              />
             </a>
           </Reveal>
 
           {/* Hoscore */}
-          <Reveal delay={0.5} width="100%">
-            <a 
-              href="https://hoscore.in" 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              className="ecosystem-card-minimal"
-            >
-              <div className="grayscale-logo-container">
-                <Image 
-                  src="/Assets/Logos/HOSCORE.png" 
-                  alt="Hoscore Logo" 
-                  width={280} 
-                  height={70} 
-                  style={{ objectFit: 'contain', width: '100%', height: '100%', maxWidth: '300px', maxHeight: '72px', display: 'block', margin: '0 auto' }} 
-                  unoptimized 
-                />
-              </div>
+          <Reveal delay={0.5}>
+            <a href="https://hoscore.in" target="_blank" rel="noopener noreferrer" className="logo-strip-item">
+              <Image 
+                src="/Assets/Logos/HOSCORE.png" 
+                alt="Hoscore Logo" 
+                width={200} 
+                height={55} 
+                style={{ objectFit: 'contain', width: 'auto', height: '72px' }} 
+                unoptimized 
+              />
             </a>
           </Reveal>
 

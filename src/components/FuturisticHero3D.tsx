@@ -141,7 +141,6 @@ export default function FuturisticHero3D() {
       if (canvasRef.current) {
         const opacity = Math.max(0, 1 - scrollY.current / fadeThreshold);
         canvasRef.current.style.opacity = opacity.toString();
-        canvasRef.current.style.transform = `translateY(${scrollY.current * 0.22}px)`; // Parallax shift
       }
 
       // Pause drawing loop if completely scrolled down past hero
@@ -243,8 +242,7 @@ export default function FuturisticHero3D() {
     <div 
       ref={containerRef}
       style={{ 
-        position: "absolute", 
-        inset: 0, 
+        position: "relative", 
         width: "100%", 
         height: "100%", 
         overflow: "hidden", 

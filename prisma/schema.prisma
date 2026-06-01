@@ -211,3 +211,364 @@ model StudioProject {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
+
+model EmployeeUser {
+  id         Int       @id @default(autoincrement())
+  name       String
+  email      String    @unique
+  password   String
+  role       String    @default("employee")
+  department String    @default("General")
+  departmentId Int?
+  managerId Int?
+  title      String    @default("Team Member")
+  employeeType String  @default("Full-time")
+  compensationStatus String @default("Paid")
+  employmentStart DateTime?
+  employmentEnd DateTime?
+  workStartTime String @default("09:00")
+  workEndTime String   @default("18:00")
+  status     String    @default("Active")
+  lastLogin  DateTime?
+  lastSeenAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([role])
+  @@index([status])
+  @@index([departmentId])
+  @@index([managerId])
+  @@index([employeeType])
+  @@index([compensationStatus])
+  @@index([lastSeenAt])
+}
+
+model EmployeeCrmRecord {
+  id          Int      @id @default(autoincrement())
+  company     String
+  contactName String
+  email       String?
+  phone       String?
+  ownerRole   String   @default("sales")
+  stage       String   @default("New")
+  source      String   @default("Manual")
+  priority    String   @default("Medium")
+  leadRating  String   @default("Warm")
+  estimatedValue Float @default(0)
+  reminderAt  DateTime?
+  nextAction  String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([ownerRole])
+  @@index([stage])
+  @@index([reminderAt])
+  @@index([createdAt])
+}
+
+model EmployeeCrmSheet {
+  id              Int      @id @default(autoincrement())
+  title           String
+  description     String?
+  sourceName      String?
+  sourceType      String   @default("Pasted sheet")
+  ownerRole       String   @default("sales")
+  audienceRoles   String   @default("sales")
+  status          String   @default("Pending")
+  locked          Boolean  @default(true)
+  columns         Json?
+  requestedBy     Int?
+  requestedByName String?
+  approvedBy      Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  rows            EmployeeCrmSheetRow[]
+
+  @@index([ownerRole])
+  @@index([audienceRoles])
+  @@index([status])
+  @@index([requestedBy])
+}
+
+model EmployeeCrmSheetRow {
+  id            Int      @id @default(autoincrement())
+  sheetId       Int
+  rowNumber     Int
+  data          Json
+  status        String   @default("Open")
+  statusColor   String   @default("none")
+  reason        String?
+  notes         String?
+  locked        Boolean  @default(false)
+  updatedBy     Int?
+  updatedByName String?
+  doneAt        DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  sheet         EmployeeCrmSheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+
+  @@index([sheetId, rowNumber])
+  @@index([status])
+  @@index([updatedBy])
+}
+
+model EmployeeAttendance {
+  id          Int       @id @default(autoincrement())
+  employeeId  Int
+  employeeName String
+  workDate    DateTime
+  loginAt     DateTime?
+  logoutAt    DateTime?
+  totalHours  Float     @default(0)
+  status      String    @default("Present")
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([employeeId])
+  @@index([workDate])
+  @@index([status])
+}
+
+model EmployeeLeaveRequest {
+  id          Int      @id @default(autoincrement())
+  employeeId  Int
+  employeeName String
+  leaveType   String   @default("Casual")
+  startsAt    DateTime
+  endsAt      DateTime
+  status      String   @default("Pending")
+  reason      String?
+  reviewedBy  Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([employeeId])
+  @@index([status])
+  @@index([startsAt])
+}
+
+model EmployeeTask {
+  id          Int      @id @default(autoincrement())
+  title       String
+  assignedTo  Int?
+  assignedName String?
+  ownerRole   String   @default("all")
+  priority    String   @default("Medium")
+  status      String   @default("Open")
+  dueAt       DateTime?
+  proofUrl    String?
+  description String?
+  createdBy   Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([assignedTo])
+  @@index([ownerRole])
+  @@index([status])
+  @@index([dueAt])
+}
+
+model EmployeePayrollInput {
+  id          Int      @id @default(autoincrement())
+  employeeId  Int
+  employeeName String
+  payPeriod   String
+  payType     String   @default("Salary")
+  amount      Float    @default(0)
+  workingDays Float    @default(0)
+  unpaidLeaveDays Float @default(0)
+  bonus       Float    @default(0)
+  deductions  Float    @default(0)
+  status      String   @default("Draft")
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([employeeId])
+  @@index([payPeriod])
+  @@index([status])
+}
+
+model EmployeePerformanceReview {
+  id          Int      @id @default(autoincrement())
+  employeeId  Int
+  employeeName String
+  reviewPeriod String
+  reviewerId  Int?
+  score       Float    @default(0)
+  kpiSummary  String?
+  strengths   String?
+  improvements String?
+  status      String   @default("Draft")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([employeeId])
+  @@index([reviewPeriod])
+  @@index([status])
+}
+
+model EmployeeDocument {
+  id          Int      @id @default(autoincrement())
+  employeeId  Int?
+  employeeName String?
+  title       String
+  documentType String  @default("General")
+  url         String
+  fileName    String?
+  fileSize    Int?
+  mimeType    String?
+  visibilityRoles String @default("super_admin,admin,hr")
+  notes       String?
+  uploadedBy  Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([employeeId])
+  @@index([documentType])
+  @@index([visibilityRoles])
+}
+
+model EmployeeDepartment {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  managerId   Int?
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([active])
+  @@index([managerId])
+}
+
+model EmployeeNotification {
+  id          Int      @id @default(autoincrement())
+  employeeId  Int?
+  targetRoles String   @default("all")
+  title       String
+  body        String
+  readAt      DateTime?
+  createdBy   Int?
+  createdAt   DateTime @default(now())
+
+  @@index([employeeId])
+  @@index([targetRoles])
+  @@index([readAt])
+}
+
+model EmployeeExpenseClaim {
+  id          Int      @id @default(autoincrement())
+  employeeId  Int
+  employeeName String
+  category    String   @default("General")
+  amount      Float    @default(0)
+  claimDate   DateTime
+  receiptUrl  String?
+  status      String   @default("Pending")
+  reviewerId  Int?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([employeeId])
+  @@index([status])
+  @@index([claimDate])
+}
+
+model EmployeeAuditEvent {
+  id          Int      @id @default(autoincrement())
+  actorId     Int?
+  actorName   String?
+  action      String
+  entityType  String
+  entityId    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([actorId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model EmployeeAnnouncement {
+  id          Int      @id @default(autoincrement())
+  title       String
+  body        String
+  audienceRoles String @default("all")
+  priority    String  @default("Normal")
+  publishedBy Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([audienceRoles])
+  @@index([priority])
+  @@index([createdAt])
+}
+
+model EmployeeComment {
+  id          Int      @id @default(autoincrement())
+  entityType  String
+  entityId    Int
+  body        String
+  authorId    Int?
+  authorName  String?
+  createdAt   DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([authorId])
+}
+
+model EmployeeApplicant {
+  id          Int      @id @default(autoincrement())
+  name        String
+  email       String
+  phone       String?
+  roleApplied String
+  stage       String   @default("New")
+  source      String   @default("Manual")
+  meetUrl     String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([roleApplied])
+  @@index([stage])
+}
+
+model EmployeeMeeting {
+  id             Int      @id @default(autoincrement())
+  title          String
+  startsAt       DateTime
+  endsAt         DateTime
+  meetUrl        String?
+  audienceRoles  String   @default("all")
+  applicantName  String?
+  applicantEmail String?
+  notes          String?
+  createdBy      Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([startsAt])
+  @@index([audienceRoles])
+}
+
+model EmployeeResource {
+  id            Int      @id @default(autoincrement())
+  title         String
+  resourceType  String   @default("Link")
+  url           String
+  description   String?
+  audienceRoles String   @default("all")
+  tags          String?
+  createdBy     Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([resourceType])
+  @@index([audienceRoles])
+  @@index([createdAt])
+}

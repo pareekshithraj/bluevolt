@@ -12,8 +12,13 @@ if (!databaseUrl) {
   throw new Error("DATABASE_URL is not set");
 }
 
-// Correctly initialize node-postgres Pool for standard adapter-pg
-const pool = new Pool({ connectionString: databaseUrl });
+// Keep database failures short and clear in the UI instead of waiting on long network retries.
+const pool = new Pool({
+  connectionString: databaseUrl,
+  connectionTimeoutMillis: 5000,
+  idleTimeoutMillis: 30000,
+  max: 5,
+});
 const adapter = new PrismaPg(pool);
 
 export const prisma =

@@ -37,20 +37,6 @@ export default function Navbar() {
 
     return (
         <header className={`navbar-fixed ${scrolled ? "scrolled" : ""}`}>
-            {/* Top Utility Bar (Minimal & Monospace) */}
-            <div className="top-utility-bar">
-                <div style={{ display: "flex", gap: "1.5rem", alignItems: "center" }}>
-                    <span>GLOBAL NODE ACCESS</span>
-                    <span style={{ color: "rgba(255,255,255,0.1)" }}>/</span>
-                    <Link href="/contact" style={{ color: "inherit", textDecoration: "none", transition: "color 0.2s" }}>
-                        BOARD CONTACT
-                    </Link>
-                </div>
-                <div style={{ display: "flex", gap: "1.5rem" }}>
-                    <span>BLUEVOLT GROUPS PVT. LTD.</span>
-                </div>
-            </div>
-
             {/* Main Navigation Tier */}
             <div className="navbar-container-inner">
                 <Link href="/" className="navbar-logo" style={{ display: "flex", alignItems: "center", textDecoration: "none" }}>
@@ -59,7 +45,7 @@ export default function Navbar() {
                         alt="BLUEVOLT GROUPS Logo" 
                         width={220} 
                         height={48} 
-                        style={{ objectFit: "contain", height: "44px", width: "auto" }} 
+                        style={{ objectFit: "contain", height: "44px", width: "auto", borderRadius: "8px" }} 
                         priority 
                         unoptimized 
                     />
@@ -70,13 +56,15 @@ export default function Navbar() {
                     className="mobile-menu-toggle"
                     onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                     aria-label="Toggle menu"
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "white" }}
                 >
                     {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
                 </button>
 
                 <div className={`nav-links-wrapper ${mobileMenuOpen ? "open" : ""}`}>
                     <nav className="nav-links">
+                        <Link href="/" className="nav-link-corporate active-home-pill" onClick={() => setMobileMenuOpen(false)}>
+                            Home
+                        </Link>
                         <Link href="https://schools24.in" target="_blank" className="nav-link-corporate" onClick={() => setMobileMenuOpen(false)}>
                             Schools24
                         </Link>

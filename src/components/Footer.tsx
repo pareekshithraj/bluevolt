@@ -51,7 +51,7 @@ export default function Footer() {
                         <ul>
                             <li><a href="https://schools24.in" target="_blank" rel="noopener noreferrer">Schools24</a></li>
                             <li><a href="https://stores24.bluevolt.group" target="_blank" rel="noopener noreferrer">Stores24 ERP</a></li>
-                            <li><Link href="/#ecosystem">Events24 <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.55rem', padding: '0.1rem 0.4rem', border: '1px solid rgba(255,255,255,0.12)', marginLeft: '0.5rem', color: 'var(--text-primary)' }}>Beta</span></Link></li>
+                            <li><Link href="/#ecosystem">Events24 <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.55rem', padding: '0.1rem 0.4rem', border: '1px solid var(--border-main)', marginLeft: '0.5rem', color: 'var(--text-primary)' }}>Beta</span></Link></li>
                         </ul>
                     </div>
 
@@ -92,6 +92,7 @@ export default function Footer() {
                         <Link href="/legal">LEGAL DISCLOSURE</Link>
                         <Link href="/privacy">PRIVACY POLICY</Link>
                         <Link href="/terms">TERMS OF SERVICE</Link>
+                        <Link href="/employee/login" style={{ opacity: 0.15, fontSize: '0.62rem', fontFamily: 'var(--font-mono)', letterSpacing: '0.05em', transition: 'opacity 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'} onMouseLeave={(e) => e.currentTarget.style.opacity = '0.15'}>[EMPLOYEE_GATEWAY]</Link>
                         <Link href="/studio/admin" style={{ opacity: 0.15, fontSize: '0.62rem', fontFamily: 'var(--font-mono)', letterSpacing: '0.05em', transition: 'opacity 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'} onMouseLeave={(e) => e.currentTarget.style.opacity = '0.15'}>[SYS_ADMIN_NODE]</Link>
                     </div>
                 </div>

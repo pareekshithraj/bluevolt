@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionCookieName, readSessionToken } from "@/lib/stores24/session";
+import { getEmployeeSessionCookieName, readEmployeeSessionToken } from "@/lib/employee/session";
 
 export const config = {
     matcher: [
@@ -136,6 +137,20 @@ export async function proxy(request: NextRequest) {
 
         if (session?.role === "Cashier" && isAdminRoute) {
             return NextResponse.redirect(new URL("/stores24/pos", request.url));
+        }
+    }
+
+    if (url.pathname.startsWith("/employee")) {
+        const session = await readEmployeeSessionToken(request.cookies.get(getEmployeeSessionCookieName())?.value);
+        const isLoginPage = url.pathname === "/employee/login";
+        const isProtectedEmployeeRoute = url.pathname.startsWith("/employee/portal");
+
+        if (isLoginPage && session) {
+            return NextResponse.redirect(new URL("/employee/portal", request.url));
+        }
+
+        if (isProtectedEmployeeRoute && !session) {
+            return NextResponse.redirect(new URL("/employee/login", request.url));
         }
     }
 

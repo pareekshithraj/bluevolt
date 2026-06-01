@@ -91,6 +91,7 @@ a.primary {
 
 a.secondary {
   border-color: var(--button-secondary-border);
+  color: var(--text-primary);
 }
 
 /* Enable hover only on non-touch devices */

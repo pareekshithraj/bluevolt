@@ -12,10 +12,18 @@ import {
   hasEmployeeRole,
   setEmployeeSession,
 } from "@/lib/employee/session";
-import { EMPLOYEE_ROLES, type EmployeeRole } from "@/lib/employee/roles";
+import { EMPLOYEE_ROLES } from "@/lib/employee/roles";
 
-function normalizeRole(role: string): EmployeeRole {
-  return EMPLOYEE_ROLES.includes(role as EmployeeRole) ? (role as EmployeeRole) : "employee";
+function roleKey(value: string): string {
+  return (value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "") || "employee";
+}
+
+function normalizeRole(role: string): string {
+  return roleKey(role);
 }
 
 function parseRoles(value: string): string[] {
@@ -70,9 +78,61 @@ type LocalEmployeeUser = {
   updatedAt: string;
 };
 
+type EmployeeRoleDefinition = {
+  id: number;
+  key: string;
+  label: string;
+  description: string;
+  permissions: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type LocalEmployeeStore = {
   users: LocalEmployeeUser[];
+  roles?: EmployeeRoleDefinition[];
 };
+
+const defaultRoleLabels: Record<string, string> = {
+  super_admin: "Super Admin",
+  admin: "Admin",
+  sales: "Sales",
+  content: "Content Developer",
+  hr: "HR",
+  operations: "Operations",
+  employee: "Employee",
+};
+
+const defaultRolePermissions: Record<string, string> = {
+  super_admin: "Full portal control, employee mapping, role setup, CRM sheets, documents, resources, meetings, payroll, and audits.",
+  admin: "Employee operations, attendance, documents, resources, payroll, reviews, and approvals.",
+  sales: "CRM access, meetings, tasks, resources, and assigned work updates.",
+  content: "Content resources, CRM visibility, tasks, documents, and assigned work updates.",
+  hr: "Hiring, employee records, payroll inputs, reviews, documents, and attendance.",
+  operations: "Tasks, resources, documents, announcements, and day-to-day operations.",
+  employee: "Own dashboard, check-in/out, documents, resources, tasks, leave, expenses, and ID card.",
+};
+
+function defaultRoleDefinitions(now = new Date().toISOString()): EmployeeRoleDefinition[] {
+  return EMPLOYEE_ROLES.map((key, index) => ({
+    id: index + 1,
+    key,
+    label: defaultRoleLabels[key] || key.replace(/_/g, " "),
+    description: defaultRolePermissions[key] || "Portal access role.",
+    permissions: defaultRolePermissions[key] || "Basic portal access.",
+    status: "Active",
+    createdAt: now,
+    updatedAt: now,
+  }));
+}
+
+function mergeRoleDefinitions(roles?: EmployeeRoleDefinition[]): EmployeeRoleDefinition[] {
+  const merged = new Map<string, EmployeeRoleDefinition>();
+  for (const role of defaultRoleDefinitions()) merged.set(role.key, role);
+  for (const role of roles || []) merged.set(role.key, role);
+  return [...merged.values()].sort((first, second) => first.label.localeCompare(second.label));
+}
 
 function isDatabaseUnavailable(error: unknown): boolean {
   const text = error instanceof Error ? error.message : String(error || "");
@@ -138,7 +198,9 @@ async function readLocalEmployeeStore(): Promise<LocalEmployeeStore> {
   try {
     const raw = await fs.readFile(localEmployeeStorePath, "utf8");
     const parsed = JSON.parse(raw) as LocalEmployeeStore;
-    if (Array.isArray(parsed.users)) return parsed;
+    if (Array.isArray(parsed.users)) {
+      return { ...parsed, roles: mergeRoleDefinitions(parsed.roles) };
+    }
   } catch {
     // The local store is created on first use when Neon is not reachable.
   }
@@ -169,6 +231,7 @@ async function readLocalEmployeeStore(): Promise<LocalEmployeeStore> {
       createdAt: now,
       updatedAt: now,
     }],
+    roles: defaultRoleDefinitions(now),
   };
   await writeLocalEmployeeStore(store);
   return store;
@@ -176,6 +239,48 @@ async function readLocalEmployeeStore(): Promise<LocalEmployeeStore> {
 
 async function writeLocalEmployeeStore(store: LocalEmployeeStore) {
   await fs.writeFile(localEmployeeStorePath, `${JSON.stringify(store, null, 2)}\n`, "utf8");
+}
+
+async function ensureEmployeeRoleDefinitionTable() {
+  await prisma.$executeRaw`
+    CREATE TABLE IF NOT EXISTS "EmployeeRoleDefinition" (
+      "id" SERIAL PRIMARY KEY,
+      "key" TEXT NOT NULL UNIQUE,
+      "label" TEXT NOT NULL,
+      "description" TEXT NOT NULL DEFAULT '',
+      "permissions" TEXT NOT NULL DEFAULT '',
+      "status" TEXT NOT NULL DEFAULT 'Active',
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+}
+
+async function getEmployeeRoleDefinitionsFromDatabase(): Promise<EmployeeRoleDefinition[]> {
+  await ensureEmployeeRoleDefinitionTable();
+  for (const role of defaultRoleDefinitions()) {
+    await prisma.$executeRaw`
+      INSERT INTO "EmployeeRoleDefinition" ("key", "label", "description", "permissions", "status")
+      VALUES (${role.key}, ${role.label}, ${role.description}, ${role.permissions}, ${role.status})
+      ON CONFLICT ("key") DO NOTHING
+    `;
+  }
+
+  const roles = await prisma.$queryRaw<EmployeeRoleDefinition[]>`
+    SELECT
+      "id",
+      "key",
+      "label",
+      "description",
+      "permissions",
+      "status",
+      "createdAt"::text AS "createdAt",
+      "updatedAt"::text AS "updatedAt"
+    FROM "EmployeeRoleDefinition"
+    ORDER BY "label" ASC
+  `;
+
+  return mergeRoleDefinitions(roles);
 }
 
 async function loginLocalEmployee(email: string, password: string) {
@@ -489,6 +594,7 @@ async function getLocalEmployeePortalData(sortResources = "newest", activeTab = 
     announcements: [],
     comments: [],
     departments: [],
+    roleDefinitions: mergeRoleDefinitions(store.roles),
     notifications: [{
       id: 1,
       employeeId: activeUser.id,
@@ -518,7 +624,7 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
     data: { lastSeenAt: now },
   });
 
-  const [users, crmRecords, crmSheets, applicants, meetings, resources, attendance, leaveRequests, tasks, payrollInputs, reviews, documents, announcements, comments, departments, notifications, expenses, auditEvents] = await Promise.all([
+  const [users, crmRecords, crmSheets, applicants, meetings, resources, attendance, leaveRequests, tasks, payrollInputs, reviews, documents, announcements, comments, departments, roleDefinitions, notifications, expenses, auditEvents] = await Promise.all([
     canManage && ["dashboard", "admin", "ops"].includes(activeTab)
       ? prisma.employeeUser.findMany({ orderBy: { createdAt: "desc" } })
       : prisma.employeeUser.findMany({ where: { id: user.id } }),
@@ -601,6 +707,7 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
       ? prisma.employeeComment.findMany({ orderBy: { createdAt: "desc" }, take: 120 })
       : Promise.resolve([]),
     activeTab === "admin" && canManage ? prisma.employeeDepartment.findMany({ orderBy: { name: "asc" } }) : Promise.resolve([]),
+    activeTab === "admin" && canManage ? getEmployeeRoleDefinitionsFromDatabase() : Promise.resolve(defaultRoleDefinitions()),
     ["dashboard", "admin"].includes(activeTab)
       ? prisma.employeeNotification.findMany({
           where: {
@@ -672,6 +779,7 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
     announcements: announcements.filter((announcement) => visibleToRole(announcement.audienceRoles, session.role)),
     comments,
     departments,
+    roleDefinitions,
     notifications,
     expenses,
     auditEvents,
@@ -679,6 +787,81 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
   } catch (error) {
     if (isDatabaseUnavailable(error)) return getLocalEmployeePortalData(sortResources, activeTab);
     throw error;
+  }
+}
+
+export async function saveEmployeeRoleDefinition(input: {
+  label: string;
+  key?: string;
+  description?: string;
+  permissions?: string;
+  status?: string;
+}) {
+  const label = input.label.trim();
+  if (!label) return { success: false, error: "Role name is required." };
+
+  const key = roleKey(input.key?.trim() || label);
+  const status = input.status === "Inactive" ? "Inactive" : "Active";
+  const description = input.description?.trim() || "Portal access role.";
+  const permissions = input.permissions?.trim() || "Access is controlled by Super Admin assignments.";
+
+  try {
+    const { session } = await requireEmployee();
+    if (!hasEmployeeRole(session, ["admin", "hr"])) {
+      return { success: false, error: "Only Super Admin, Admin, or HR can create roles." };
+    }
+
+    await ensureEmployeeRoleDefinitionTable();
+    await prisma.$executeRaw`
+      INSERT INTO "EmployeeRoleDefinition" ("key", "label", "description", "permissions", "status")
+      VALUES (${key}, ${label}, ${description}, ${permissions}, ${status})
+      ON CONFLICT ("key") DO UPDATE SET
+        "label" = EXCLUDED."label",
+        "description" = EXCLUDED."description",
+        "permissions" = EXCLUDED."permissions",
+        "status" = EXCLUDED."status",
+        "updatedAt" = NOW()
+    `;
+
+    await logEmployeeAudit({
+      actorId: Number(session.userId),
+      actorName: session.name,
+      action: "role.upsert",
+      entityType: "employee_role",
+      entityId: key,
+      metadata: { label, status },
+    });
+
+    revalidatePath("/employee/portal");
+    return { success: true };
+  } catch (error) {
+    if (!isDatabaseUnavailable(error)) throw error;
+    const session = await getEmployeeSession();
+    if (!session || !hasEmployeeRole(session, ["admin", "hr"])) {
+      return { success: false, error: "Only Super Admin, Admin, or HR can create roles." };
+    }
+
+    const store = await readLocalEmployeeStore();
+    const now = new Date().toISOString();
+    const roles = mergeRoleDefinitions(store.roles);
+    const existingIndex = roles.findIndex((role) => role.key === key);
+    const nextId = Math.max(0, ...roles.map((role) => role.id || 0)) + 1;
+    const role: EmployeeRoleDefinition = {
+      id: existingIndex >= 0 ? roles[existingIndex].id : nextId,
+      key,
+      label,
+      description,
+      permissions,
+      status,
+      createdAt: existingIndex >= 0 ? roles[existingIndex].createdAt : now,
+      updatedAt: now,
+    };
+    if (existingIndex >= 0) roles[existingIndex] = role;
+    else roles.push(role);
+
+    await writeLocalEmployeeStore({ ...store, roles: mergeRoleDefinitions(roles) });
+    revalidatePath("/employee/portal");
+    return { success: true };
   }
 }
 

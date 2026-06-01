@@ -17,6 +17,7 @@ import {
   saveCrmRecord,
   saveCrmSheetRequest,
   saveEmployeeDocument,
+  saveEmployeeRoleDefinition,
   saveEmployeeUser,
   saveExpenseClaim,
   saveDepartment,
@@ -30,7 +31,6 @@ import {
   updateCrmSheetRowData,
   updateEmployeeRecordStatus,
 } from "@/app/actions/employee-portal";
-import { EMPLOYEE_ROLES } from "@/lib/employee/roles";
 import styles from "../portal.module.css";
 
 type PortalData = Awaited<ReturnType<typeof getEmployeePortalData>>;
@@ -64,7 +64,7 @@ const tabs = [
   { id: "announcements", label: "Announcements", icon: Bell },
   { id: "meetings", label: "Meetings", icon: Video },
   { id: "resources", label: "Resources", icon: FileText },
-  { id: "admin", label: "Super Admin", icon: CalendarDays },
+  { id: "admin", label: "Employees", icon: CalendarDays },
 ] as const;
 
 type SelectOption = string | { label: string; value: string };
@@ -201,6 +201,7 @@ function mergePortalData(previous: PortalData, incoming: PortalData, activeTab: 
     announcements: ["dashboard", "announcements"].includes(activeTab) ? incoming.announcements : previous.announcements,
     comments: activeTab === "ops" ? incoming.comments : previous.comments,
     departments: activeTab === "admin" ? incoming.departments : previous.departments,
+    roleDefinitions: activeTab === "admin" ? incoming.roleDefinitions : previous.roleDefinitions,
     notifications: ["dashboard", "admin"].includes(activeTab) ? incoming.notifications : previous.notifications,
     expenses: activeTab === "expenses" ? incoming.expenses : previous.expenses,
     auditEvents: activeTab === "admin" ? incoming.auditEvents : previous.auditEvents,
@@ -277,7 +278,15 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const onlineEmployees = employees.filter((user) => user.isOnline).length;
   const workingEmployees = employees.filter((user) => user.isWithinWorkHours).length;
   const employeeOptions = employees.map((user) => ({ label: `${user.name} (${user.email})`, value: user.id.toString() }));
-  const roleLabel = data.session.role.replace("_", " ");
+  const roleDefinitions = data.roleDefinitions || [];
+  const activeRoleOptions = roleDefinitions
+    .filter((role) => role.status !== "Inactive")
+    .map((role) => ({ label: `${role.label} (${role.key})`, value: role.key }));
+  const roleOptions = activeRoleOptions.length ? activeRoleOptions : [{ label: "Employee (employee)", value: "employee" }];
+  const ownerRoleOptions = [{ label: "All roles", value: "all" }, ...roleOptions];
+  const roleNameByKey = new Map(roleDefinitions.map((role) => [role.key, role.label]));
+  const displayRole = (role: string) => roleNameByKey.get(role) || role.replace(/_/g, " ");
+  const roleLabel = displayRole(data.session.role);
   const openTasks = data.tasks.filter((task) => task.status !== "Done");
   const blockedTasks = data.tasks.filter((task) => task.status === "Blocked");
   const dueSoonTasks = data.tasks.filter((task) => task.dueAt && task.status !== "Done" && new Date(task.dueAt).getTime() <= Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -771,7 +780,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               <div className={styles.list}>{openTasks.length === 0 ? <div className={styles.emptyState}>No open tasks.</div> : openTasks.slice(0, 5).map((task) => (
                 <div className={styles.row} key={task.id}>
                   <div className={styles.rowHeader}><strong>{task.title}</strong><span className={task.status === "Blocked" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{task.status}</span></div>
-                  <p className={styles.muted}>{task.assignedName || task.ownerRole} {task.dueAt ? `- Due ${formatPortalDateTime(task.dueAt)}` : ""}</p>
+                  <p className={styles.muted}>{task.assignedName || displayRole(task.ownerRole)} {task.dueAt ? `- Due ${formatPortalDateTime(task.dueAt)}` : ""}</p>
                 </div>
               ))}</div>
             </div>
@@ -871,7 +880,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 <Field label="Contact" name="contactName" required />
                 <Field label="Email" name="email" type="email" />
                 <Field label="Phone" name="phone" />
-                <Field label="Owner Role" name="ownerRole" options={["sales", "content"]} />
+                <Field label="Owner Role" name="ownerRole" options={roleOptions} />
                 <Field label="Stage" name="stage" options={["New", "Qualified", "Proposal", "Won", "Lost"]} />
                 <Field label="Source" name="source" defaultValue="Manual" />
                 <Field label="Priority" name="priority" options={["High", "Medium", "Low"]} />
@@ -926,7 +935,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                       <div className={styles.rowHeader}><strong>{record.company}</strong><span className={styles.pill}>{record.stage}</span></div>
                       <p className={styles.muted}>{record.contactName} {record.email ? `- ${record.email}` : ""}</p>
                       <div className={styles.compactMeta}>
-                        <span className={styles.pill}>{record.ownerRole}</span>
+                        <span className={styles.pill}>{displayRole(record.ownerRole)}</span>
                         <span className={record.priority === "High" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{record.priority}</span>
                         <span className={record.leadRating === "Hot" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{record.leadRating}</span>
                       </div>
@@ -1237,7 +1246,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Assign Task</h2>
               <Field label="Title" name="title" required wide />
               <Field label="Assign To" name="assignedTo" options={[{ label: "Role based / unassigned", value: "" }, ...employeeOptions]} wide />
-              <Field label="Owner Role" name="ownerRole" options={["all", ...EMPLOYEE_ROLES]} />
+              <Field label="Owner Role" name="ownerRole" options={ownerRoleOptions} />
               <Field label="Priority" name="priority" options={["High", "Medium", "Low"]} />
               <Field label="Status" name="status" options={["Open", "In Progress", "Blocked", "Done"]} />
               <Field label="Due At" name="dueAt" type="datetime-local" />
@@ -1256,7 +1265,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               <div className={styles.list}>{data.tasks.length === 0 ? <div className={styles.emptyState}>No tasks yet.</div> : data.tasks.map((task) => (
                 <div className={styles.row} key={task.id}>
                   <div className={styles.rowHeader}><strong>{task.title}</strong><span className={task.priority === "High" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{task.priority}</span></div>
-                  <p className={styles.muted}>{task.assignedName || task.ownerRole} - {task.status}{task.dueAt ? ` - Due ${formatPortalDateTime(task.dueAt)}` : ""}</p>
+                  <p className={styles.muted}>{task.assignedName || displayRole(task.ownerRole)} - {task.status}{task.dueAt ? ` - Due ${formatPortalDateTime(task.dueAt)}` : ""}</p>
                   {task.proofUrl && <a href={task.proofUrl} target="_blank" rel="noopener noreferrer">Open proof</a>}
                   <div className={styles.toolbar}>
                     {["In Progress", "Blocked", "Done"].map((status) => <button className={styles.ghostButton} key={status} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "task", id: task.id.toString(), status }))}>{status}</button>)}
@@ -1534,12 +1543,45 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
 
         {tab === "admin" && (
           <section className={styles.grid}>
+            <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveEmployeeRoleDefinition)}>
+              <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>1. Create Role</h2>
+              <p className={`${styles.muted} ${styles.fieldWide}`}>Create the access role first, then assign employees to that role below.</p>
+              <Field label="Role Name" name="label" placeholder="Content Lead" required />
+              <Field label="Role Key" name="key" placeholder="content_lead" />
+              <Field label="Status" name="status" options={["Active", "Inactive"]} />
+              <Field label="Permissions / Access Notes" name="permissions" textarea wide />
+              <Field label="Description" name="description" textarea wide />
+              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Role</button>
+            </form>
+            <div className={`${styles.card} ${styles.span8}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>Created Roles</h2>
+                  <p className={styles.muted}>Use the role key when importing employees by CSV.</p>
+                </div>
+                <span className={styles.pill}>{roleDefinitions.length} roles</span>
+              </div>
+              <div className={styles.list}>{roleDefinitions.length === 0 ? <div className={styles.emptyState}>No roles yet.</div> : roleDefinitions.map((role) => (
+                <div className={styles.row} key={role.key}>
+                  <div className={styles.rowHeader}>
+                    <strong>{role.label}</strong>
+                    <span style={{ display: "inline-flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      <span className={styles.pill}>{role.key}</span>
+                      <span className={role.status === "Active" ? `${styles.pill} ${styles.pillSuccess}` : `${styles.pill} ${styles.pillMuted}`}>{role.status}</span>
+                    </span>
+                  </div>
+                  <p className={styles.muted}>{role.description}</p>
+                  <p className={styles.muted}>{role.permissions}</p>
+                </div>
+              ))}</div>
+            </div>
             <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveEmployeeUser)}>
-              <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Employee Mapping</h2>
+              <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>2. Register Employee</h2>
+              <p className={`${styles.muted} ${styles.fieldWide}`}>Pick from the roles created above, then set employee type, paid status, and work hours.</p>
               <Field label="Name" name="name" required />
               <Field label="Email" name="email" type="email" required />
               <Field label="Password" name="password" type="password" />
-              <Field label="Role" name="role" options={[...EMPLOYEE_ROLES]} />
+              <Field label="Role" name="role" options={roleOptions} defaultValue={roleOptions.some((role) => role.value === "employee") ? "employee" : roleOptions[0]?.value} />
               <Field label="Department" name="department" defaultValue="General" />
               <Field label="Department Record" name="departmentId" options={[{ label: "No department record", value: "" }, ...data.departments.map((dept) => ({ label: dept.name, value: dept.id.toString() }))]} />
               <Field label="Manager" name="managerId" options={[{ label: "No manager", value: "" }, ...employeeOptions]} />
@@ -1581,7 +1623,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   <div className={styles.rowHeader}>
                     <strong>{user.name}</strong>
                     <span style={{ display: "inline-flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                      <span className={styles.pill}>{user.role}</span>
+                      <span className={styles.pill}>{displayRole(user.role)}</span>
                       <span className={styles.pill}>{user.employeeType}</span>
                       <span className={user.compensationStatus === "Paid" ? `${styles.pill} ${styles.pillSuccess}` : `${styles.pill} ${styles.pillWarn}`}>{user.compensationStatus}</span>
                       <span className={user.isOnline ? `${styles.pill} ${styles.pillSuccess}` : `${styles.pill} ${styles.pillMuted}`}>{user.isOnline ? "Logged in now" : "Offline"}</span>
@@ -1604,7 +1646,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
             </div>
             <div className={`${styles.card} ${styles.span12}`}>
               <h2 className={styles.cardTitle}>Bulk Employee Import</h2>
-              <p className={styles.muted}>CSV headers: name,email,password,role,department,title,employeeType,compensationStatus. New accounts get default offer/internship letter access through Documents.</p>
+              <p className={styles.muted}>CSV headers: name,email,password,role,department,title,employeeType,compensationStatus. Role must match a Role Key from Created Roles. New accounts get default offer/internship letter access through Documents.</p>
               <input className={styles.input} type="file" accept=".csv,text/csv" onChange={(event) => importEmployees(event.target.files?.[0])} />
             </div>
             <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveDepartment)}>

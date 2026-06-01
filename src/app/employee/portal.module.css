@@ -285,6 +285,7 @@
 .span3 { grid-column: span 3; }
 .span6 { grid-column: span 6; }
 .span8 { grid-column: span 8; }
+.span9 { grid-column: span 9; }
 .span12 { grid-column: span 12; }
 
 .cardTitle {
@@ -776,7 +777,7 @@
   .nav { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; margin: 20px 0; max-width: 100%; }
   .navButton { flex: 0 0 auto; white-space: nowrap; }
   .main { padding: 24px; }
-  .span3, .span4, .span6, .span8 { grid-column: span 12; }
+  .span3, .span4, .span6, .span8, .span9 { grid-column: span 12; }
   .formGrid { grid-template-columns: 1fr; }
   .topbar, .sectionHeader, .dashboardHero { flex-direction: column; align-items: stretch; }
   .toolbar, .heroActions { width: 100%; }

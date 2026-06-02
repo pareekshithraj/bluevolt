@@ -359,6 +359,42 @@
   resize: vertical;
 }
 
+.accessGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.accessOption {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  align-items: flex-start;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.28);
+  padding: 12px;
+}
+
+.accessOption input {
+  margin-top: 3px;
+  accent-color: #635bff;
+}
+
+.accessOption strong {
+  display: block;
+  color: #111827;
+  font-size: 0.9rem;
+}
+
+.accessOption small {
+  display: block;
+  color: #64748b;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  margin-top: 3px;
+}
+
 .button {
   border: 0;
   border-radius: 10px;
@@ -779,6 +815,7 @@
   .main { padding: 24px; }
   .span3, .span4, .span6, .span8, .span9 { grid-column: span 12; }
   .formGrid { grid-template-columns: 1fr; }
+  .accessGrid { grid-template-columns: 1fr; }
   .topbar, .sectionHeader, .dashboardHero { flex-direction: column; align-items: stretch; }
   .toolbar, .heroActions { width: 100%; }
   .toolbar > *, .heroActions > * { flex: 1 1 150px; }

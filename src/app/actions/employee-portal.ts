@@ -12,7 +12,12 @@ import {
   hasEmployeeRole,
   setEmployeeSession,
 } from "@/lib/employee/session";
-import { EMPLOYEE_ROLES } from "@/lib/employee/roles";
+import {
+  DEFAULT_ROLE_FEATURE_ACCESS,
+  EMPLOYEE_PORTAL_FEATURES,
+  EMPLOYEE_ROLES,
+  type EmployeePortalFeature,
+} from "@/lib/employee/roles";
 
 function roleKey(value: string): string {
   return (value || "")
@@ -84,6 +89,7 @@ type EmployeeRoleDefinition = {
   label: string;
   description: string;
   permissions: string;
+  featureAccess: string;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -121,6 +127,7 @@ function defaultRoleDefinitions(now = new Date().toISOString()): EmployeeRoleDef
     label: defaultRoleLabels[key] || key.replace(/_/g, " "),
     description: defaultRolePermissions[key] || "Portal access role.",
     permissions: defaultRolePermissions[key] || "Basic portal access.",
+    featureAccess: (DEFAULT_ROLE_FEATURE_ACCESS[key] || ["dashboard"]).join(","),
     status: "Active",
     createdAt: now,
     updatedAt: now,
@@ -130,8 +137,51 @@ function defaultRoleDefinitions(now = new Date().toISOString()): EmployeeRoleDef
 function mergeRoleDefinitions(roles?: EmployeeRoleDefinition[]): EmployeeRoleDefinition[] {
   const merged = new Map<string, EmployeeRoleDefinition>();
   for (const role of defaultRoleDefinitions()) merged.set(role.key, role);
-  for (const role of roles || []) merged.set(role.key, role);
+  for (const role of roles || []) {
+    const fallback = merged.get(role.key);
+    merged.set(role.key, {
+      ...role,
+      featureAccess: role.featureAccess || fallback?.featureAccess || "dashboard",
+    });
+  }
   return [...merged.values()].sort((first, second) => first.label.localeCompare(second.label));
+}
+
+function parseFeatureAccess(value?: string): EmployeePortalFeature[] {
+  const valid = new Set(EMPLOYEE_PORTAL_FEATURES.map((feature) => feature.id));
+  const features = (value || "")
+    .split(",")
+    .map((feature) => feature.trim())
+    .filter((feature): feature is EmployeePortalFeature => valid.has(feature as EmployeePortalFeature));
+  return [...new Set(features.length ? features : (["dashboard"] as EmployeePortalFeature[]))];
+}
+
+function roleCanAccessFeature(role: string, roles: EmployeeRoleDefinition[], feature: EmployeePortalFeature): boolean {
+  if (role === "super_admin") return true;
+  const roleDefinition = mergeRoleDefinitions(roles).find((entry) => entry.key === role);
+  return parseFeatureAccess(roleDefinition?.featureAccess).includes(feature);
+}
+
+function capabilitiesForRole(role: string, roles: EmployeeRoleDefinition[]) {
+  const canManage = roleCanAccessFeature(role, roles, "employees");
+  const canUseCrm = roleCanAccessFeature(role, roles, "crm") || roleCanAccessFeature(role, roles, "crm_manage");
+  const canManageCrm = roleCanAccessFeature(role, roles, "crm_manage");
+  return {
+    canManage,
+    canUseCrm,
+    canRequestCrmSource: canManageCrm,
+    canUpdateCrmSheetRows: canManageCrm,
+    canManageCrmSheets: canManageCrm,
+    canManageApplicants: roleCanAccessFeature(role, roles, "applicants"),
+    canManageResources: roleCanAccessFeature(role, roles, "resources"),
+    canScheduleMeetings: roleCanAccessFeature(role, roles, "meetings"),
+    canManageOps: roleCanAccessFeature(role, roles, "ops"),
+    canManagePayroll: roleCanAccessFeature(role, roles, "payroll"),
+    canReviewPerformance: roleCanAccessFeature(role, roles, "reviews"),
+    canManageDocuments: roleCanAccessFeature(role, roles, "documents"),
+    canPublishAnnouncements: roleCanAccessFeature(role, roles, "announcements"),
+    canManageExpenses: roleCanAccessFeature(role, roles, "expenses"),
+  };
 }
 
 function isDatabaseUnavailable(error: unknown): boolean {
@@ -249,10 +299,15 @@ async function ensureEmployeeRoleDefinitionTable() {
       "label" TEXT NOT NULL,
       "description" TEXT NOT NULL DEFAULT '',
       "permissions" TEXT NOT NULL DEFAULT '',
+      "featureAccess" TEXT NOT NULL DEFAULT 'dashboard',
       "status" TEXT NOT NULL DEFAULT 'Active',
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `;
+  await prisma.$executeRaw`
+    ALTER TABLE "EmployeeRoleDefinition"
+    ADD COLUMN IF NOT EXISTS "featureAccess" TEXT NOT NULL DEFAULT 'dashboard'
   `;
 }
 
@@ -260,8 +315,8 @@ async function getEmployeeRoleDefinitionsFromDatabase(): Promise<EmployeeRoleDef
   await ensureEmployeeRoleDefinitionTable();
   for (const role of defaultRoleDefinitions()) {
     await prisma.$executeRaw`
-      INSERT INTO "EmployeeRoleDefinition" ("key", "label", "description", "permissions", "status")
-      VALUES (${role.key}, ${role.label}, ${role.description}, ${role.permissions}, ${role.status})
+      INSERT INTO "EmployeeRoleDefinition" ("key", "label", "description", "permissions", "featureAccess", "status")
+      VALUES (${role.key}, ${role.label}, ${role.description}, ${role.permissions}, ${role.featureAccess}, ${role.status})
       ON CONFLICT ("key") DO NOTHING
     `;
   }
@@ -273,6 +328,7 @@ async function getEmployeeRoleDefinitionsFromDatabase(): Promise<EmployeeRoleDef
       "label",
       "description",
       "permissions",
+      "featureAccess",
       "status",
       "createdAt"::text AS "createdAt",
       "updatedAt"::text AS "updatedAt"
@@ -281,6 +337,17 @@ async function getEmployeeRoleDefinitionsFromDatabase(): Promise<EmployeeRoleDef
   `;
 
   return mergeRoleDefinitions(roles);
+}
+
+async function employeeSessionCanAccessFeature(session: { role: string }, feature: EmployeePortalFeature): Promise<boolean> {
+  if (session.role === "super_admin") return true;
+  try {
+    return roleCanAccessFeature(session.role, await getEmployeeRoleDefinitionsFromDatabase(), feature);
+  } catch (error) {
+    if (!isDatabaseUnavailable(error)) throw error;
+    const store = await readLocalEmployeeStore();
+    return roleCanAccessFeature(session.role, mergeRoleDefinitions(store.roles), feature);
+  }
 }
 
 async function loginLocalEmployee(email: string, password: string) {
@@ -546,9 +613,9 @@ async function getLocalEmployeePortalData(sortResources = "newest", activeTab = 
 
   const activeUser = store.users[userIndex];
   const normalizedSession = { ...session, name: activeUser.name, email: activeUser.email, role: activeUser.role };
-  const canManage = hasEmployeeRole(normalizedSession, ["admin", "hr"]);
-  const canUseCrm = hasEmployeeRole(normalizedSession, ["sales", "content"]);
-  const canEditCrm = normalizedSession.role === "super_admin";
+  const roleDefinitions = mergeRoleDefinitions(store.roles);
+  const capabilities = capabilitiesForRole(normalizedSession.role, roleDefinitions);
+  const canManage = capabilities.canManage;
   const visibleUsers = canManage ? store.users : store.users.filter((employee) => employee.id === activeUser.id);
   const users = visibleUsers.map((employee) => ({
     ...employee,
@@ -565,20 +632,7 @@ async function getLocalEmployeePortalData(sortResources = "newest", activeTab = 
 
   return {
     session: normalizedSession,
-    capabilities: {
-      canManage,
-      canUseCrm,
-      canRequestCrmSource: canEditCrm,
-      canUpdateCrmSheetRows: canEditCrm,
-      canManageCrmSheets: canEditCrm,
-      canManageApplicants: hasEmployeeRole(normalizedSession, ["admin", "hr"]),
-      canManageResources: hasEmployeeRole(normalizedSession, ["admin", "hr", "operations", "content"]),
-      canScheduleMeetings: hasEmployeeRole(normalizedSession, ["admin", "hr", "sales"]),
-      canManageOps: canManage,
-      canManagePayroll: canManage,
-      canReviewPerformance: canManage,
-      canPublishAnnouncements: hasEmployeeRole(normalizedSession, ["admin", "hr", "operations"]),
-    },
+    capabilities,
     users,
     crmRecords: [],
     crmSheets: [],
@@ -594,7 +648,7 @@ async function getLocalEmployeePortalData(sortResources = "newest", activeTab = 
     announcements: [],
     comments: [],
     departments: [],
-    roleDefinitions: mergeRoleDefinitions(store.roles),
+    roleDefinitions,
     notifications: [{
       id: 1,
       employeeId: activeUser.id,
@@ -613,10 +667,11 @@ async function getLocalEmployeePortalData(sortResources = "newest", activeTab = 
 export async function getEmployeePortalData(sortResources = "newest", activeTab = "dashboard") {
   try {
   const { session, user } = await requireEmployee();
-  const canManage = hasEmployeeRole(session, ["admin", "hr"]);
-  const canUseCrm = hasEmployeeRole(session, ["sales", "content"]);
-  const canEditCrm = session.role === "super_admin";
-  const canManagePayroll = hasEmployeeRole(session, ["admin", "hr"]);
+  const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
+  const capabilities = capabilitiesForRole(session.role, roleDefinitions);
+  const canManage = capabilities.canManage;
+  const canUseCrm = capabilities.canUseCrm;
+  const canManagePayroll = capabilities.canManagePayroll;
   const now = new Date();
 
   await prisma.employeeUser.update({
@@ -624,14 +679,14 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
     data: { lastSeenAt: now },
   });
 
-  const [users, crmRecords, crmSheets, applicants, meetings, resources, attendance, leaveRequests, tasks, payrollInputs, reviews, documents, announcements, comments, departments, roleDefinitions, notifications, expenses, auditEvents] = await Promise.all([
+  const [users, crmRecords, crmSheets, applicants, meetings, resources, attendance, leaveRequests, tasks, payrollInputs, reviews, documents, announcements, comments, departments, notifications, expenses, auditEvents] = await Promise.all([
     canManage && ["dashboard", "admin", "ops"].includes(activeTab)
       ? prisma.employeeUser.findMany({ orderBy: { createdAt: "desc" } })
       : prisma.employeeUser.findMany({ where: { id: user.id } }),
     canUseCrm && ["dashboard", "crm"].includes(activeTab)
       ? prisma.employeeCrmRecord.findMany({ orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }] })
       : Promise.resolve([]),
-    activeTab === "crm"
+    activeTab === "crm" && canUseCrm
       ? prisma.employeeCrmSheet.findMany({
           where: canManage
             ? {}
@@ -648,13 +703,13 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
           take: 30,
         })
       : Promise.resolve([]),
-    hasEmployeeRole(session, ["admin", "hr"]) && activeTab === "applicants"
+    capabilities.canManageApplicants && activeTab === "applicants"
       ? prisma.employeeApplicant.findMany({ orderBy: { updatedAt: "desc" } })
       : Promise.resolve([]),
-    ["dashboard", "meetings"].includes(activeTab)
+    capabilities.canScheduleMeetings && ["dashboard", "meetings"].includes(activeTab)
       ? prisma.employeeMeeting.findMany({ orderBy: { startsAt: "asc" } })
       : Promise.resolve([]),
-    ["dashboard", "resources"].includes(activeTab)
+    capabilities.canManageResources && ["dashboard", "resources"].includes(activeTab)
       ? prisma.employeeResource.findMany({
           orderBy:
             sortResources === "title"
@@ -669,12 +724,12 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
         ? prisma.employeeAttendance.findMany({ orderBy: [{ workDate: "desc" }, { createdAt: "desc" }], take: 500 })
         : prisma.employeeAttendance.findMany({ where: { employeeId: user.id }, orderBy: [{ workDate: "desc" }, { createdAt: "desc" }], take: 120 }))
       : Promise.resolve([]),
-    activeTab === "ops"
+    capabilities.canManageOps && activeTab === "ops"
       ? (canManage
         ? prisma.employeeLeaveRequest.findMany({ orderBy: [{ updatedAt: "desc" }, { startsAt: "desc" }], take: 80 })
         : prisma.employeeLeaveRequest.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }, { startsAt: "desc" }], take: 40 }))
       : Promise.resolve([]),
-    ["dashboard", "ops"].includes(activeTab)
+    capabilities.canManageOps && ["dashboard", "ops"].includes(activeTab)
       ? prisma.employeeTask.findMany({
           where: session.role === "super_admin" ? {} : {
             OR: [
@@ -687,27 +742,26 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
           take: 100,
         })
       : Promise.resolve([]),
-    activeTab === "payroll"
+    capabilities.canManagePayroll && activeTab === "payroll"
       ? (canManagePayroll
         ? prisma.employeePayrollInput.findMany({ orderBy: [{ updatedAt: "desc" }], take: 80 })
         : prisma.employeePayrollInput.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }], take: 24 }))
       : Promise.resolve([]),
-    activeTab === "reviews"
+    capabilities.canReviewPerformance && activeTab === "reviews"
       ? (canManage
         ? prisma.employeePerformanceReview.findMany({ orderBy: [{ updatedAt: "desc" }], take: 80 })
         : prisma.employeePerformanceReview.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }], take: 24 }))
       : Promise.resolve([]),
-    ["dashboard", "documents"].includes(activeTab)
+    capabilities.canManageDocuments && ["dashboard", "documents"].includes(activeTab)
       ? prisma.employeeDocument.findMany({ orderBy: [{ updatedAt: "desc" }], take: 100 })
       : Promise.resolve([]),
-    ["dashboard", "announcements"].includes(activeTab)
+    capabilities.canPublishAnnouncements && ["dashboard", "announcements"].includes(activeTab)
       ? prisma.employeeAnnouncement.findMany({ orderBy: [{ createdAt: "desc" }], take: 40 })
       : Promise.resolve([]),
-    activeTab === "ops"
+    capabilities.canManageOps && activeTab === "ops"
       ? prisma.employeeComment.findMany({ orderBy: { createdAt: "desc" }, take: 120 })
       : Promise.resolve([]),
     activeTab === "admin" && canManage ? prisma.employeeDepartment.findMany({ orderBy: { name: "asc" } }) : Promise.resolve([]),
-    activeTab === "admin" && canManage ? getEmployeeRoleDefinitionsFromDatabase() : Promise.resolve(defaultRoleDefinitions()),
     ["dashboard", "admin"].includes(activeTab)
       ? prisma.employeeNotification.findMany({
           where: {
@@ -721,7 +775,7 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
           take: 50,
         })
       : Promise.resolve([]),
-    activeTab === "expenses"
+    capabilities.canManageExpenses && activeTab === "expenses"
       ? (canManage
         ? prisma.employeeExpenseClaim.findMany({ orderBy: [{ updatedAt: "desc" }], take: 80 })
         : prisma.employeeExpenseClaim.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }], take: 40 }))
@@ -745,20 +799,7 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
 
   return {
     session,
-    capabilities: {
-      canManage,
-      canUseCrm,
-      canRequestCrmSource: canEditCrm,
-      canUpdateCrmSheetRows: canEditCrm,
-      canManageCrmSheets: canEditCrm,
-      canManageApplicants: hasEmployeeRole(session, ["admin", "hr"]),
-      canManageResources: hasEmployeeRole(session, ["admin", "hr", "operations", "content"]),
-      canScheduleMeetings: hasEmployeeRole(session, ["admin", "hr", "sales"]),
-      canManageOps: canManage,
-      canManagePayroll,
-      canReviewPerformance: canManage,
-      canPublishAnnouncements: hasEmployeeRole(session, ["admin", "hr", "operations"]),
-    },
+    capabilities,
     users: users.map(({ password, ...employee }) => ({
       ...employee,
       isOnline: employee.lastSeenAt ? now.getTime() - employee.lastSeenAt.getTime() <= 5 * 60 * 1000 : false,
@@ -795,6 +836,7 @@ export async function saveEmployeeRoleDefinition(input: {
   key?: string;
   description?: string;
   permissions?: string;
+  featureAccess?: string;
   status?: string;
 }) {
   const label = input.label.trim();
@@ -804,21 +846,23 @@ export async function saveEmployeeRoleDefinition(input: {
   const status = input.status === "Inactive" ? "Inactive" : "Active";
   const description = input.description?.trim() || "Portal access role.";
   const permissions = input.permissions?.trim() || "Access is controlled by Super Admin assignments.";
+  const featureAccess = parseFeatureAccess(input.featureAccess).join(",");
 
   try {
     const { session } = await requireEmployee();
-    if (!hasEmployeeRole(session, ["admin", "hr"])) {
-      return { success: false, error: "Only Super Admin, Admin, or HR can create roles." };
+    if (session.role !== "super_admin") {
+      return { success: false, error: "Only Super Admin can create roles and map feature access." };
     }
 
     await ensureEmployeeRoleDefinitionTable();
     await prisma.$executeRaw`
-      INSERT INTO "EmployeeRoleDefinition" ("key", "label", "description", "permissions", "status")
-      VALUES (${key}, ${label}, ${description}, ${permissions}, ${status})
+      INSERT INTO "EmployeeRoleDefinition" ("key", "label", "description", "permissions", "featureAccess", "status")
+      VALUES (${key}, ${label}, ${description}, ${permissions}, ${featureAccess}, ${status})
       ON CONFLICT ("key") DO UPDATE SET
         "label" = EXCLUDED."label",
         "description" = EXCLUDED."description",
         "permissions" = EXCLUDED."permissions",
+        "featureAccess" = EXCLUDED."featureAccess",
         "status" = EXCLUDED."status",
         "updatedAt" = NOW()
     `;
@@ -829,7 +873,7 @@ export async function saveEmployeeRoleDefinition(input: {
       action: "role.upsert",
       entityType: "employee_role",
       entityId: key,
-      metadata: { label, status },
+      metadata: { label, status, featureAccess },
     });
 
     revalidatePath("/employee/portal");
@@ -837,8 +881,8 @@ export async function saveEmployeeRoleDefinition(input: {
   } catch (error) {
     if (!isDatabaseUnavailable(error)) throw error;
     const session = await getEmployeeSession();
-    if (!session || !hasEmployeeRole(session, ["admin", "hr"])) {
-      return { success: false, error: "Only Super Admin, Admin, or HR can create roles." };
+    if (!session || session.role !== "super_admin") {
+      return { success: false, error: "Only Super Admin can create roles and map feature access." };
     }
 
     const store = await readLocalEmployeeStore();
@@ -852,6 +896,7 @@ export async function saveEmployeeRoleDefinition(input: {
       label,
       description,
       permissions,
+      featureAccess,
       status,
       createdAt: existingIndex >= 0 ? roles[existingIndex].createdAt : now,
       updatedAt: now,
@@ -884,7 +929,7 @@ export async function saveEmployeeUser(input: {
 }) {
   try {
   const { session } = await requireEmployee();
-  if (!hasEmployeeRole(session, ["admin", "hr"])) {
+  if (!(await employeeSessionCanAccessFeature(session, "employees"))) {
     return { success: false, error: "Only super admins/admins can manage employee mappings." };
   }
 
@@ -956,7 +1001,7 @@ export async function saveEmployeeUser(input: {
   } catch (error) {
     if (!isDatabaseUnavailable(error)) throw error;
     const session = await getEmployeeSession();
-    if (!session || !hasEmployeeRole(session, ["admin", "hr"])) {
+    if (!session || !(await employeeSessionCanAccessFeature(session, "employees"))) {
       return { success: false, error: "Only super admins/admins can manage employee mappings." };
     }
     const store = await readLocalEmployeeStore();
@@ -1154,7 +1199,7 @@ export async function saveApplicant(input: {
   notes?: string;
 }) {
   const { session } = await requireEmployee();
-  if (!hasEmployeeRole(session, ["admin", "hr"])) {
+  if (!(await employeeSessionCanAccessFeature(session, "applicants"))) {
     return { success: false, error: "Only HR/admin roles can manage applicants." };
   }
   await prisma.employeeApplicant.create({ data: input });
@@ -1173,7 +1218,7 @@ export async function saveMeeting(input: {
   notes?: string;
 }) {
   const { session } = await requireEmployee();
-  if (!hasEmployeeRole(session, ["admin", "hr", "sales"])) {
+  if (!(await employeeSessionCanAccessFeature(session, "meetings"))) {
     return { success: false, error: "Only super admin/admin, HR, or sales can schedule meetings." };
   }
   await prisma.employeeMeeting.create({
@@ -1197,7 +1242,7 @@ export async function saveResource(input: {
   tags?: string;
 }) {
   const { session } = await requireEmployee();
-  if (!hasEmployeeRole(session, ["admin", "hr", "operations", "content"])) {
+  if (!(await employeeSessionCanAccessFeature(session, "resources"))) {
     return { success: false, error: "You do not have permission to publish resources." };
   }
   await prisma.employeeResource.create({
@@ -1220,7 +1265,7 @@ export async function saveAttendance(input: {
   notes?: string;
 }) {
   const { session } = await requireEmployee();
-  if (!hasEmployeeRole(session, ["admin", "hr"])) {
+  if (!(await employeeSessionCanAccessFeature(session, "ops"))) {
     return { success: false, error: "Only HR/admin roles can manage attendance." };
   }
   const employeeId = Number(input.employeeId);
@@ -1328,7 +1373,7 @@ export async function saveLeaveRequest(input: {
   reason?: string;
 }) {
   const { session, user } = await requireEmployee();
-  const canManage = hasEmployeeRole(session, ["admin", "hr"]);
+  const canManage = await employeeSessionCanAccessFeature(session, "ops");
   const employeeId = canManage && input.employeeId ? Number(input.employeeId) : user.id;
   await prisma.employeeLeaveRequest.create({
     data: {
@@ -1364,7 +1409,7 @@ export async function saveTask(input: {
   description?: string;
 }) {
   const { session } = await requireEmployee();
-  if (!hasEmployeeRole(session, ["admin", "hr", "operations", "sales", "content"])) {
+  if (!(await employeeSessionCanAccessFeature(session, "ops"))) {
     return { success: false, error: "You do not have permission to create tasks." };
   }
   const assignedTo = input.assignedTo ? Number(input.assignedTo) : null;
@@ -1400,7 +1445,7 @@ export async function savePayrollInput(input: {
   notes?: string;
 }) {
   const { session } = await requireEmployee();
-  if (!hasEmployeeRole(session, ["admin", "hr"])) {
+  if (!(await employeeSessionCanAccessFeature(session, "payroll"))) {
     return { success: false, error: "Only HR/admin roles can manage payroll inputs." };
   }
   const employeeId = Number(input.employeeId);
@@ -1434,7 +1479,7 @@ export async function savePerformanceReview(input: {
   status: string;
 }) {
   const { session } = await requireEmployee();
-  if (!hasEmployeeRole(session, ["admin", "hr"])) {
+  if (!(await employeeSessionCanAccessFeature(session, "reviews"))) {
     return { success: false, error: "Only HR/admin roles can manage reviews." };
   }
   const employeeId = Number(input.employeeId);
@@ -1468,7 +1513,7 @@ export async function saveEmployeeDocument(input: {
   notes?: string;
 }) {
   const { session } = await requireEmployee();
-  if (!hasEmployeeRole(session, ["admin", "hr", "operations"])) {
+  if (!(await employeeSessionCanAccessFeature(session, "documents"))) {
     return { success: false, error: "Only admin/HR/operations can manage documents." };
   }
   const employeeId = input.employeeId ? Number(input.employeeId) : null;
@@ -1501,7 +1546,7 @@ export async function saveAnnouncement(input: {
   priority: string;
 }) {
   const { session } = await requireEmployee();
-  if (!hasEmployeeRole(session, ["admin", "hr", "operations"])) {
+  if (!(await employeeSessionCanAccessFeature(session, "announcements"))) {
     return { success: false, error: "Only admin/HR/operations can publish announcements." };
   }
   await prisma.employeeAnnouncement.create({
@@ -1535,7 +1580,7 @@ export async function saveExpenseClaim(input: {
   notes?: string;
 }) {
   const { session, user } = await requireEmployee();
-  const canManage = hasEmployeeRole(session, ["admin", "hr"]);
+  const canManage = await employeeSessionCanAccessFeature(session, "expenses");
   const employeeId = canManage && input.employeeId ? Number(input.employeeId) : user.id;
   await prisma.employeeExpenseClaim.create({
     data: {
@@ -1562,7 +1607,7 @@ export async function saveDepartment(input: {
   active?: string;
 }) {
   const { session } = await requireEmployee();
-  if (!hasEmployeeRole(session, ["admin", "hr"])) {
+  if (!(await employeeSessionCanAccessFeature(session, "employees"))) {
     return { success: false, error: "Only HR/admin roles can manage departments." };
   }
   await prisma.employeeDepartment.upsert({
@@ -1590,7 +1635,7 @@ export async function updateEmployeeRecordStatus(input: {
   status: string;
 }) {
   const { session } = await requireEmployee();
-  if (!hasEmployeeRole(session, ["admin", "hr", "operations"])) {
+  if (!(await employeeSessionCanAccessFeature(session, "ops"))) {
     return { success: false, error: "You do not have permission to approve records." };
   }
   const id = Number(input.id);
@@ -1647,7 +1692,7 @@ export async function deleteEmployeeEntity(input: {
   if (["crm", "crmSheet"].includes(input.entityType) && session.role !== "super_admin") {
     return { success: false, error: "Only super admin can delete CRM records." };
   }
-  if (!hasEmployeeRole(session, ["admin", "hr"])) {
+  if (!(await employeeSessionCanAccessFeature(session, "employees"))) {
     return { success: false, error: "Only HR/admin roles can delete records." };
   }
   const id = Number(input.id);

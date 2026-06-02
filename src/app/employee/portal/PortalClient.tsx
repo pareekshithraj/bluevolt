@@ -31,6 +31,7 @@ import {
   updateCrmSheetRowData,
   updateEmployeeRecordStatus,
 } from "@/app/actions/employee-portal";
+import { EMPLOYEE_PORTAL_FEATURES } from "@/lib/employee/roles";
 import styles from "../portal.module.css";
 
 type PortalData = Awaited<ReturnType<typeof getEmployeePortalData>>;
@@ -112,7 +113,13 @@ function Field(props: {
 }
 
 function values(form: HTMLFormElement) {
-  return Object.fromEntries(new FormData(form).entries()) as Record<string, string>;
+  const output: Record<string, string> = {};
+  const formData = new FormData(form);
+  for (const [key, value] of formData.entries()) {
+    const text = String(value);
+    output[key] = output[key] ? `${output[key]},${text}` : text;
+  }
+  return output;
 }
 
 type SaveHandler = (payload: any) => Promise<{ success: boolean; error?: string }>;
@@ -182,6 +189,10 @@ function formatWorkHours(value: number) {
   return `${value.toFixed(2)} hrs`;
 }
 
+function featureAccessSet(value?: string | null) {
+  return new Set((value || "").split(",").map((feature) => feature.trim()).filter(Boolean));
+}
+
 function mergePortalData(previous: PortalData, incoming: PortalData, activeTab: PortalTab): PortalData {
   return {
     ...previous,
@@ -237,8 +248,17 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   }, [activeCrmSheetId]);
 
   const visibleTabs = useMemo(() => tabs.filter((item) => {
+    if (item.id === "dashboard") return true;
     if (item.id === "crm") return data.capabilities.canRequestCrmSource || data.capabilities.canUseCrm;
     if (item.id === "applicants") return data.capabilities.canManageApplicants;
+    if (item.id === "ops") return data.capabilities.canManageOps;
+    if (item.id === "expenses") return data.capabilities.canManageExpenses;
+    if (item.id === "payroll") return data.capabilities.canManagePayroll;
+    if (item.id === "reviews") return data.capabilities.canReviewPerformance;
+    if (item.id === "documents") return data.capabilities.canManageDocuments;
+    if (item.id === "announcements") return data.capabilities.canPublishAnnouncements;
+    if (item.id === "meetings") return data.capabilities.canScheduleMeetings;
+    if (item.id === "resources") return data.capabilities.canManageResources;
     if (item.id === "admin") return data.capabilities.canManage;
     return true;
   }), [data.capabilities]);
@@ -1384,7 +1404,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
 
         {tab === "documents" && (
           <section className={styles.grid}>
-            {data.capabilities.canManageOps && (
+            {data.capabilities.canManageDocuments && (
               <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveEmployeeDocument)}>
                 <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Employee Document</h2>
                 <Field label="Employee" name="employeeId" options={[{ label: "General document", value: "" }, ...employeeOptions]} wide />
@@ -1404,7 +1424,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Document</button>
               </form>
             )}
-            <div className={`${styles.card} ${data.capabilities.canManageOps ? styles.span8 : styles.span12}`}>
+            <div className={`${styles.card} ${data.capabilities.canManageDocuments ? styles.span8 : styles.span12}`}>
               <div className={styles.sectionHeader}>
                 <div>
                   <h2 className={styles.cardTitle}>Employee Documents</h2>
@@ -1417,7 +1437,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   <div className={styles.rowHeader}><strong>{document.title}</strong><span className={styles.pill}>{document.documentType}</span></div>
                   <p className={styles.muted}>{document.employeeName || "General"} - {document.visibilityRoles}</p>
                   <a href={document.url} target="_blank" rel="noopener noreferrer">Open document</a>
-                  {data.capabilities.canManageOps && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "document", id: document.id.toString() }))}>Delete</button>}
+                  {data.capabilities.canManageDocuments && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "document", id: document.id.toString() }))}>Delete</button>}
                 </div>
               ))}</div>
             </div>
@@ -1551,6 +1571,20 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               <Field label="Status" name="status" options={["Active", "Inactive"]} />
               <Field label="Permissions / Access Notes" name="permissions" textarea wide />
               <Field label="Description" name="description" textarea wide />
+              <div className={`${styles.field} ${styles.fieldWide}`}>
+                <span className={styles.label}>Feature Access</span>
+                <div className={styles.accessGrid}>
+                  {EMPLOYEE_PORTAL_FEATURES.map((feature) => (
+                    <label className={styles.accessOption} key={feature.id}>
+                      <input type="checkbox" name="featureAccess" value={feature.id} defaultChecked={feature.id === "dashboard"} />
+                      <span>
+                        <strong>{feature.label}</strong>
+                        <small>{feature.description}</small>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
               <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Role</button>
             </form>
             <div className={`${styles.card} ${styles.span8}`}>
@@ -1561,8 +1595,15 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 </div>
                 <span className={styles.pill}>{roleDefinitions.length} roles</span>
               </div>
-              <div className={styles.list}>{roleDefinitions.length === 0 ? <div className={styles.emptyState}>No roles yet.</div> : roleDefinitions.map((role) => (
-                <div className={styles.row} key={role.key}>
+              <div className={styles.list}>{roleDefinitions.length === 0 ? <div className={styles.emptyState}>No roles yet.</div> : roleDefinitions.map((role) => {
+                const selectedFeatures = featureAccessSet(role.featureAccess);
+                return (
+                <form className={styles.row} key={role.key} onSubmit={submit(saveEmployeeRoleDefinition)}>
+                  <input type="hidden" name="label" value={role.label} />
+                  <input type="hidden" name="key" value={role.key} />
+                  <input type="hidden" name="description" value={role.description} />
+                  <input type="hidden" name="permissions" value={role.permissions} />
+                  <input type="hidden" name="status" value={role.status} />
                   <div className={styles.rowHeader}>
                     <strong>{role.label}</strong>
                     <span style={{ display: "inline-flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -1572,8 +1613,31 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   </div>
                   <p className={styles.muted}>{role.description}</p>
                   <p className={styles.muted}>{role.permissions}</p>
-                </div>
-              ))}</div>
+                  <div className={styles.accessGrid}>
+                    {EMPLOYEE_PORTAL_FEATURES.map((feature) => (
+                      <label className={styles.accessOption} key={feature.id}>
+                        <input
+                          type="checkbox"
+                          name="featureAccess"
+                          value={feature.id}
+                          defaultChecked={role.key === "super_admin" || selectedFeatures.has(feature.id)}
+                          disabled={role.key === "super_admin"}
+                        />
+                        <span>
+                          <strong>{feature.label}</strong>
+                          <small>{feature.description}</small>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {role.key === "super_admin" ? (
+                    <p className={styles.muted}>Super Admin always has full access.</p>
+                  ) : (
+                    <button className={styles.ghostButton} type="submit">Update Access</button>
+                  )}
+                </form>
+              );
+              })}</div>
             </div>
             <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveEmployeeUser)}>
               <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>2. Register Employee</h2>

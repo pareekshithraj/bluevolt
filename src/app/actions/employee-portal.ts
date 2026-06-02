@@ -95,9 +95,24 @@ type EmployeeRoleDefinition = {
   updatedAt: string;
 };
 
+type LocalEmployeeApplicant = {
+  id: number;
+  name: string;
+  email: string;
+  phone: string | null;
+  roleApplied: string;
+  stage: string;
+  source: string;
+  meetUrl: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type LocalEmployeeStore = {
   users: LocalEmployeeUser[];
   roles?: EmployeeRoleDefinition[];
+  applicants?: LocalEmployeeApplicant[];
 };
 
 const defaultRoleLabels: Record<string, string> = {
@@ -282,6 +297,7 @@ async function readLocalEmployeeStore(): Promise<LocalEmployeeStore> {
       updatedAt: now,
     }],
     roles: defaultRoleDefinitions(now),
+    applicants: [],
   };
   await writeLocalEmployeeStore(store);
   return store;
@@ -636,7 +652,16 @@ async function getLocalEmployeePortalData(sortResources = "newest", activeTab = 
     users,
     crmRecords: [],
     crmSheets: [],
-    applicants: [],
+    applicants: canManage || ["applicants", "reports"].includes(activeTab)
+      ? (store.applicants || []).map((applicant) => ({
+        ...applicant,
+        phone: applicant.phone || null,
+        meetUrl: applicant.meetUrl || null,
+        notes: applicant.notes || null,
+        createdAt: localDate(applicant.createdAt) || now,
+        updatedAt: localDate(applicant.updatedAt) || now,
+      }))
+      : [],
     meetings: [],
     resources: [],
     attendance: [],
@@ -680,10 +705,10 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
   });
 
   const [users, crmRecords, crmSheets, applicants, meetings, resources, attendance, leaveRequests, tasks, payrollInputs, reviews, documents, announcements, comments, departments, notifications, expenses, auditEvents] = await Promise.all([
-    canManage && ["dashboard", "admin", "ops"].includes(activeTab)
+    canManage && ["dashboard", "admin", "ops", "reports"].includes(activeTab)
       ? prisma.employeeUser.findMany({ orderBy: { createdAt: "desc" } })
       : prisma.employeeUser.findMany({ where: { id: user.id } }),
-    canUseCrm && ["dashboard", "crm"].includes(activeTab)
+    canUseCrm && ["dashboard", "crm", "reports"].includes(activeTab)
       ? prisma.employeeCrmRecord.findMany({ orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }] })
       : Promise.resolve([]),
     activeTab === "crm" && canUseCrm
@@ -703,13 +728,13 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
           take: 30,
         })
       : Promise.resolve([]),
-    capabilities.canManageApplicants && activeTab === "applicants"
+    capabilities.canManageApplicants && ["applicants", "reports"].includes(activeTab)
       ? prisma.employeeApplicant.findMany({ orderBy: { updatedAt: "desc" } })
       : Promise.resolve([]),
-    capabilities.canScheduleMeetings && ["dashboard", "meetings"].includes(activeTab)
+    capabilities.canScheduleMeetings && ["dashboard", "meetings", "reports"].includes(activeTab)
       ? prisma.employeeMeeting.findMany({ orderBy: { startsAt: "asc" } })
       : Promise.resolve([]),
-    capabilities.canManageResources && ["dashboard", "resources"].includes(activeTab)
+    capabilities.canManageResources && ["dashboard", "resources", "reports"].includes(activeTab)
       ? prisma.employeeResource.findMany({
           orderBy:
             sortResources === "title"
@@ -719,7 +744,7 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
               : { createdAt: "desc" },
         })
       : Promise.resolve([]),
-    ["dashboard", "ops"].includes(activeTab)
+    ["dashboard", "ops", "reports"].includes(activeTab)
       ? (canManage
         ? prisma.employeeAttendance.findMany({ orderBy: [{ workDate: "desc" }, { createdAt: "desc" }], take: 500 })
         : prisma.employeeAttendance.findMany({ where: { employeeId: user.id }, orderBy: [{ workDate: "desc" }, { createdAt: "desc" }], take: 120 }))
@@ -742,20 +767,20 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
           take: 100,
         })
       : Promise.resolve([]),
-    capabilities.canManagePayroll && activeTab === "payroll"
+    capabilities.canManagePayroll && ["payroll", "reports"].includes(activeTab)
       ? (canManagePayroll
         ? prisma.employeePayrollInput.findMany({ orderBy: [{ updatedAt: "desc" }], take: 80 })
         : prisma.employeePayrollInput.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }], take: 24 }))
       : Promise.resolve([]),
-    capabilities.canReviewPerformance && activeTab === "reviews"
+    capabilities.canReviewPerformance && ["reviews", "reports"].includes(activeTab)
       ? (canManage
         ? prisma.employeePerformanceReview.findMany({ orderBy: [{ updatedAt: "desc" }], take: 80 })
         : prisma.employeePerformanceReview.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }], take: 24 }))
       : Promise.resolve([]),
-    capabilities.canManageDocuments && ["dashboard", "documents"].includes(activeTab)
+    capabilities.canManageDocuments && ["dashboard", "documents", "reports"].includes(activeTab)
       ? prisma.employeeDocument.findMany({ orderBy: [{ updatedAt: "desc" }], take: 100 })
       : Promise.resolve([]),
-    capabilities.canPublishAnnouncements && ["dashboard", "announcements"].includes(activeTab)
+    capabilities.canPublishAnnouncements && ["dashboard", "announcements", "reports"].includes(activeTab)
       ? prisma.employeeAnnouncement.findMany({ orderBy: [{ createdAt: "desc" }], take: 40 })
       : Promise.resolve([]),
     capabilities.canManageOps && activeTab === "ops"
@@ -775,12 +800,12 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
           take: 50,
         })
       : Promise.resolve([]),
-    capabilities.canManageExpenses && activeTab === "expenses"
+    capabilities.canManageExpenses && ["expenses", "reports"].includes(activeTab)
       ? (canManage
         ? prisma.employeeExpenseClaim.findMany({ orderBy: [{ updatedAt: "desc" }], take: 80 })
         : prisma.employeeExpenseClaim.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }], take: 40 }))
       : Promise.resolve([]),
-    activeTab === "admin" && canManage ? prisma.employeeAuditEvent.findMany({ orderBy: { createdAt: "desc" }, take: 100 }) : Promise.resolve([]),
+    ["admin", "reports"].includes(activeTab) && canManage ? prisma.employeeAuditEvent.findMany({ orderBy: { createdAt: "desc" }, take: 100 }) : Promise.resolve([]),
   ]);
 
   const visibleMeetings = meetings
@@ -1021,6 +1046,7 @@ export async function saveEmployeeUser(input: {
 }
 
 export async function saveCrmRecord(input: {
+  id?: string;
   company: string;
   contactName: string;
   email?: string;
@@ -1040,14 +1066,15 @@ export async function saveCrmRecord(input: {
     return { success: false, error: "Only super admin can edit CRM records." };
   }
 
-  await prisma.employeeCrmRecord.create({
-    data: {
-      ...input,
-      leadRating: input.leadRating || "Warm",
-      estimatedValue: numberValue(input.estimatedValue),
-      reminderAt: optionalDateTime(input.reminderAt),
-    },
-  });
+  const { id, ...rest } = input;
+  const data = {
+    ...rest,
+    leadRating: input.leadRating || "Warm",
+    estimatedValue: numberValue(input.estimatedValue),
+    reminderAt: optionalDateTime(input.reminderAt),
+  };
+  if (id) await prisma.employeeCrmRecord.update({ where: { id: Number(id) }, data });
+  else await prisma.employeeCrmRecord.create({ data });
   revalidatePath("/employee/portal");
   return { success: true };
 }
@@ -1189,6 +1216,7 @@ export async function updateCrmSheetRowStatus(input: {
 }
 
 export async function saveApplicant(input: {
+  id?: string;
   name: string;
   email: string;
   phone?: string;
@@ -1198,16 +1226,99 @@ export async function saveApplicant(input: {
   meetUrl?: string;
   notes?: string;
 }) {
-  const { session } = await requireEmployee();
-  if (!(await employeeSessionCanAccessFeature(session, "applicants"))) {
-    return { success: false, error: "Only HR/admin roles can manage applicants." };
+  const data = {
+    name: input.name.trim(),
+    email: input.email.trim().toLowerCase(),
+    phone: input.phone?.trim() || null,
+    roleApplied: input.roleApplied.trim(),
+    stage: input.stage || "New",
+    source: input.source || "Manual",
+    meetUrl: input.meetUrl?.trim() || null,
+    notes: input.notes?.trim() || null,
+  };
+  try {
+    const { session } = await requireEmployee();
+    if (!(await employeeSessionCanAccessFeature(session, "applicants"))) {
+      return { success: false, error: "Only HR/admin roles can manage applicants." };
+    }
+    if (input.id) await prisma.employeeApplicant.update({ where: { id: Number(input.id) }, data });
+    else await prisma.employeeApplicant.create({ data });
+    revalidatePath("/employee/portal");
+    return { success: true };
+  } catch (error) {
+    if (!isDatabaseUnavailable(error)) throw error;
+    const session = await getEmployeeSession();
+    if (!session || !(await employeeSessionCanAccessFeature(session, "applicants"))) {
+      return { success: false, error: "Only HR/admin roles can manage applicants." };
+    }
+    const store = await readLocalEmployeeStore();
+    const applicants = store.applicants || [];
+    const now = new Date().toISOString();
+    const existingIndex = input.id ? applicants.findIndex((applicant) => applicant.id === Number(input.id)) : -1;
+    const nextId = existingIndex >= 0 ? applicants[existingIndex].id : Math.max(0, ...applicants.map((applicant) => applicant.id)) + 1;
+    const applicant: LocalEmployeeApplicant = {
+      id: nextId,
+      ...data,
+      createdAt: existingIndex >= 0 ? applicants[existingIndex].createdAt : now,
+      updatedAt: now,
+    };
+    if (existingIndex >= 0) applicants[existingIndex] = applicant;
+    else applicants.unshift(applicant);
+    await writeLocalEmployeeStore({ ...store, applicants });
+    revalidatePath("/employee/portal");
+    return { success: true };
   }
-  await prisma.employeeApplicant.create({ data: input });
-  revalidatePath("/employee/portal");
-  return { success: true };
+}
+
+export async function submitEmployeeApplication(input: {
+  name: string;
+  email: string;
+  phone?: string;
+  roleApplied: string;
+  notes?: string;
+}) {
+  const data = {
+    name: input.name.trim(),
+    email: input.email.trim().toLowerCase(),
+    phone: input.phone?.trim() || null,
+    roleApplied: input.roleApplied.trim(),
+    stage: "New",
+    source: "Public application link",
+    meetUrl: null,
+    notes: input.notes?.trim() || null,
+  };
+
+  if (!data.name || !data.email || !data.roleApplied) {
+    return { success: false, error: "Name, email, and role are required." };
+  }
+
+  try {
+    await prisma.employeeApplicant.create({ data });
+    revalidatePath("/employee/portal");
+    return { success: true };
+  } catch (error) {
+    if (!isDatabaseUnavailable(error)) throw error;
+    const store = await readLocalEmployeeStore();
+    const now = new Date().toISOString();
+    const applicants = store.applicants || [];
+    const existingIndex = applicants.findIndex((applicant) => applicant.email === data.email && applicant.roleApplied === data.roleApplied);
+    const nextId = existingIndex >= 0 ? applicants[existingIndex].id : Math.max(0, ...applicants.map((applicant) => applicant.id)) + 1;
+    const applicant: LocalEmployeeApplicant = {
+      id: nextId,
+      ...data,
+      createdAt: existingIndex >= 0 ? applicants[existingIndex].createdAt : now,
+      updatedAt: now,
+    };
+    if (existingIndex >= 0) applicants[existingIndex] = applicant;
+    else applicants.unshift(applicant);
+    await writeLocalEmployeeStore({ ...store, applicants });
+    revalidatePath("/employee/portal");
+    return { success: true };
+  }
 }
 
 export async function saveMeeting(input: {
+  id?: string;
   title: string;
   startsAt: string;
   endsAt: string;
@@ -1221,19 +1332,21 @@ export async function saveMeeting(input: {
   if (!(await employeeSessionCanAccessFeature(session, "meetings"))) {
     return { success: false, error: "Only super admin/admin, HR, or sales can schedule meetings." };
   }
-  await prisma.employeeMeeting.create({
-    data: {
-      ...input,
-      startsAt: new Date(input.startsAt),
-      endsAt: new Date(input.endsAt),
-      createdBy: Number(session.userId),
-    },
-  });
+  const { id, ...rest } = input;
+  const data = {
+    ...rest,
+    startsAt: new Date(input.startsAt),
+    endsAt: new Date(input.endsAt),
+    createdBy: Number(session.userId),
+  };
+  if (id) await prisma.employeeMeeting.update({ where: { id: Number(id) }, data });
+  else await prisma.employeeMeeting.create({ data });
   revalidatePath("/employee/portal");
   return { success: true };
 }
 
 export async function saveResource(input: {
+  id?: string;
   title: string;
   resourceType: string;
   url: string;
@@ -1245,12 +1358,10 @@ export async function saveResource(input: {
   if (!(await employeeSessionCanAccessFeature(session, "resources"))) {
     return { success: false, error: "You do not have permission to publish resources." };
   }
-  await prisma.employeeResource.create({
-    data: {
-      ...input,
-      createdBy: Number(session.userId),
-    },
-  });
+  const { id, ...rest } = input;
+  const data = { ...rest, createdBy: Number(session.userId) };
+  if (id) await prisma.employeeResource.update({ where: { id: Number(id) }, data });
+  else await prisma.employeeResource.create({ data });
   revalidatePath("/employee/portal");
   return { success: true };
 }
@@ -1399,6 +1510,7 @@ export async function saveLeaveRequest(input: {
 }
 
 export async function saveTask(input: {
+  id?: string;
   title: string;
   assignedTo?: string;
   ownerRole: string;
@@ -1413,26 +1525,27 @@ export async function saveTask(input: {
     return { success: false, error: "You do not have permission to create tasks." };
   }
   const assignedTo = input.assignedTo ? Number(input.assignedTo) : null;
-  await prisma.employeeTask.create({
-    data: {
-      title: input.title,
-      assignedTo,
-      assignedName: assignedTo ? await employeeNameForId(assignedTo) : null,
-      ownerRole: input.ownerRole || "all",
-      priority: input.priority || "Medium",
-      status: input.status || "Open",
-      dueAt: optionalDateTime(input.dueAt),
-      proofUrl: input.proofUrl,
-      description: input.description,
-      createdBy: Number(session.userId),
-    },
-  });
+  const data = {
+    title: input.title,
+    assignedTo,
+    assignedName: assignedTo ? await employeeNameForId(assignedTo) : null,
+    ownerRole: input.ownerRole || "all",
+    priority: input.priority || "Medium",
+    status: input.status || "Open",
+    dueAt: optionalDateTime(input.dueAt),
+    proofUrl: input.proofUrl,
+    description: input.description,
+    createdBy: Number(session.userId),
+  };
+  if (input.id) await prisma.employeeTask.update({ where: { id: Number(input.id) }, data });
+  else await prisma.employeeTask.create({ data });
   await logEmployeeAudit({ actorId: Number(session.userId), actorName: session.name, action: "task.create", entityType: "task", metadata: { title: input.title } });
   revalidatePath("/employee/portal");
   return { success: true };
 }
 
 export async function savePayrollInput(input: {
+  id?: string;
   employeeId: string;
   payPeriod: string;
   payType: string;
@@ -1449,27 +1562,28 @@ export async function savePayrollInput(input: {
     return { success: false, error: "Only HR/admin roles can manage payroll inputs." };
   }
   const employeeId = Number(input.employeeId);
-  await prisma.employeePayrollInput.create({
-    data: {
-      employeeId,
-      employeeName: await employeeNameForId(employeeId),
-      payPeriod: input.payPeriod,
-      payType: input.payType || "Salary",
-      amount: numberValue(input.amount),
-      workingDays: numberValue(input.workingDays),
-      unpaidLeaveDays: numberValue(input.unpaidLeaveDays),
-      bonus: numberValue(input.bonus),
-      deductions: numberValue(input.deductions),
-      status: input.status || "Draft",
-      notes: input.notes,
-    },
-  });
+  const data = {
+    employeeId,
+    employeeName: await employeeNameForId(employeeId),
+    payPeriod: input.payPeriod,
+    payType: input.payType || "Salary",
+    amount: numberValue(input.amount),
+    workingDays: numberValue(input.workingDays),
+    unpaidLeaveDays: numberValue(input.unpaidLeaveDays),
+    bonus: numberValue(input.bonus),
+    deductions: numberValue(input.deductions),
+    status: input.status || "Draft",
+    notes: input.notes,
+  };
+  if (input.id) await prisma.employeePayrollInput.update({ where: { id: Number(input.id) }, data });
+  else await prisma.employeePayrollInput.create({ data });
   await logEmployeeAudit({ actorId: Number(session.userId), actorName: session.name, action: "payroll.create", entityType: "payroll", metadata: { employeeId, payPeriod: input.payPeriod } });
   revalidatePath("/employee/portal");
   return { success: true };
 }
 
 export async function savePerformanceReview(input: {
+  id?: string;
   employeeId: string;
   reviewPeriod: string;
   score?: string;
@@ -1483,25 +1597,26 @@ export async function savePerformanceReview(input: {
     return { success: false, error: "Only HR/admin roles can manage reviews." };
   }
   const employeeId = Number(input.employeeId);
-  await prisma.employeePerformanceReview.create({
-    data: {
-      employeeId,
-      employeeName: await employeeNameForId(employeeId),
-      reviewPeriod: input.reviewPeriod,
-      reviewerId: Number(session.userId),
-      score: numberValue(input.score),
-      kpiSummary: input.kpiSummary,
-      strengths: input.strengths,
-      improvements: input.improvements,
-      status: input.status || "Draft",
-    },
-  });
+  const data = {
+    employeeId,
+    employeeName: await employeeNameForId(employeeId),
+    reviewPeriod: input.reviewPeriod,
+    reviewerId: Number(session.userId),
+    score: numberValue(input.score),
+    kpiSummary: input.kpiSummary,
+    strengths: input.strengths,
+    improvements: input.improvements,
+    status: input.status || "Draft",
+  };
+  if (input.id) await prisma.employeePerformanceReview.update({ where: { id: Number(input.id) }, data });
+  else await prisma.employeePerformanceReview.create({ data });
   await logEmployeeAudit({ actorId: Number(session.userId), actorName: session.name, action: "review.create", entityType: "review", metadata: { employeeId, reviewPeriod: input.reviewPeriod } });
   revalidatePath("/employee/portal");
   return { success: true };
 }
 
 export async function saveEmployeeDocument(input: {
+  id?: string;
   employeeId?: string;
   title: string;
   documentType: string;
@@ -1520,26 +1635,27 @@ export async function saveEmployeeDocument(input: {
   if (!input.url?.trim()) {
     return { success: false, error: "Upload a file or provide a document URL." };
   }
-  await prisma.employeeDocument.create({
-    data: {
-      employeeId,
-      employeeName: employeeId ? await employeeNameForId(employeeId) : null,
-      title: input.title,
-      documentType: input.documentType || "General",
-      url: input.url,
-      fileName: input.fileName,
-      fileSize: input.fileSize ? Number(input.fileSize) : null,
-      mimeType: input.mimeType,
-      visibilityRoles: input.visibilityRoles || "super_admin,admin,hr",
-      notes: input.notes,
-      uploadedBy: Number(session.userId),
-    },
-  });
+  const data = {
+    employeeId,
+    employeeName: employeeId ? await employeeNameForId(employeeId) : null,
+    title: input.title,
+    documentType: input.documentType || "General",
+    url: input.url,
+    fileName: input.fileName,
+    fileSize: input.fileSize ? Number(input.fileSize) : null,
+    mimeType: input.mimeType,
+    visibilityRoles: input.visibilityRoles || "super_admin,admin,hr",
+    notes: input.notes,
+    uploadedBy: Number(session.userId),
+  };
+  if (input.id) await prisma.employeeDocument.update({ where: { id: Number(input.id) }, data });
+  else await prisma.employeeDocument.create({ data });
   revalidatePath("/employee/portal");
   return { success: true };
 }
 
 export async function saveAnnouncement(input: {
+  id?: string;
   title: string;
   body: string;
   audienceRoles: string;
@@ -1549,28 +1665,31 @@ export async function saveAnnouncement(input: {
   if (!(await employeeSessionCanAccessFeature(session, "announcements"))) {
     return { success: false, error: "Only admin/HR/operations can publish announcements." };
   }
-  await prisma.employeeAnnouncement.create({
-    data: {
-      title: input.title,
-      body: input.body,
-      audienceRoles: input.audienceRoles || "all",
-      priority: input.priority || "Normal",
-      publishedBy: Number(session.userId),
-    },
-  });
-  await prisma.employeeNotification.create({
-    data: {
-      targetRoles: input.audienceRoles || "all",
-      title: input.title,
-      body: input.body,
-      createdBy: Number(session.userId),
-    },
-  });
+  const data = {
+    title: input.title,
+    body: input.body,
+    audienceRoles: input.audienceRoles || "all",
+    priority: input.priority || "Normal",
+    publishedBy: Number(session.userId),
+  };
+  if (input.id) await prisma.employeeAnnouncement.update({ where: { id: Number(input.id) }, data });
+  else {
+    await prisma.employeeAnnouncement.create({ data });
+    await prisma.employeeNotification.create({
+      data: {
+        targetRoles: input.audienceRoles || "all",
+        title: input.title,
+        body: input.body,
+        createdBy: Number(session.userId),
+      },
+    });
+  }
   revalidatePath("/employee/portal");
   return { success: true };
 }
 
 export async function saveExpenseClaim(input: {
+  id?: string;
   employeeId?: string;
   category: string;
   amount?: string;
@@ -1582,19 +1701,19 @@ export async function saveExpenseClaim(input: {
   const { session, user } = await requireEmployee();
   const canManage = await employeeSessionCanAccessFeature(session, "expenses");
   const employeeId = canManage && input.employeeId ? Number(input.employeeId) : user.id;
-  await prisma.employeeExpenseClaim.create({
-    data: {
-      employeeId,
-      employeeName: await employeeNameForId(employeeId),
-      category: input.category || "General",
-      amount: numberValue(input.amount),
-      claimDate: optionalDate(input.claimDate) || new Date(),
-      receiptUrl: input.receiptUrl,
-      status: canManage ? input.status || "Pending" : "Pending",
-      reviewerId: canManage ? Number(session.userId) : null,
-      notes: input.notes,
-    },
-  });
+  const data = {
+    employeeId,
+    employeeName: await employeeNameForId(employeeId),
+    category: input.category || "General",
+    amount: numberValue(input.amount),
+    claimDate: optionalDate(input.claimDate) || new Date(),
+    receiptUrl: input.receiptUrl,
+    status: canManage ? input.status || "Pending" : "Pending",
+    reviewerId: canManage ? Number(session.userId) : null,
+    notes: input.notes,
+  };
+  if (input.id) await prisma.employeeExpenseClaim.update({ where: { id: Number(input.id) }, data });
+  else await prisma.employeeExpenseClaim.create({ data });
   await logEmployeeAudit({ actorId: Number(session.userId), actorName: session.name, action: "expense.create", entityType: "expense", metadata: { employeeId, amount: input.amount } });
   revalidatePath("/employee/portal");
   return { success: true };
@@ -1634,20 +1753,41 @@ export async function updateEmployeeRecordStatus(input: {
   id: string;
   status: string;
 }) {
-  const { session } = await requireEmployee();
-  if (!(await employeeSessionCanAccessFeature(session, "ops"))) {
-    return { success: false, error: "You do not have permission to approve records." };
+  const feature: EmployeePortalFeature =
+    input.entityType === "applicant" ? "applicants" :
+    input.entityType === "payroll" ? "payroll" :
+    input.entityType === "expense" ? "expenses" :
+    "ops";
+  try {
+    const { session } = await requireEmployee();
+    if (!(await employeeSessionCanAccessFeature(session, feature))) {
+      return { success: false, error: "You do not have permission to approve records." };
+    }
+    const id = Number(input.id);
+    const data = { status: input.status };
+    if (input.entityType === "leave") await prisma.employeeLeaveRequest.update({ where: { id }, data: { ...data, reviewedBy: Number(session.userId) } });
+    else if (input.entityType === "expense") await prisma.employeeExpenseClaim.update({ where: { id }, data: { ...data, reviewerId: Number(session.userId) } });
+    else if (input.entityType === "payroll") await prisma.employeePayrollInput.update({ where: { id }, data });
+    else if (input.entityType === "task") await prisma.employeeTask.update({ where: { id }, data });
+    else if (input.entityType === "applicant") await prisma.employeeApplicant.update({ where: { id }, data: { stage: input.status } });
+    else return { success: false, error: "Unsupported record type." };
+    await logEmployeeAudit({ actorId: Number(session.userId), actorName: session.name, action: `${input.entityType}.status`, entityType: input.entityType, entityId: input.id, metadata: { status: input.status } });
+    revalidatePath("/employee/portal");
+    return { success: true };
+  } catch (error) {
+    if (!isDatabaseUnavailable(error) || input.entityType !== "applicant") throw error;
+    const session = await getEmployeeSession();
+    if (!session || !(await employeeSessionCanAccessFeature(session, feature))) {
+      return { success: false, error: "You do not have permission to approve records." };
+    }
+    const store = await readLocalEmployeeStore();
+    const applicants = (store.applicants || []).map((applicant) => (
+      applicant.id === Number(input.id) ? { ...applicant, stage: input.status, updatedAt: new Date().toISOString() } : applicant
+    ));
+    await writeLocalEmployeeStore({ ...store, applicants });
+    revalidatePath("/employee/portal");
+    return { success: true };
   }
-  const id = Number(input.id);
-  const data = { status: input.status };
-  if (input.entityType === "leave") await prisma.employeeLeaveRequest.update({ where: { id }, data: { ...data, reviewedBy: Number(session.userId) } });
-  else if (input.entityType === "expense") await prisma.employeeExpenseClaim.update({ where: { id }, data: { ...data, reviewerId: Number(session.userId) } });
-  else if (input.entityType === "payroll") await prisma.employeePayrollInput.update({ where: { id }, data });
-  else if (input.entityType === "task") await prisma.employeeTask.update({ where: { id }, data });
-  else return { success: false, error: "Unsupported record type." };
-  await logEmployeeAudit({ actorId: Number(session.userId), actorName: session.name, action: `${input.entityType}.status`, entityType: input.entityType, entityId: input.id, metadata: { status: input.status } });
-  revalidatePath("/employee/portal");
-  return { success: true };
 }
 
 export async function markNotificationRead(input: { id: string }) {
@@ -1688,25 +1828,62 @@ export async function deleteEmployeeEntity(input: {
   entityType: string;
   id: string;
 }) {
-  const { session } = await requireEmployee();
-  if (["crm", "crmSheet"].includes(input.entityType) && session.role !== "super_admin") {
-    return { success: false, error: "Only super admin can delete CRM records." };
+  try {
+    const { session } = await requireEmployee();
+    if (["crm", "crmSheet"].includes(input.entityType) && session.role !== "super_admin") {
+      return { success: false, error: "Only super admin can delete CRM records." };
+    }
+    const deleteFeature: EmployeePortalFeature =
+      ["employee", "department"].includes(input.entityType) ? "employees" :
+      input.entityType === "applicant" ? "applicants" :
+      input.entityType === "payroll" ? "payroll" :
+      input.entityType === "review" ? "reviews" :
+      input.entityType === "document" ? "documents" :
+      input.entityType === "resource" ? "resources" :
+      input.entityType === "announcement" ? "announcements" :
+      input.entityType === "meeting" ? "meetings" :
+      input.entityType === "expense" ? "expenses" :
+      "ops";
+    if (!(await employeeSessionCanAccessFeature(session, deleteFeature))) {
+      return { success: false, error: "Only HR/admin roles can delete records." };
+    }
+    const id = Number(input.id);
+    if (input.entityType === "task") await prisma.employeeTask.delete({ where: { id } });
+    else if (input.entityType === "document") await prisma.employeeDocument.delete({ where: { id } });
+    else if (input.entityType === "resource") await prisma.employeeResource.delete({ where: { id } });
+    else if (input.entityType === "crm") await prisma.employeeCrmRecord.delete({ where: { id } });
+    else if (input.entityType === "crmSheet") await prisma.employeeCrmSheet.delete({ where: { id } });
+    else if (input.entityType === "announcement") await prisma.employeeAnnouncement.delete({ where: { id } });
+    else if (input.entityType === "expense") await prisma.employeeExpenseClaim.delete({ where: { id } });
+    else if (input.entityType === "employee") await prisma.employeeUser.delete({ where: { id } });
+    else if (input.entityType === "applicant") await prisma.employeeApplicant.delete({ where: { id } });
+    else if (input.entityType === "meeting") await prisma.employeeMeeting.delete({ where: { id } });
+    else if (input.entityType === "payroll") await prisma.employeePayrollInput.delete({ where: { id } });
+    else if (input.entityType === "review") await prisma.employeePerformanceReview.delete({ where: { id } });
+    else if (input.entityType === "leave") await prisma.employeeLeaveRequest.delete({ where: { id } });
+    else if (input.entityType === "attendance") await prisma.employeeAttendance.delete({ where: { id } });
+    else if (input.entityType === "department") await prisma.employeeDepartment.delete({ where: { id } });
+    else return { success: false, error: "Unsupported delete type." };
+    await logEmployeeAudit({ actorId: Number(session.userId), actorName: session.name, action: `${input.entityType}.delete`, entityType: input.entityType, entityId: input.id });
+    revalidatePath("/employee/portal");
+    return { success: true };
+  } catch (error) {
+    if (!isDatabaseUnavailable(error)) throw error;
+    const session = await getEmployeeSession();
+    if (!session || !(await employeeSessionCanAccessFeature(session, "employees"))) {
+      return { success: false, error: "Only HR/admin roles can delete records." };
+    }
+    const store = await readLocalEmployeeStore();
+    if (input.entityType === "employee") {
+      await writeLocalEmployeeStore({ ...store, users: store.users.filter((user) => user.id !== Number(input.id)) });
+    } else if (input.entityType === "applicant") {
+      await writeLocalEmployeeStore({ ...store, applicants: (store.applicants || []).filter((applicant) => applicant.id !== Number(input.id)) });
+    } else {
+      return { success: false, error: "This local fallback record cannot be deleted yet." };
+    }
+    revalidatePath("/employee/portal");
+    return { success: true };
   }
-  if (!(await employeeSessionCanAccessFeature(session, "employees"))) {
-    return { success: false, error: "Only HR/admin roles can delete records." };
-  }
-  const id = Number(input.id);
-  if (input.entityType === "task") await prisma.employeeTask.delete({ where: { id } });
-  else if (input.entityType === "document") await prisma.employeeDocument.delete({ where: { id } });
-  else if (input.entityType === "resource") await prisma.employeeResource.delete({ where: { id } });
-  else if (input.entityType === "crm") await prisma.employeeCrmRecord.delete({ where: { id } });
-  else if (input.entityType === "crmSheet") await prisma.employeeCrmSheet.delete({ where: { id } });
-  else if (input.entityType === "announcement") await prisma.employeeAnnouncement.delete({ where: { id } });
-  else if (input.entityType === "expense") await prisma.employeeExpenseClaim.delete({ where: { id } });
-  else return { success: false, error: "Unsupported delete type." };
-  await logEmployeeAudit({ actorId: Number(session.userId), actorName: session.name, action: `${input.entityType}.delete`, entityType: input.entityType, entityId: input.id });
-  revalidatePath("/employee/portal");
-  return { success: true };
 }
 
 export async function saveEmployeeComment(input: {

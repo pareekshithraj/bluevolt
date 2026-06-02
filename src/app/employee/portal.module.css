@@ -488,6 +488,24 @@
   font-weight: 600;
 }
 
+.editPanel {
+  margin-top: 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+  padding-top: 12px;
+}
+
+.editPanel summary {
+  cursor: pointer;
+  color: #3f37c9;
+  font-weight: 800;
+  font-size: 0.9rem;
+  margin-bottom: 12px;
+}
+
+.editPanel[open] summary {
+  margin-bottom: 14px;
+}
+
 .pill {
   display: inline-flex;
   align-items: center;
@@ -533,6 +551,95 @@
   color: #64748b;
   text-align: center;
   font-weight: 500;
+}
+
+.smartTable {
+  display: grid;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  overflow-x: auto;
+  background: rgba(2, 6, 23, 0.28);
+}
+
+.smartTableHeader,
+.smartTableRow {
+  display: grid;
+  grid-template-columns: minmax(230px, 1.25fr) minmax(140px, 0.8fr) minmax(260px, 1.2fr) minmax(135px, 0.75fr) minmax(110px, 0.6fr) minmax(220px, 1fr);
+  gap: 14px;
+  align-items: center;
+  min-width: 1120px;
+}
+
+.smartTableHeader {
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 14px 18px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.smartTableRow {
+  min-height: 78px;
+  padding: 14px 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.smartTableRow:hover {
+  background: rgba(56, 189, 248, 0.06);
+}
+
+.identityCell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.identityCell strong,
+.identityCell small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.identityCell small {
+  margin-top: 3px;
+  color: #94a3b8;
+  font-size: 0.82rem;
+}
+
+.avatar {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #312e81, #0891b2);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.actionStack {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.actionStack .ghostButton {
+  min-height: 34px;
+  padding: 7px 11px;
+  font-size: 0.78rem;
+}
+
+.reportCard {
+  display: flex;
+  min-height: 190px;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 .quickGrid {
@@ -1649,6 +1756,12 @@
 
   .emptyState {
     padding: 28px 18px;
+  }
+
+  .smartTableHeader,
+  .smartTableRow {
+    grid-template-columns: minmax(210px, 1.1fr) minmax(130px, 0.7fr) minmax(230px, 1fr) minmax(120px, 0.7fr) minmax(105px, 0.6fr) minmax(190px, 0.9fr);
+    min-width: 980px;
   }
 
   .fullSheetApp {

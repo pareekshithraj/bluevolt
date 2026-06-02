@@ -60,6 +60,7 @@ const tabs = [
   { id: "ops", label: "Work Ops", icon: ClipboardList },
   { id: "expenses", label: "Expenses", icon: WalletCards },
   { id: "payroll", label: "Payroll", icon: WalletCards },
+  { id: "reports", label: "Reports", icon: FileText },
   { id: "reviews", label: "Reviews", icon: Star },
   { id: "documents", label: "Documents", icon: FileText },
   { id: "announcements", label: "Announcements", icon: Bell },
@@ -189,6 +190,16 @@ function formatWorkHours(value: number) {
   return `${value.toFixed(2)} hrs`;
 }
 
+function inputDate(value: DateValue) {
+  const date = validDate(value);
+  return date ? date.toISOString().slice(0, 10) : "";
+}
+
+function inputDateTime(value: DateValue) {
+  const date = validDate(value);
+  return date ? date.toISOString().slice(0, 16) : "";
+}
+
 function featureAccessSet(value?: string | null) {
   return new Set((value || "").split(",").map((feature) => feature.trim()).filter(Boolean));
 }
@@ -197,25 +208,25 @@ function mergePortalData(previous: PortalData, incoming: PortalData, activeTab: 
   return {
     ...previous,
     ...incoming,
-    users: ["dashboard", "admin", "ops"].includes(activeTab) ? incoming.users : previous.users,
-    crmRecords: ["dashboard", "crm"].includes(activeTab) ? incoming.crmRecords : previous.crmRecords,
+    users: ["dashboard", "admin", "ops", "reports"].includes(activeTab) ? incoming.users : previous.users,
+    crmRecords: ["dashboard", "crm", "reports"].includes(activeTab) ? incoming.crmRecords : previous.crmRecords,
     crmSheets: activeTab === "crm" ? incoming.crmSheets : previous.crmSheets,
-    applicants: activeTab === "applicants" ? incoming.applicants : previous.applicants,
-    meetings: ["dashboard", "meetings"].includes(activeTab) ? incoming.meetings : previous.meetings,
-    resources: ["dashboard", "resources"].includes(activeTab) ? incoming.resources : previous.resources,
-    attendance: ["dashboard", "ops"].includes(activeTab) ? incoming.attendance : previous.attendance,
+    applicants: ["applicants", "reports"].includes(activeTab) ? incoming.applicants : previous.applicants,
+    meetings: ["dashboard", "meetings", "reports"].includes(activeTab) ? incoming.meetings : previous.meetings,
+    resources: ["dashboard", "resources", "reports"].includes(activeTab) ? incoming.resources : previous.resources,
+    attendance: ["dashboard", "ops", "reports"].includes(activeTab) ? incoming.attendance : previous.attendance,
     leaveRequests: activeTab === "ops" ? incoming.leaveRequests : previous.leaveRequests,
     tasks: ["dashboard", "ops"].includes(activeTab) ? incoming.tasks : previous.tasks,
-    payrollInputs: activeTab === "payroll" ? incoming.payrollInputs : previous.payrollInputs,
-    reviews: activeTab === "reviews" ? incoming.reviews : previous.reviews,
-    documents: ["dashboard", "documents"].includes(activeTab) ? incoming.documents : previous.documents,
-    announcements: ["dashboard", "announcements"].includes(activeTab) ? incoming.announcements : previous.announcements,
+    payrollInputs: ["payroll", "reports"].includes(activeTab) ? incoming.payrollInputs : previous.payrollInputs,
+    reviews: ["reviews", "reports"].includes(activeTab) ? incoming.reviews : previous.reviews,
+    documents: ["dashboard", "documents", "reports"].includes(activeTab) ? incoming.documents : previous.documents,
+    announcements: ["dashboard", "announcements", "reports"].includes(activeTab) ? incoming.announcements : previous.announcements,
     comments: activeTab === "ops" ? incoming.comments : previous.comments,
     departments: activeTab === "admin" ? incoming.departments : previous.departments,
     roleDefinitions: activeTab === "admin" ? incoming.roleDefinitions : previous.roleDefinitions,
     notifications: ["dashboard", "admin"].includes(activeTab) ? incoming.notifications : previous.notifications,
-    expenses: activeTab === "expenses" ? incoming.expenses : previous.expenses,
-    auditEvents: activeTab === "admin" ? incoming.auditEvents : previous.auditEvents,
+    expenses: ["expenses", "reports"].includes(activeTab) ? incoming.expenses : previous.expenses,
+    auditEvents: ["admin", "reports"].includes(activeTab) ? incoming.auditEvents : previous.auditEvents,
   };
 }
 
@@ -239,6 +250,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const [selectedCrmCell, setSelectedCrmCell] = useState<SelectedCrmCell | null>(null);
   const [clockOverride, setClockOverride] = useState<"working" | "off" | "">("");
   const [clockSaving, setClockSaving] = useState(false);
+  const [applicationLink, setApplicationLink] = useState("/employee/apply");
   const [pending, startTransition] = useTransition();
   const [uploadedFile, setUploadedFile] = useState<{ url: string; fileName: string; fileSize: string; mimeType: string } | null>(null);
 
@@ -247,6 +259,10 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     setSelectedCrmCell(null);
   }, [activeCrmSheetId]);
 
+  useEffect(() => {
+    setApplicationLink(`${window.location.origin}/employee/apply`);
+  }, []);
+
   const visibleTabs = useMemo(() => tabs.filter((item) => {
     if (item.id === "dashboard") return true;
     if (item.id === "crm") return data.capabilities.canRequestCrmSource || data.capabilities.canUseCrm;
@@ -254,6 +270,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     if (item.id === "ops") return data.capabilities.canManageOps;
     if (item.id === "expenses") return data.capabilities.canManageExpenses;
     if (item.id === "payroll") return data.capabilities.canManagePayroll;
+    if (item.id === "reports") return data.capabilities.canManage || data.capabilities.canManagePayroll || data.capabilities.canManageApplicants;
     if (item.id === "reviews") return data.capabilities.canReviewPerformance;
     if (item.id === "documents") return data.capabilities.canManageDocuments;
     if (item.id === "announcements") return data.capabilities.canPublishAnnouncements;
@@ -330,6 +347,75 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     .reduce((total, entry) => total + Number(entry.totalHours || 0), 0);
   const completedSessions = data.attendance.filter((entry) => entry.logoutAt).length;
   const selectedEmployeeSessions = data.attendance.filter((entry) => entry.employeeId === selectedHoursEmployeeId).length;
+  const pendingApplicants = data.applicants.filter((applicant) => !["Offer", "Rejected"].includes(applicant.stage));
+  const approvedApplicants = data.applicants.filter((applicant) => applicant.stage === "Offer");
+  const rejectedApplicants = data.applicants.filter((applicant) => applicant.stage === "Rejected");
+  const payrollTotal = data.payrollInputs.reduce((total, item) => total + Number(item.amount || 0), 0);
+  const payrollReady = data.payrollInputs.filter((item) => item.status === "Ready").length;
+  const payrollPaid = data.payrollInputs.filter((item) => item.status === "Paid").length;
+
+  const downloadCsv = (fileName: string, rows: Record<string, string | number | null | undefined>[]) => {
+    if (!rows.length) {
+      setNotice("No records available for this report yet.");
+      return;
+    }
+    const headers = Object.keys(rows[0]);
+    const escape = (value: string | number | null | undefined) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const csv = [headers.join(","), ...rows.map((row) => headers.map((header) => escape(row[header])).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const applicantRows = data.applicants.map((applicant) => ({
+    name: applicant.name,
+    email: applicant.email,
+    phone: applicant.phone || "",
+    role: applicant.roleApplied,
+    stage: applicant.stage,
+    source: applicant.source,
+    submitted: formatPortalDateTime(applicant.createdAt),
+    notes: applicant.notes || "",
+  }));
+
+  const employeeRows = employees.map((employee) => ({
+    name: employee.name,
+    email: employee.email,
+    role: displayRole(employee.role),
+    department: employee.department,
+    title: employee.title,
+    type: employee.employeeType,
+    compensation: employee.compensationStatus,
+    status: employee.status,
+    workStart: employee.workStartTime,
+    workEnd: employee.workEndTime,
+  }));
+
+  const payrollRows = data.payrollInputs.map((payroll) => ({
+    employee: payroll.employeeName,
+    period: payroll.payPeriod,
+    payType: payroll.payType,
+    amount: payroll.amount,
+    workingDays: payroll.workingDays,
+    unpaidLeaveDays: payroll.unpaidLeaveDays,
+    bonus: payroll.bonus,
+    deductions: payroll.deductions,
+    status: payroll.status,
+  }));
+
+  const attendanceRows = data.attendance.map((entry) => ({
+    employee: entry.employeeName,
+    date: formatPortalDate(entry.workDate),
+    loginAt: formatPortalDateTime(entry.loginAt),
+    logoutAt: formatPortalDateTime(entry.logoutAt),
+    totalHours: Number(entry.totalHours || 0).toFixed(2),
+    status: entry.status,
+    notes: entry.notes || "",
+  }));
 
   const submit = (handler: SaveHandler, onSuccessOptimistic?: () => void) => (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -521,6 +607,12 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     const subject = encodeURIComponent(`BlueVolt ${type}`);
     const body = encodeURIComponent(`Hi ${user.name},\n\nYour BlueVolt ${type} is ready here:\n${url}\n\nPlease review it and confirm acceptance.\n\nRegards,\nBlueVolt HR`);
     return `mailto:${user.email}?subject=${subject}&body=${body}`;
+  };
+
+  const copyApplicationLink = async () => {
+    const message = `BlueVolt application link:\n${applicationLink}\n\nPlease fill this form if you are applying for an employee or internship role.`;
+    await navigator.clipboard.writeText(message);
+    setNotice("Application link copied. Paste it in WhatsApp.");
   };
 
   const idCardUrlFor = (user: EmployeeListItem, download = false) => (
@@ -1164,33 +1256,114 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
 
         {tab === "applicants" && (
           <section className={styles.grid}>
-            <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveApplicant)}>
-              <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Add Applicant</h2>
-              <Field label="Name" name="name" required />
-              <Field label="Email" name="email" type="email" required />
-              <Field label="Phone" name="phone" />
-              <Field label="Role Applied" name="roleApplied" required />
-              <Field label="Stage" name="stage" options={["New", "Screening", "Interview", "Offer", "Rejected"]} />
-              <Field label="Source" name="source" defaultValue="Manual" />
-              <Field label="Meet URL" name="meetUrl" type="url" wide />
-              <Field label="Notes" name="notes" textarea wide />
-              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Applicant</button>
-            </form>
-            <div className={`${styles.card} ${styles.span8}`}>
+            <div className={`${styles.dashboardHero} ${styles.span12}`}>
+              <div>
+                <div className={styles.eyebrow}>Hiring Console</div>
+                <h1 className={styles.heroTitle}>Recruitment decisions without follow-up data entry.</h1>
+                <p className={styles.muted}>Applicants submit role, type, availability, links, and expectations up front. Admin can accept, reject, or edit only when needed.</p>
+              </div>
+              <div className={styles.heroActions}>
+                <button className={styles.button} type="button" onClick={copyApplicationLink}>Copy WhatsApp Link</button>
+                <a className={styles.ghostButton} href={applicationLink} target="_blank" rel="noopener noreferrer">View Public Form</a>
+              </div>
+            </div>
+
+            <div className={`${styles.card} ${styles.metricCard} ${styles.span3}`}>
+              <span className={styles.muted}>Total Applications</span>
+              <span className={styles.metricValue}>{data.applicants.length}</span>
+            </div>
+            <div className={`${styles.card} ${styles.metricCard} ${styles.span3}`}>
+              <span className={styles.muted}>Awaiting Review</span>
+              <span className={styles.metricValue}>{pendingApplicants.length}</span>
+            </div>
+            <div className={`${styles.card} ${styles.metricCard} ${styles.span3}`}>
+              <span className={styles.muted}>Approved</span>
+              <span className={styles.metricValue}>{approvedApplicants.length}</span>
+            </div>
+            <div className={`${styles.card} ${styles.metricCard} ${styles.span3}`}>
+              <span className={styles.muted}>Rejected</span>
+              <span className={styles.metricValue}>{rejectedApplicants.length}</span>
+            </div>
+
+            <div className={`${styles.card} ${styles.span12}`}>
               <div className={styles.sectionHeader}>
                 <div>
-                  <h2 className={styles.cardTitle}>Applicant Board</h2>
-                  <p className={styles.muted}>Track hiring stages and interview links separately from CRM.</p>
+                  <h2 className={styles.cardTitle}>Applications</h2>
+                  <p className={styles.muted}>{pendingApplicants.length} pending decisions. Accept creates the HR signal; reject closes the applicant cleanly.</p>
                 </div>
-                <span className={styles.pill}>{data.applicants.length} applicants</span>
+                <button className={styles.ghostButton} type="button" onClick={() => downloadCsv("bluevolt-applicants.csv", applicantRows)}>Download CSV</button>
               </div>
-              <div className={styles.list}>{data.applicants.length === 0 ? <div className={styles.emptyState}>No applicants yet.</div> : data.applicants.map((applicant) => (
-                <div className={styles.row} key={applicant.id}>
-                  <div className={styles.rowHeader}><strong>{applicant.name}</strong><span className={styles.pill}>{applicant.stage}</span></div>
-                  <p className={styles.muted}>{applicant.roleApplied} - {applicant.email}</p>
-                  {applicant.meetUrl && <a href={applicant.meetUrl} target="_blank" rel="noopener noreferrer">Open Meet</a>}
+              <div className={styles.smartTable}>
+                <div className={styles.smartTableHeader}>
+                  <span>Applicant</span>
+                  <span>Role</span>
+                  <span>Details</span>
+                  <span>Submitted</span>
+                  <span>Status</span>
+                  <span>Action</span>
                 </div>
-              ))}</div>
+                {data.applicants.length === 0 ? <div className={styles.emptyState}>No applications yet. Copy the public form link and share it in WhatsApp.</div> : data.applicants.map((applicant) => (
+                  <div className={styles.smartTableRow} key={applicant.id}>
+                    <div className={styles.identityCell}>
+                      <span className={styles.avatar}>{applicant.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
+                      <span><strong>{applicant.name}</strong><small>{applicant.email}</small></span>
+                    </div>
+                    <span>{applicant.roleApplied}</span>
+                    <span className={styles.muted}>{applicant.phone || "No phone"}{applicant.notes ? ` - ${applicant.notes.slice(0, 90)}` : ""}</span>
+                    <span className={styles.muted}>{formatPortalDateTime(applicant.createdAt)}</span>
+                    <span className={applicant.stage === "Offer" ? `${styles.pill} ${styles.pillSuccess}` : applicant.stage === "Rejected" ? `${styles.pill} ${styles.pillMuted}` : `${styles.pill} ${styles.pillWarn}`}>{applicant.stage}</span>
+                    <span className={styles.actionStack}>
+                      {applicant.stage !== "Offer" && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "applicant", id: applicant.id.toString(), status: "Offer" }))}>Accept</button>}
+                      {applicant.stage !== "Rejected" && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "applicant", id: applicant.id.toString(), status: "Rejected" }))}>Reject</button>}
+                      <details className={styles.editPanel}>
+                        <summary>Edit</summary>
+                        <form className={styles.formGrid} onSubmit={submit(saveApplicant)}>
+                          <input type="hidden" name="id" value={applicant.id} />
+                          <Field label="Name" name="name" defaultValue={applicant.name} required />
+                          <Field label="Email" name="email" type="email" defaultValue={applicant.email} required />
+                          <Field label="Phone" name="phone" defaultValue={applicant.phone || ""} />
+                          <Field label="Role Applied" name="roleApplied" defaultValue={applicant.roleApplied} required />
+                          <Field label="Stage" name="stage" options={["New", "Screening", "Interview", "Offer", "Rejected"]} defaultValue={applicant.stage} />
+                          <Field label="Source" name="source" defaultValue={applicant.source} />
+                          <Field label="Meet URL" name="meetUrl" type="url" defaultValue={applicant.meetUrl || ""} wide />
+                          <Field label="Notes" name="notes" textarea defaultValue={applicant.notes || ""} wide />
+                          <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Applicant</button>
+                        </form>
+                      </details>
+                      <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "applicant", id: applicant.id.toString() }))}>Delete</button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className={`${styles.card} ${styles.span6}`}>
+              <h2 className={styles.cardTitle}>Decision Trail</h2>
+              <p className={styles.muted}>Latest accept/reject decisions for audit and handover.</p>
+              <div className={styles.list}>
+                {[...approvedApplicants, ...rejectedApplicants].slice(0, 6).map((applicant) => (
+                  <div className={styles.row} key={`decision-${applicant.id}`}>
+                    <div className={styles.rowHeader}><strong>{applicant.name}</strong><span className={applicant.stage === "Offer" ? `${styles.pill} ${styles.pillSuccess}` : styles.pill}>{applicant.stage}</span></div>
+                    <p className={styles.muted}>{applicant.roleApplied} - {formatPortalDateTime(applicant.updatedAt)}</p>
+                  </div>
+                ))}
+                {approvedApplicants.length + rejectedApplicants.length === 0 && <div className={styles.emptyState}>No decisions recorded yet.</div>}
+              </div>
+            </div>
+            <div className={`${styles.card} ${styles.span6}`}>
+              <h2 className={styles.cardTitle}>Application Form Sharing</h2>
+              <p className={styles.muted}>Public link for WhatsApp groups, career pages, and manual sharing.</p>
+              <label className={styles.field}>
+                <span className={styles.label}>Direct Form URL</span>
+                <div className={styles.inlineForm}>
+                  <input className={styles.input} value={applicationLink} readOnly />
+                  <button className={styles.button} type="button" onClick={copyApplicationLink}>Copy Link</button>
+                </div>
+              </label>
+              <label className={styles.field}>
+                <span className={styles.label}>Embed Code</span>
+                <textarea className={styles.textarea} value={`<iframe src="${applicationLink}?embed=1" width="100%" height="980" style="border:0;" loading="lazy"></iframe>`} readOnly />
+              </label>
             </div>
           </section>
         )}
@@ -1225,6 +1398,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                     {formatPortalDate(entry.workDate)} - In: {formatPortalDateTime(entry.loginAt)} - Out: {entry.logoutAt ? formatPortalDateTime(entry.logoutAt) : "Still working"} - {entry.totalHours.toFixed(2)} hours
                   </p>
                   {entry.notes && <p>{entry.notes}</p>}
+                  {data.capabilities.canManageOps && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "attendance", id: entry.id.toString() }))}>Delete</button>}
                 </div>
               ))}</div>
             </div>
@@ -1256,6 +1430,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                     <div className={styles.toolbar}>
                       <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "leave", id: leave.id.toString(), status: "Approved" }))}>Approve</button>
                       <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "leave", id: leave.id.toString(), status: "Rejected" }))}>Reject</button>
+                      <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "leave", id: leave.id.toString() }))}>Delete</button>
                     </div>
                   )}
                 </div>
@@ -1291,6 +1466,23 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                     {["In Progress", "Blocked", "Done"].map((status) => <button className={styles.ghostButton} key={status} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "task", id: task.id.toString(), status }))}>{status}</button>)}
                     {data.capabilities.canManageOps && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "task", id: task.id.toString() }))}>Delete</button>}
                   </div>
+                  {data.capabilities.canManageOps && (
+                    <details className={styles.editPanel}>
+                      <summary>Edit task</summary>
+                      <form className={styles.formGrid} onSubmit={submit(saveTask)}>
+                        <input type="hidden" name="id" value={task.id} />
+                        <Field label="Title" name="title" defaultValue={task.title} required wide />
+                        <Field label="Assign To" name="assignedTo" options={[{ label: "Role based / unassigned", value: "" }, ...employeeOptions]} defaultValue={task.assignedTo?.toString() || ""} wide />
+                        <Field label="Owner Role" name="ownerRole" options={ownerRoleOptions} defaultValue={task.ownerRole} />
+                        <Field label="Priority" name="priority" options={["High", "Medium", "Low"]} defaultValue={task.priority} />
+                        <Field label="Status" name="status" options={["Open", "In Progress", "Blocked", "Done"]} defaultValue={task.status} />
+                        <Field label="Due At" name="dueAt" type="datetime-local" defaultValue={inputDateTime(task.dueAt)} />
+                        <Field label="Proof URL" name="proofUrl" type="url" defaultValue={task.proofUrl || ""} wide />
+                        <Field label="Description" name="description" textarea defaultValue={task.description || ""} wide />
+                        <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Task</button>
+                      </form>
+                    </details>
+                  )}
                 </div>
               ))}</div>
             </div>
@@ -1324,6 +1516,22 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   <p className={styles.muted}>{claim.category} - Rs. {formatPortalNumber(claim.amount)} - {formatPortalDate(claim.claimDate)}</p>
                   {claim.receiptUrl && <a href={claim.receiptUrl} target="_blank" rel="noopener noreferrer">Open receipt</a>}
                   {data.capabilities.canManageOps && <div className={styles.toolbar}>{["Approved", "Rejected", "Paid"].map((status) => <button className={styles.ghostButton} key={status} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "expense", id: claim.id.toString(), status }))}>{status}</button>)}<button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "expense", id: claim.id.toString() }))}>Delete</button></div>}
+                  {data.capabilities.canManageExpenses && (
+                    <details className={styles.editPanel}>
+                      <summary>Edit expense</summary>
+                      <form className={styles.formGrid} onSubmit={submit(saveExpenseClaim)}>
+                        <input type="hidden" name="id" value={claim.id} />
+                        <Field label="Employee" name="employeeId" options={employeeOptions} defaultValue={claim.employeeId.toString()} wide />
+                        <Field label="Category" name="category" options={["Travel", "Food", "Software", "Office", "General"]} defaultValue={claim.category} />
+                        <Field label="Amount" name="amount" type="number" defaultValue={claim.amount.toString()} required />
+                        <Field label="Claim Date" name="claimDate" type="date" defaultValue={inputDate(claim.claimDate)} required />
+                        <Field label="Receipt URL" name="receiptUrl" type="url" defaultValue={claim.receiptUrl || ""} wide />
+                        <Field label="Status" name="status" options={["Pending", "Approved", "Rejected", "Paid"]} defaultValue={claim.status} />
+                        <Field label="Notes" name="notes" textarea defaultValue={claim.notes || ""} wide />
+                        <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Expense</button>
+                      </form>
+                    </details>
+                  )}
                 </div>
               ))}</div>
             </div>
@@ -1332,23 +1540,51 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
 
         {tab === "payroll" && (
           <section className={styles.grid}>
+            <div className={`${styles.dashboardHero} ${styles.span12}`}>
+              <div>
+                <div className={styles.eyebrow}>Salary Management</div>
+                <h1 className={styles.heroTitle}>Payroll overview for employees, interns, and paid contractors.</h1>
+                <p className={styles.muted}>Review monthly payroll, mark payment status, and export payroll records without opening multiple forms.</p>
+              </div>
+              <div className={styles.heroActions}>
+                <button className={styles.button} type="button" onClick={() => downloadCsv("bluevolt-payroll.csv", payrollRows)}>Export CSV</button>
+              </div>
+            </div>
+            <div className={`${styles.card} ${styles.metricCard} ${styles.span3}`}>
+              <span className={styles.muted}>Total Payroll</span>
+              <span className={styles.metricValue}>Rs. {formatPortalNumber(payrollTotal)}</span>
+            </div>
+            <div className={`${styles.card} ${styles.metricCard} ${styles.span3}`}>
+              <span className={styles.muted}>Ready to Pay</span>
+              <span className={styles.metricValue}>{payrollReady}</span>
+            </div>
+            <div className={`${styles.card} ${styles.metricCard} ${styles.span3}`}>
+              <span className={styles.muted}>Paid</span>
+              <span className={styles.metricValue}>{payrollPaid}</span>
+            </div>
+            <div className={`${styles.card} ${styles.metricCard} ${styles.span3}`}>
+              <span className={styles.muted}>Employees</span>
+              <span className={styles.metricValue}>{employees.length}</span>
+            </div>
             {data.capabilities.canManagePayroll && (
-              <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(savePayrollInput)}>
-                <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Payroll Input</h2>
-                <Field label="Employee" name="employeeId" options={employeeOptions} required wide />
-                <Field label="Pay Period" name="payPeriod" placeholder="2026-05" required />
-                <Field label="Pay Type" name="payType" options={["Salary", "Stipend", "Contract", "Bonus Only"]} />
-                <Field label="Amount" name="amount" type="number" />
-                <Field label="Working Days" name="workingDays" type="number" />
-                <Field label="Unpaid Leave Days" name="unpaidLeaveDays" type="number" />
-                <Field label="Bonus" name="bonus" type="number" />
-                <Field label="Deductions" name="deductions" type="number" />
-                <Field label="Status" name="status" options={["Draft", "Ready", "Paid", "Hold"]} />
-                <Field label="Notes" name="notes" textarea wide />
-                <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Payroll</button>
-              </form>
+              <details className={`${styles.card} ${styles.span12} ${styles.editPanel}`}>
+                <summary>Add payroll record</summary>
+                <form className={styles.formGrid} onSubmit={submit(savePayrollInput)}>
+                  <Field label="Employee" name="employeeId" options={employeeOptions} required wide />
+                  <Field label="Pay Period" name="payPeriod" placeholder="2026-05" required />
+                  <Field label="Pay Type" name="payType" options={["Salary", "Stipend", "Contract", "Bonus Only"]} />
+                  <Field label="Amount" name="amount" type="number" />
+                  <Field label="Working Days" name="workingDays" type="number" />
+                  <Field label="Unpaid Leave Days" name="unpaidLeaveDays" type="number" />
+                  <Field label="Bonus" name="bonus" type="number" />
+                  <Field label="Deductions" name="deductions" type="number" />
+                  <Field label="Status" name="status" options={["Draft", "Ready", "Paid", "Hold"]} />
+                  <Field label="Notes" name="notes" textarea wide />
+                  <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Payroll</button>
+                </form>
+              </details>
             )}
-            <div className={`${styles.card} ${data.capabilities.canManagePayroll ? styles.span8 : styles.span12}`}>
+            <div className={`${styles.card} ${styles.span12}`}>
               <div className={styles.sectionHeader}>
                 <div>
                   <h2 className={styles.cardTitle}>Payroll Inputs</h2>
@@ -1356,15 +1592,79 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 </div>
                 <span className={styles.pill}>{data.payrollInputs.length} records</span>
               </div>
-              <div className={styles.list}>{data.payrollInputs.length === 0 ? <div className={styles.emptyState}>No payroll records yet.</div> : data.payrollInputs.map((payroll) => (
-                <div className={styles.row} key={payroll.id}>
-                  <div className={styles.rowHeader}><strong>{payroll.employeeName}</strong><span className={styles.pill}>{payroll.status}</span></div>
-                  <p className={styles.muted}>{payroll.payPeriod} - {payroll.payType} - Rs. {formatPortalNumber(payroll.amount)}</p>
-                  <p className={styles.muted}>Working days: {payroll.workingDays} - Unpaid leave: {payroll.unpaidLeaveDays} - Bonus: {payroll.bonus} - Deductions: {payroll.deductions}</p>
-                  {data.capabilities.canManagePayroll && <div className={styles.toolbar}>{["Ready", "Paid", "Hold"].map((status) => <button className={styles.ghostButton} key={status} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "payroll", id: payroll.id.toString(), status }))}>{status}</button>)}</div>}
+              <div className={styles.smartTable}>
+                <div className={styles.smartTableHeader}>
+                  <span>Employee</span>
+                  <span>Period</span>
+                  <span>Type</span>
+                  <span>Amount</span>
+                  <span>Status</span>
+                  <span>Action</span>
                 </div>
-              ))}</div>
+                {data.payrollInputs.length === 0 ? <div className={styles.emptyState}>No payroll records yet.</div> : data.payrollInputs.map((payroll) => (
+                  <div className={styles.smartTableRow} key={payroll.id}>
+                    <div className={styles.identityCell}>
+                      <span className={styles.avatar}>{payroll.employeeName.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
+                      <span><strong>{payroll.employeeName}</strong><small>{payroll.workingDays} working days, {payroll.unpaidLeaveDays} unpaid leave</small></span>
+                    </div>
+                    <span>{payroll.payPeriod}</span>
+                    <span>{payroll.payType}</span>
+                    <strong>Rs. {formatPortalNumber(payroll.amount)}</strong>
+                    <span className={payroll.status === "Paid" ? `${styles.pill} ${styles.pillSuccess}` : payroll.status === "Hold" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{payroll.status}</span>
+                    {data.capabilities.canManagePayroll && (
+                      <span className={styles.actionStack}>
+                        {["Ready", "Paid", "Hold"].map((status) => <button className={styles.ghostButton} key={status} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "payroll", id: payroll.id.toString(), status }))}>{status}</button>)}
+                        <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "payroll", id: payroll.id.toString() }))}>Delete</button>
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
+          </section>
+        )}
+
+        {tab === "reports" && (
+          <section className={styles.grid}>
+            <div className={`${styles.dashboardHero} ${styles.span12}`}>
+              <div>
+                <div className={styles.eyebrow}>Reports</div>
+                <h1 className={styles.heroTitle}>Download the operating data you need.</h1>
+                <p className={styles.muted}>Employees, applications, payroll, attendance, CRM, resources, documents, and expenses can be exported for reviews or backups.</p>
+              </div>
+              <div className={styles.heroActions}>
+                <button className={styles.button} type="button" onClick={() => {
+                  downloadCsv("bluevolt-all-reports-summary.csv", [
+                    { report: "employees", records: employees.length },
+                    { report: "applicants", records: data.applicants.length },
+                    { report: "attendance", records: data.attendance.length },
+                    { report: "payroll", records: data.payrollInputs.length },
+                    { report: "resources", records: data.resources.length },
+                    { report: "documents", records: data.documents.length },
+                    { report: "expenses", records: data.expenses.length },
+                  ]);
+                }}>Export Summary</button>
+              </div>
+            </div>
+            {[
+              { title: "Employee Report", hint: "Roster, roles, work type, paid/unpaid status", count: employees.length, action: () => downloadCsv("bluevolt-employees.csv", employeeRows) },
+              { title: "Applicant Report", hint: "Public form submissions and decisions", count: data.applicants.length, action: () => downloadCsv("bluevolt-applicants.csv", applicantRows) },
+              { title: "Attendance Report", hint: "Check-in, check-out, and total hours", count: data.attendance.length, action: () => downloadCsv("bluevolt-attendance.csv", attendanceRows) },
+              { title: "Payroll Report", hint: "Salary/stipend inputs and status", count: data.payrollInputs.length, action: () => downloadCsv("bluevolt-payroll.csv", payrollRows) },
+              { title: "Resource Report", hint: "Links, files, tags, and role visibility", count: data.resources.length, action: () => downloadCsv("bluevolt-resources.csv", data.resources.map((item) => ({ title: item.title, type: item.resourceType, url: item.url, audience: item.audienceRoles, tags: item.tags || "" }))) },
+              { title: "Expense Report", hint: "Claims, receipts, amounts, and status", count: data.expenses.length, action: () => downloadCsv("bluevolt-expenses.csv", data.expenses.map((item) => ({ employee: item.employeeName, category: item.category, amount: item.amount, date: formatPortalDate(item.claimDate), status: item.status, receipt: item.receiptUrl || "" }))) },
+            ].map((report) => (
+              <div className={`${styles.card} ${styles.span4} ${styles.reportCard}`} key={report.title}>
+                <div>
+                  <h2 className={styles.cardTitle}>{report.title}</h2>
+                  <p className={styles.muted}>{report.hint}</p>
+                </div>
+                <div className={styles.rowHeader}>
+                  <span className={styles.metricValue}>{report.count}</span>
+                  <button className={styles.button} type="button" onClick={report.action}>Download</button>
+                </div>
+              </div>
+            ))}
           </section>
         )}
 
@@ -1396,6 +1696,25 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   <div className={styles.rowHeader}><strong>{review.employeeName}</strong><span className={styles.pill}>{review.score}/10</span></div>
                   <p className={styles.muted}>{review.reviewPeriod} - {review.status}</p>
                   {review.kpiSummary && <p>{review.kpiSummary}</p>}
+                  {data.capabilities.canReviewPerformance && (
+                    <>
+                      <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "review", id: review.id.toString() }))}>Delete</button>
+                      <details className={styles.editPanel}>
+                        <summary>Edit review</summary>
+                        <form className={styles.formGrid} onSubmit={submit(savePerformanceReview)}>
+                          <input type="hidden" name="id" value={review.id} />
+                          <Field label="Employee" name="employeeId" options={employeeOptions} defaultValue={review.employeeId.toString()} required wide />
+                          <Field label="Review Period" name="reviewPeriod" defaultValue={review.reviewPeriod} required />
+                          <Field label="Score" name="score" type="number" defaultValue={review.score.toString()} />
+                          <Field label="Status" name="status" options={["Draft", "Shared", "Final"]} defaultValue={review.status} />
+                          <Field label="KPI Summary" name="kpiSummary" textarea defaultValue={review.kpiSummary || ""} wide />
+                          <Field label="Strengths" name="strengths" textarea defaultValue={review.strengths || ""} wide />
+                          <Field label="Improvements" name="improvements" textarea defaultValue={review.improvements || ""} wide />
+                          <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Review</button>
+                        </form>
+                      </details>
+                    </>
+                  )}
                 </div>
               ))}</div>
             </div>
@@ -1438,6 +1757,21 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   <p className={styles.muted}>{document.employeeName || "General"} - {document.visibilityRoles}</p>
                   <a href={document.url} target="_blank" rel="noopener noreferrer">Open document</a>
                   {data.capabilities.canManageDocuments && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "document", id: document.id.toString() }))}>Delete</button>}
+                  {data.capabilities.canManageDocuments && (
+                    <details className={styles.editPanel}>
+                      <summary>Edit document</summary>
+                      <form className={styles.formGrid} onSubmit={submit(saveEmployeeDocument)}>
+                        <input type="hidden" name="id" value={document.id} />
+                        <Field label="Employee" name="employeeId" options={[{ label: "General document", value: "" }, ...employeeOptions]} defaultValue={document.employeeId?.toString() || ""} wide />
+                        <Field label="Title" name="title" defaultValue={document.title} required />
+                        <Field label="Type" name="documentType" options={["Offer Letter", "NDA", "ID Proof", "Resume", "Certificate", "Payslip", "General"]} defaultValue={document.documentType} />
+                        <Field label="URL" name="url" type="url" defaultValue={document.url} wide />
+                        <Field label="Visibility Roles" name="visibilityRoles" defaultValue={document.visibilityRoles} wide />
+                        <Field label="Notes" name="notes" textarea defaultValue={document.notes || ""} wide />
+                        <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Document</button>
+                      </form>
+                    </details>
+                  )}
                 </div>
               ))}</div>
             </div>
@@ -1470,6 +1804,19 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   <p>{announcement.body}</p>
                   <p className={styles.muted}>{announcement.audienceRoles} - {formatPortalDateTime(announcement.createdAt)}</p>
                   {data.capabilities.canPublishAnnouncements && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "announcement", id: announcement.id.toString() }))}>Delete</button>}
+                  {data.capabilities.canPublishAnnouncements && (
+                    <details className={styles.editPanel}>
+                      <summary>Edit announcement</summary>
+                      <form className={styles.formGrid} onSubmit={submit(saveAnnouncement)}>
+                        <input type="hidden" name="id" value={announcement.id} />
+                        <Field label="Title" name="title" defaultValue={announcement.title} required wide />
+                        <Field label="Audience Roles" name="audienceRoles" defaultValue={announcement.audienceRoles} wide />
+                        <Field label="Priority" name="priority" options={["Normal", "Important", "Urgent"]} defaultValue={announcement.priority} />
+                        <Field label="Body" name="body" textarea defaultValue={announcement.body} wide required />
+                        <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Announcement</button>
+                      </form>
+                    </details>
+                  )}
                 </div>
               ))}</div>
             </div>
@@ -1507,7 +1854,25 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                     {meeting.meetUrl && <a href={meeting.meetUrl} target="_blank" rel="noopener noreferrer">Open Google Meet</a>}
                     <a href={meeting.calendarUrl} target="_blank" rel="noopener noreferrer">Add to Google Calendar</a>
+                    {data.capabilities.canScheduleMeetings && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "meeting", id: meeting.id.toString() }))}>Delete</button>}
                   </div>
+                  {data.capabilities.canScheduleMeetings && (
+                    <details className={styles.editPanel}>
+                      <summary>Edit meeting</summary>
+                      <form className={styles.formGrid} onSubmit={submit(saveMeeting)}>
+                        <input type="hidden" name="id" value={meeting.id} />
+                        <Field label="Title" name="title" defaultValue={meeting.title} required wide />
+                        <Field label="Starts At" name="startsAt" type="datetime-local" defaultValue={inputDateTime(meeting.startsAt)} required />
+                        <Field label="Ends At" name="endsAt" type="datetime-local" defaultValue={inputDateTime(meeting.endsAt)} required />
+                        <Field label="Meet URL" name="meetUrl" type="url" defaultValue={meeting.meetUrl || ""} wide />
+                        <Field label="Audience Roles" name="audienceRoles" defaultValue={meeting.audienceRoles} wide />
+                        <Field label="Applicant Name" name="applicantName" defaultValue={meeting.applicantName || ""} />
+                        <Field label="Applicant Email" name="applicantEmail" type="email" defaultValue={meeting.applicantEmail || ""} />
+                        <Field label="Notes" name="notes" textarea defaultValue={meeting.notes || ""} wide />
+                        <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Meeting</button>
+                      </form>
+                    </details>
+                  )}
                 </div>
               ))}</div>
             </div>
@@ -1555,6 +1920,21 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   <p className={styles.muted}>{resource.audienceRoles} {resource.tags ? `- ${resource.tags}` : ""}</p>
                   <a href={resource.url} target="_blank" rel="noopener noreferrer">Open Resource</a>
                   {data.capabilities.canManageResources && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "resource", id: resource.id.toString() }))}>Delete</button>}
+                  {data.capabilities.canManageResources && (
+                    <details className={styles.editPanel}>
+                      <summary>Edit resource</summary>
+                      <form className={styles.formGrid} onSubmit={submit(saveResource)}>
+                        <input type="hidden" name="id" value={resource.id} />
+                        <Field label="Title" name="title" defaultValue={resource.title} required />
+                        <Field label="Type" name="resourceType" options={["Link", "PDF", "Excel", "PowerPoint", "Document", "Image", "Video", "Other"]} defaultValue={resource.resourceType} />
+                        <Field label="URL" name="url" type="url" defaultValue={resource.url} required wide />
+                        <Field label="Audience Roles" name="audienceRoles" defaultValue={resource.audienceRoles} wide />
+                        <Field label="Tags" name="tags" defaultValue={resource.tags || ""} wide />
+                        <Field label="Description" name="description" textarea defaultValue={resource.description || ""} wide />
+                        <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Resource</button>
+                      </form>
+                    </details>
+                  )}
                 </div>
               ))}</div>
             </div>
@@ -1563,6 +1943,19 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
 
         {tab === "admin" && (
           <section className={styles.grid}>
+            <div className={`${styles.card} ${styles.span12}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>Simple Hiring Link</h2>
+                  <p className={styles.muted}>Copy this link and paste it in WhatsApp. Applicants fill the form and appear in the Applicants board.</p>
+                </div>
+                <button className={styles.button} type="button" onClick={copyApplicationLink}>Copy WhatsApp Link</button>
+              </div>
+              <div className={styles.inlineForm}>
+                <input className={styles.input} value={applicationLink} readOnly />
+                <a className={styles.ghostButton} href={applicationLink} target="_blank" rel="noopener noreferrer">Open Form</a>
+              </div>
+            </div>
             <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveEmployeeRoleDefinition)}>
               <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>1. Create Role</h2>
               <p className={`${styles.muted} ${styles.fieldWide}`}>Create the access role first, then assign employees to that role below.</p>
@@ -1704,7 +2097,29 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                     <a className={styles.ghostButton} href={mailtoFor(user)}>Send letter email</a>
                     <a className={styles.ghostButton} href={idCardUrlFor(user)} target="_blank" rel="noopener noreferrer">Open ID card</a>
                     <a className={styles.ghostButton} href={idCardUrlFor(user, true)}>Download ID card</a>
+                    {user.id !== currentUserId && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "employee", id: user.id.toString() }))}>Delete</button>}
                   </div>
+                  <details className={styles.editPanel}>
+                    <summary>Edit employee</summary>
+                    <form className={styles.formGrid} onSubmit={submit(saveEmployeeUser)}>
+                      <Field label="Name" name="name" defaultValue={user.name} required />
+                      <Field label="Email" name="email" type="email" defaultValue={user.email} required />
+                      <Field label="New Password" name="password" type="password" />
+                      <Field label="Role" name="role" options={roleOptions} defaultValue={user.role} />
+                      <Field label="Department" name="department" defaultValue={user.department} />
+                      <Field label="Department Record" name="departmentId" options={[{ label: "No department record", value: "" }, ...data.departments.map((dept) => ({ label: dept.name, value: dept.id.toString() }))]} defaultValue={user.departmentId?.toString() || ""} />
+                      <Field label="Manager" name="managerId" options={[{ label: "No manager", value: "" }, ...employeeOptions]} defaultValue={user.managerId?.toString() || ""} />
+                      <Field label="Title" name="title" defaultValue={user.title} />
+                      <Field label="Employee Type" name="employeeType" options={["Full-time", "Part-time", "Intern", "Contractor", "Consultant"]} defaultValue={user.employeeType} />
+                      <Field label="Paid Status" name="compensationStatus" options={["Paid", "Unpaid"]} defaultValue={user.compensationStatus} />
+                      <Field label="Employment Start" name="employmentStart" type="date" defaultValue={inputDate(user.employmentStart)} />
+                      <Field label="Employment End" name="employmentEnd" type="date" defaultValue={inputDate(user.employmentEnd)} />
+                      <Field label="Work Starts" name="workStartTime" type="time" defaultValue={user.workStartTime} />
+                      <Field label="Work Ends" name="workEndTime" type="time" defaultValue={user.workEndTime} />
+                      <Field label="Status" name="status" options={["Active", "Inactive"]} defaultValue={user.status} />
+                      <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Employee</button>
+                    </form>
+                  </details>
                 </div>
               ))}</div>
             </div>
@@ -1722,6 +2137,16 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Department</button>
             </form>
             <div className={`${styles.card} ${styles.span8}`}>
+              <h2 className={styles.cardTitle}>Departments</h2>
+              <div className={styles.list}>{data.departments.length === 0 ? <div className={styles.emptyState}>No departments yet.</div> : data.departments.map((department) => (
+                <div className={styles.row} key={department.id}>
+                  <div className={styles.rowHeader}><strong>{department.name}</strong><span className={department.active ? `${styles.pill} ${styles.pillSuccess}` : `${styles.pill} ${styles.pillMuted}`}>{department.active ? "Active" : "Inactive"}</span></div>
+                  {department.description && <p className={styles.muted}>{department.description}</p>}
+                  <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "department", id: department.id.toString() }))}>Delete</button>
+                </div>
+              ))}</div>
+            </div>
+            <div className={`${styles.card} ${styles.span12}`}>
               <h2 className={styles.cardTitle}>Audit Logs</h2>
               <div className={styles.list}>{data.auditEvents.length === 0 ? <div className={styles.emptyState}>No audit events yet.</div> : data.auditEvents.map((event) => (
                 <div className={styles.row} key={event.id}>

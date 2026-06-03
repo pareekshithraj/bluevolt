@@ -1,19 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { 
   Lock, 
   ShieldCheck, 
   AlertTriangle, 
   LogOut, 
-  Plus, 
-  Trash2, 
-  Edit3, 
-  Activity, 
   Globe, 
-  Play,
   ArrowLeft,
   Eye,
   EyeOff,

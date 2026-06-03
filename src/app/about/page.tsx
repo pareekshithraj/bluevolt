@@ -3,7 +3,7 @@
 import React from 'react';
 import Image from 'next/image';
 import Reveal from '@/components/Reveal';
-import { Target, Globe, Server, Code, Users, Linkedin, Twitter, Instagram, Facebook } from 'lucide-react';
+import { Target, Globe, Linkedin, Twitter, Instagram, Facebook } from 'lucide-react';
 
 export default function AboutPage() {
     return (

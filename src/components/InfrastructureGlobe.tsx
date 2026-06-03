@@ -31,7 +31,6 @@ export default function InfrastructureGlobe() {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [selectedNode, setSelectedNode] = useState<NodeData>(nodes[0]);
-  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
 
   // Sync selectedNode to a ref so the Three.js loop can access the latest state
   const selectedNodeRef = useRef(selectedNode);
@@ -340,11 +339,9 @@ export default function InfrastructureGlobe() {
       const intersects = raycaster.intersectObjects(nodeMeshes);
       if (intersects.length > 0) {
         hoveredIdLocal = intersects[0].object.name;
-        setHoveredNode(hoveredIdLocal);
         document.body.style.cursor = "pointer";
       } else {
         hoveredIdLocal = null;
-        setHoveredNode(null);
         document.body.style.cursor = "default";
       }
 

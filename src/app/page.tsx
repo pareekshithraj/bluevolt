@@ -1,10 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
 import Reveal from "@/components/Reveal";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import FuturisticHero3DWrapper from "@/components/FuturisticHero3DWrapper";
 import FloatingHeroWindows from "@/components/FloatingHeroWindows";
 import StatsSection from "@/components/StatsSection";
 

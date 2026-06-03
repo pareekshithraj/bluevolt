@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Image from "next/image";
 
 export default function FloatingHeroWindows() {
   const [scrollY, setScrollY] = useState(0);
@@ -87,10 +88,12 @@ export default function FloatingHeroWindows() {
           <div style={{ width: "52px" }} />
         </div>
 
-        <div className="mac-window-body" style={{ padding: 0, overflow: "hidden", display: "flex", height: "calc(100% - 36px)" }}>
-          <img 
-            src="/Assets/img_1.png" 
-            alt="Schools24 Desktop Dashboard" 
+        <div className="mac-window-body" style={{ padding: 0, overflow: "hidden", display: "flex", height: "calc(100% - 36px)", position: "relative" }}>
+          <Image
+            src="/Assets/img_1.png"
+            alt="Schools24 Desktop Dashboard"
+            fill
+            sizes="(max-width: 640px) 60vw, (max-width: 1100px) 70vw, 760px"
             style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top" }}
           />
         </div>
@@ -152,9 +155,11 @@ export default function FloatingHeroWindows() {
         </div>
 
         <div className="phone-simulator-screen" style={{ height: "100%", width: "100%", position: "relative" }}>
-          <img 
-            src="/Assets/img_2.png" 
-            alt="Schools24 Mobile Dashboard" 
+          <Image
+            src="/Assets/img_2.png"
+            alt="Schools24 Mobile Dashboard"
+            fill
+            sizes="(max-width: 640px) 124px, (max-width: 1100px) 230px, 250px"
             style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top" }}
           />
         </div>
@@ -198,10 +203,12 @@ export default function FloatingHeroWindows() {
           <div style={{ width: "52px" }} />
         </div>
 
-        <div className="mac-window-body" style={{ padding: 0, overflow: "hidden", display: "flex", height: "calc(100% - 36px)" }}>
-          <img 
-            src="/Assets/img_3.png" 
-            alt="Schools24 Route Planner" 
+        <div className="mac-window-body" style={{ padding: 0, overflow: "hidden", display: "flex", height: "calc(100% - 36px)", position: "relative" }}>
+          <Image
+            src="/Assets/img_3.png"
+            alt="Schools24 Route Planner"
+            fill
+            sizes="(max-width: 640px) 95vw, (max-width: 1100px) 560px, 440px"
             style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top" }}
           />
         </div>

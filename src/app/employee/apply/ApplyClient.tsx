@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState, useTransition } from "react";
+import Image from "next/image";
 import { submitEmployeeApplication } from "@/app/actions/employee-portal";
 import styles from "../portal.module.css";
 
@@ -59,7 +60,7 @@ export default function ApplyClient({ roleOptions }: { roleOptions: Array<{ labe
       <section className={styles.loginCard}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, marginBottom: 28 }}>
           <div style={{ width: 100, height: 100, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <img src="/logo.png" alt="BlueVolt Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+            <Image src="/logo.png" alt="BlueVolt Logo" width={100} height={100} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
           </div>
           <div style={{ textAlign: "center" }}>
             <h1 className={styles.title} style={{ fontSize: "1.8rem", marginBottom: 4 }}>Apply for Work</h1>

@@ -32,7 +32,11 @@ export async function GET(request: NextRequest) {
   } else if (type === "expenses") {
     rows = await prisma.employeeExpenseClaim.findMany({ orderBy: { updatedAt: "desc" } });
   } else {
-    rows = (await prisma.employeeUser.findMany({ orderBy: { createdAt: "desc" } })).map(({ password, ...user }) => user);
+    rows = (await prisma.employeeUser.findMany({ orderBy: { createdAt: "desc" } })).map((user) => {
+      const row: Record<string, unknown> = { ...user };
+      delete row.password;
+      return row;
+    });
   }
 
   return new NextResponse(csv(rows), {

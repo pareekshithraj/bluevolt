@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState, useTransition } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import styles from "../portal.module.css";
@@ -131,7 +132,7 @@ export default function LoginClient() {
     <main className={`${styles.loginWrapper} ${theme === "light" ? styles.themeLight : styles.themeDark}`}>
       <div className={styles.loginVisual}>
         <div className={styles.loginVisualContent}>
-          <img src="/logo.png" alt="BlueVolt Logo" style={{ height: 56, filter: "brightness(0) invert(1)", opacity: 0.95 }} />
+          <Image src="/logo.png" alt="BlueVolt Logo" width={132} height={56} style={{ height: 56, width: "auto", filter: "brightness(0) invert(1)", opacity: 0.95 }} />
         </div>
         <div className={`${styles.loginVisualContent} ${styles.loginQuote}`}>
           BlueVolt internal<br />workspace access.
@@ -142,7 +143,7 @@ export default function LoginClient() {
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, marginBottom: 30 }}>
             <span className={styles.loginStatusPill}>Private employee access</span>
             <div className={styles.loginLogoMark}>
-              <img src="/logo.png" alt="BlueVolt Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+              <Image src="/logo.png" alt="BlueVolt Logo" width={168} height={112} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
             </div>
             <div style={{ textAlign: "center" }}>
               <h1 className={styles.title} style={{ fontSize: "2.15rem", marginBottom: 6 }}>Employee Gateway</h1>

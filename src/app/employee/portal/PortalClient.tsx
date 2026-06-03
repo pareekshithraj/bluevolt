@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Bell, Briefcase, CalendarDays, ChevronRight, ClipboardList, Clock3, Code2, FileText, Handshake, LogOut, Menu, Moon, PenLine, RefreshCw, RotateCw, Search, Shield, Star, Sun, Target, UserCheck, Users, Video, WalletCards, X } from "lucide-react";
 import {
@@ -878,7 +879,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
 
       <aside className={`${styles.sidebar} ${mobileSidebarOpen ? styles.sidebarOpen : ""}`}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 28, paddingBottom: 16, borderBottom: "1px solid var(--border-color)" }}>
-          <img src="/logo.png" alt="BlueVolt Logo" style={{ height: 52, width: "auto", objectFit: "contain" }} />
+          <Image src="/logo.png" alt="BlueVolt Logo" width={110} height={52} style={{ height: 52, width: "auto", objectFit: "contain" }} />
         </div>
         <div className={styles.sidebarProfile}>
           <div className={styles.sidebarAvatar}>
@@ -974,7 +975,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
             <div className={`${styles.card} ${styles.span12} ${styles.dashboardHero}`}>
               <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
                 <div style={{ flexShrink: 0, width: 96, height: 86, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-shell)", padding: 12, borderRadius: "18px", border: "1px solid var(--border-color)", boxShadow: "var(--shadow-sm)" }}>
-                  <img src="/logo.png" alt="BlueVolt Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                  <Image src="/logo.png" alt="BlueVolt Logo" width={96} height={86} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
                 </div>
                 <div>
                   <span className={styles.eyebrow}>Today Command Center</span>
@@ -1337,7 +1338,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 <div className={styles.fullSheetApp}>
                   <div className={styles.sheetAppHeader}>
                     <button className={styles.sheetLogoButton} type="button" onClick={() => setActiveCrmSheetId(null)} aria-label="Back to CRM sheets">
-                      <img src="/Assets/Logos/BLUEVOLT.png" alt="BlueVolt" className={styles.bluevoltSheetLogo} />
+                      <Image src="/Assets/Logos/BLUEVOLT.png" alt="BlueVolt" width={112} height={44} className={styles.bluevoltSheetLogo} />
                     </button>
                     <div className={styles.sheetTitleBlock}>
                       <div className={styles.sheetDocumentName}>{activeCrmSheet.title || "Untitled spreadsheet"} <span>*</span></div>

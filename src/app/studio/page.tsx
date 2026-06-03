@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, Lock, Play, ShieldCheck, X, AlertTriangle } from "lucide-react";
 import { getStudioProjects, StudioProjectData } from "@/app/actions/studio";

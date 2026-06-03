@@ -1,5 +1,7 @@
 export const EMPLOYEE_ROLES = [
   "super_admin",
+  "director",
+  "authorized_signatory",
   "admin",
   "sales",
   "content",
@@ -24,12 +26,16 @@ export const EMPLOYEE_PORTAL_FEATURES = [
   { id: "meetings", label: "Meetings", description: "Google Meet scheduling and meeting list." },
   { id: "resources", label: "Resources", description: "Resource library, PDFs, spreadsheets, slides, and links." },
   { id: "employees", label: "Employees & Roles", description: "Employee registration, role setup, access mapping, departments, and audit logs." },
+  { id: "access", label: "Privileges", description: "Role creation, feature access mapping, and portal permission changes." },
+  { id: "sign_documents", label: "Document Signing", description: "Approve and sign employee offer, joining, and HR documents." },
 ] as const;
 
 export type EmployeePortalFeature = (typeof EMPLOYEE_PORTAL_FEATURES)[number]["id"];
 
 export const DEFAULT_ROLE_FEATURE_ACCESS: Record<(typeof EMPLOYEE_ROLES)[number], EmployeePortalFeature[]> = {
   super_admin: EMPLOYEE_PORTAL_FEATURES.map((feature) => feature.id),
+  director: EMPLOYEE_PORTAL_FEATURES.map((feature) => feature.id),
+  authorized_signatory: EMPLOYEE_PORTAL_FEATURES.map((feature) => feature.id),
   admin: ["dashboard", "crm", "applicants", "ops", "expenses", "payroll", "reviews", "documents", "announcements", "meetings", "resources", "employees"],
   sales: ["dashboard", "crm", "ops", "expenses", "documents", "meetings", "resources"],
   content: ["dashboard", "crm", "ops", "expenses", "documents", "announcements", "meetings", "resources"],

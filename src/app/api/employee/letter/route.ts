@@ -4,6 +4,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeSession, hasEmployeeRole } from "@/lib/employee/session";
 
+const companyLegalName = "BLUEVOLT GROUPS PRIVATE LIMITED";
+const companyWebsite = "bluevolt.group";
+const companyPhone = "+91 9110893850";
+const signatorySignatureUrl = "/Assets/signatures/swathi_kn-removebg-preview.png";
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -60,8 +65,22 @@ export async function GET(request: NextRequest) {
   }
   if (!employee) return new NextResponse("Employee not found", { status: 404 });
 
-  if (String(employee.id) !== session.userId && !hasEmployeeRole(session, ["admin", "hr"])) {
+  const canReviewLetters = hasEmployeeRole(session, ["super_admin", "director", "authorized_signatory", "admin", "hr"]);
+  if (String(employee.id) !== session.userId && !canReviewLetters) {
     return new NextResponse("Forbidden", { status: 403 });
+  }
+  if (String(employee.id) === session.userId && !canReviewLetters) {
+    try {
+      const document = await prisma.employeeDocument.findFirst({
+        where: { employeeId, url: { contains: `/api/employee/letter?employeeId=${employeeId}` } },
+        orderBy: { updatedAt: "desc" },
+      });
+      if (!document?.notes?.includes("Approval status: Approved")) {
+        return new NextResponse("This document is waiting for director approval.", { status: 403 });
+      }
+    } catch {
+      return new NextResponse("This document is waiting for director approval.", { status: 403 });
+    }
   }
 
   const title = escapeHtml(type);
@@ -69,12 +88,12 @@ export async function GET(request: NextRequest) {
   const joiningText = isIntern ? "internship engagement" : "employment";
   const compensationText = employee.compensationStatus === "Unpaid"
     ? "This is currently recorded as an unpaid engagement unless separately updated in writing."
-    : "Your compensation details will be governed by the payroll record and any separate compensation schedule issued by BlueVolt.";
+    : "Your compensation details will be governed by the payroll record and any separate compensation schedule issued by BLUEVOLT GROUPS PRIVATE LIMITED.";
 
   let bodyContent = "";
   if (type === "Offer Letter") {
     bodyContent = `
-      <p>We are pleased to offer you the role of <strong>${escapeHtml(employee.title)}</strong> in the <strong>${escapeHtml(employee.department)}</strong> function at BlueVolt Groups Private Limited.</p>
+      <p>We are pleased to offer you the role of <strong>${escapeHtml(employee.title)}</strong> in the <strong>${escapeHtml(employee.department)}</strong> function at ${companyLegalName}.</p>
       <table class="meta-table">
         <tr><td>Employee Type</td><td>${escapeHtml(employee.employeeType)}</td></tr>
         <tr><td>Paid Status</td><td>${escapeHtml(employee.compensationStatus)}</td></tr>
@@ -88,7 +107,7 @@ export async function GET(request: NextRequest) {
   } else if (type === "Appraisal Letter") {
     bodyContent = `
       <p>This letter is to formally acknowledge your performance and contributions in the role of <strong>${escapeHtml(employee.title)}</strong> within the <strong>${escapeHtml(employee.department)}</strong> department.</p>
-      <p>Your ongoing dedication to the team's objectives has been noted. We appreciate your continued efforts and look forward to your future growth with BlueVolt Groups Private Limited.</p>
+      <p>Your ongoing dedication to the team's objectives has been noted. We appreciate your continued efforts and look forward to your future growth with ${companyLegalName}.</p>
       <table class="meta-table">
         <tr><td>Current Role</td><td>${escapeHtml(employee.title)}</td></tr>
         <tr><td>Review Date</td><td>${formatDate(new Date())}</td></tr>
@@ -106,7 +125,7 @@ export async function GET(request: NextRequest) {
     `;
   } else if (type === "Termination Letter") {
     bodyContent = `
-      <p>This letter serves as formal notice regarding the termination of your employment as <strong>${escapeHtml(employee.title)}</strong> at BlueVolt Groups Private Limited, effective immediately.</p>
+      <p>This letter serves as formal notice regarding the termination of your employment as <strong>${escapeHtml(employee.title)}</strong> at ${companyLegalName}, effective immediately.</p>
       <p>Please contact the HR department for instructions regarding your final settlement, clearance process, and exit procedures.</p>
     `;
   } else {
@@ -134,7 +153,8 @@ export async function GET(request: NextRequest) {
     .meta-table td { padding: 10px 0; border-bottom: 1px solid #e2e8f0; }
     .meta-table td:first-child { font-weight: bold; width: 35%; color: #334155; }
     .sign-block { margin-top: 80px; display: flex; justify-content: space-between; font-family: Arial, sans-serif; }
-    .sign-box { width: 220px; }
+    .sign-box { width: 260px; }
+    .signature-img { width: 180px; height: 72px; object-fit: contain; object-position: left center; display: block; margin-bottom: 4px; }
     .sign-line { border-top: 1px solid #111; margin-top: 60px; padding-top: 8px; font-size: 14px; font-weight: bold; }
     .footer { position: absolute; bottom: 20mm; left: 25mm; right: 25mm; text-align: center; font-family: Arial, sans-serif; font-size: 10px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }
     .print-btn { position: fixed; top: 20px; right: 20px; padding: 12px 24px; background: #0ea5e9; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-family: Arial; font-weight: bold; box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3); transition: background 0.2s; }
@@ -150,9 +170,10 @@ export async function GET(request: NextRequest) {
         <img src="/logo.png" alt="BlueVolt Logo" style="height: 48px;" />
       </div>
       <div class="company-details">
-        <strong>BlueVolt Groups Private Limited</strong><br/>
+        <strong>${companyLegalName}</strong><br/>
         Bengaluru, Karnataka, India<br/>
-        www.bluevolt.com
+        ${companyWebsite}<br/>
+        ${companyPhone}
       </div>
     </div>
     
@@ -166,17 +187,14 @@ export async function GET(request: NextRequest) {
     
     <div class="sign-block">
       <div class="sign-box">
-        <div class="sign-line">For BlueVolt Groups</div>
+        <img class="signature-img" src="${signatorySignatureUrl}" alt="Authorized Signatory Signature" />
+        <div class="sign-line">For ${companyLegalName}</div>
         <div style="font-size: 12px; color: #475569; margin-top: 4px;">Authorized Signatory</div>
-      </div>
-      <div class="sign-box">
-        <div class="sign-line">Employee Signature</div>
-        <div style="font-size: 12px; color: #475569; margin-top: 4px;">Date:</div>
       </div>
     </div>
 
     <div class="footer">
-      This is a digitally generated document. BlueVolt Groups Private Limited is registered in India.
+      This is a digitally generated document. ${companyLegalName} is registered in India.
     </div>
   </div>
 </body>

@@ -377,7 +377,28 @@
   box-sizing: border-box;
   box-shadow: 4px 0 24px var(--border-color);
   z-index: 10;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb-bg) transparent;
+}
+
+.sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-bg);
+  border-radius: 999px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }
 
 .brand {
@@ -411,14 +432,10 @@
   display: grid;
   gap: 6px;
   margin: 32px 0;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  flex: 0 0 auto;
+  min-height: auto;
+  overflow: visible;
   padding-right: 4px;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb-bg) transparent;
 }
 
 .nav::-webkit-scrollbar {
@@ -880,6 +897,8 @@
   background: var(--bg-card);
   border-radius: 12px;
   padding: 16px;
+  display: grid;
+  gap: 8px;
   transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
   position: relative;
   overflow: hidden;
@@ -1810,6 +1829,14 @@
   margin: 0;
   color: var(--text-muted);
   font-size: 0.88rem;
+}
+
+.alertActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .profileCard {

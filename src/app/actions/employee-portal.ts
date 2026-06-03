@@ -123,6 +123,8 @@ let localStoreWriteWarningShown = false;
 
 const defaultRoleLabels: Record<string, string> = {
   super_admin: "Super Admin",
+  director: "Director",
+  authorized_signatory: "Authorized Signatory",
   admin: "Admin",
   sales: "Sales",
   content: "Content Developer",
@@ -133,6 +135,8 @@ const defaultRoleLabels: Record<string, string> = {
 
 const defaultRolePermissions: Record<string, string> = {
   super_admin: "Full portal control, employee mapping, role setup, CRM sheets, documents, resources, meetings, payroll, and audits.",
+  director: "Full portal control with final employee document approval and signature rights.",
+  authorized_signatory: "Full portal control with employee document approval and signature rights.",
   admin: "Employee operations, attendance, documents, resources, payroll, reviews, and approvals.",
   sales: "CRM access, meetings, tasks, resources, and assigned work updates.",
   content: "Content resources, CRM visibility, tasks, documents, and assigned work updates.",
@@ -195,28 +199,36 @@ function capabilitiesForRole(role: string, roles: EmployeeRoleDefinition[]) {
   const canManage = roleCanAccessFeature(role, roles, "employees");
   const canUseCrm = roleCanAccessFeature(role, roles, "crm") || roleCanAccessFeature(role, roles, "crm_manage");
   const canManageCrm = roleCanAccessFeature(role, roles, "crm_manage");
-  const isAdmin = role === "super_admin" || role === "admin";
+  const canManageResources = roleCanAccessFeature(role, roles, "resources") && canManage;
+  const canScheduleMeetings = roleCanAccessFeature(role, roles, "meetings") && canManage;
+  const canPublishAnnouncements = roleCanAccessFeature(role, roles, "announcements") && canManage;
+  const canViewDocuments = roleCanAccessFeature(role, roles, "documents");
+  const canManageDocuments = canViewDocuments && canManage;
+  const canSignDocuments = roleCanAccessFeature(role, roles, "sign_documents");
   return {
     canManage,
-    canManageAccess: role === "super_admin",
+    canManageAccess: roleCanAccessFeature(role, roles, "access"),
     canUseCrm,
     canRequestCrmSource: canManageCrm,
     canUpdateCrmSheetRows: canManageCrm,
     canManageCrmSheets: canManageCrm,
     canManageApplicants: roleCanAccessFeature(role, roles, "applicants"),
-    canManageResources: isAdmin,
-    canScheduleMeetings: isAdmin,
+    canManageResources,
+    canScheduleMeetings,
     canManageOps: roleCanAccessFeature(role, roles, "ops"),
     canManagePayroll: roleCanAccessFeature(role, roles, "payroll"),
     canReviewPerformance: roleCanAccessFeature(role, roles, "reviews"),
-    canManageDocuments: roleCanAccessFeature(role, roles, "documents"),
+    canViewDocuments,
+    canManageDocuments,
+    canSignDocuments,
+    canApproveDocuments: canSignDocuments,
     canViewAnnouncements: roleCanAccessFeature(role, roles, "announcements"),
-    canPublishAnnouncements: isAdmin,
+    canPublishAnnouncements,
     canViewMeetings: roleCanAccessFeature(role, roles, "meetings"),
     canViewResources: roleCanAccessFeature(role, roles, "resources"),
     canManageExpenses: roleCanAccessFeature(role, roles, "expenses"),
-    canAdminScheduleMeetings: isAdmin,
-    canAdminManageResources: isAdmin,
+    canAdminScheduleMeetings: canScheduleMeetings,
+    canAdminManageResources: canManageResources,
   };
 }
 
@@ -415,16 +427,18 @@ export async function getEmployeeApplicationRoleOptions() {
   ];
 
   try {
+    const internalOnlyRoles = new Set(["super_admin", "admin", "director", "authorized_signatory"]);
     const roles = await getEmployeeRoleDefinitionsFromDatabase();
     const options = roles
-      .filter((role) => role.status !== "Inactive" && !["super_admin", "admin"].includes(role.key))
+      .filter((role) => role.status !== "Inactive" && !internalOnlyRoles.has(role.key))
       .map((role) => ({ label: role.label, value: role.label }));
     return options.length ? options : fallback;
   } catch (error) {
     if (!isDatabaseUnavailable(error)) throw error;
     const store = await readLocalEmployeeStore();
+    const internalOnlyRoles = new Set(["super_admin", "admin", "director", "authorized_signatory"]);
     const options = mergeRoleDefinitions(store.roles)
-      .filter((role) => role.status !== "Inactive" && !["super_admin", "admin"].includes(role.key))
+      .filter((role) => role.status !== "Inactive" && !internalOnlyRoles.has(role.key))
       .map((role) => ({ label: role.label, value: role.label }));
     return options.length ? options : fallback;
   }
@@ -509,6 +523,28 @@ function applicantStartDate(notes: string | null | undefined): Date | null {
   return optionalDate(value);
 }
 
+const documentApprovalPending = "Approval status: Pending Director Approval";
+const documentApprovalApproved = "Approval status: Approved";
+const signatorySignatureUrl = "/Assets/signatures/swathi_kn-removebg-preview.png";
+
+function documentIsApproved(notes?: string | null): boolean {
+  return (notes || "").includes(documentApprovalApproved);
+}
+
+function documentApprovalNotes(notes?: string | null, approvedBy?: string) {
+  const cleaned = (notes || "")
+    .split(/\r?\n/)
+    .filter((line) => !line.startsWith("Approval status:") && !line.startsWith("Approved by:") && !line.startsWith("Signature:"))
+    .join("\n")
+    .trim();
+  return [
+    documentApprovalApproved,
+    approvedBy ? `Approved by: ${approvedBy}` : "",
+    `Signature: ${signatorySignatureUrl}`,
+    cleaned,
+  ].filter(Boolean).join("\n");
+}
+
 async function createEmployeeStarterDocuments(input: {
   employeeId: number;
   employeeName: string;
@@ -524,8 +560,8 @@ async function createEmployeeStarterDocuments(input: {
       title: letterType,
       documentType: letterType,
       url: letterUrl,
-      visibilityRoles: "super_admin,admin,hr",
-      notes: "Auto-generated when the employee account was created.",
+      visibilityRoles: "super_admin,director,authorized_signatory,admin,hr",
+      notes: `${documentApprovalPending}\nAuto-generated when the employee account was created.`,
       uploadedBy: input.uploadedBy,
     },
   });
@@ -921,8 +957,10 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
         ? prisma.employeePerformanceReview.findMany({ orderBy: [{ updatedAt: "desc" }], take: 80 })
         : prisma.employeePerformanceReview.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }], take: 24 }))
       : Promise.resolve([]),
-    capabilities.canManageDocuments && ["dashboard", "documents", "reports"].includes(activeTab)
+    capabilities.canViewDocuments && ["dashboard", "documents", "reports"].includes(activeTab)
       ? prisma.employeeDocument.findMany({ orderBy: [{ updatedAt: "desc" }], take: 100 })
+      : activeTab === "documents"
+        ? prisma.employeeDocument.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }], take: 50 })
       : Promise.resolve([]),
     canViewAnnouncements && ["dashboard", "announcements", "reports"].includes(activeTab)
       ? prisma.employeeAnnouncement.findMany({ orderBy: [{ createdAt: "desc" }], take: 40 })
@@ -992,7 +1030,7 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
     tasks,
     payrollInputs,
     reviews,
-    documents: documents.filter((document) => visibleToRole(document.visibilityRoles, session.role) || document.employeeId === user.id),
+    documents: documents.filter((document) => visibleToRole(document.visibilityRoles, session.role) || (document.employeeId === user.id && documentIsApproved(document.notes))),
     announcements: announcements.filter((announcement) => visibleToRole(announcement.audienceRoles, session.role)),
     comments,
     departments,
@@ -1700,7 +1738,8 @@ export async function saveMeeting(input: {
   notes?: string;
 }) {
   const { session } = await requireEmployee();
-  if (!["super_admin", "admin"].includes(session.role)) {
+  const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
+  if (!capabilitiesForRole(session.role, roleDefinitions).canScheduleMeetings) {
     return { success: false, error: "Only super admin/admin can schedule meetings." };
   }
   const { id, ...rest } = input;
@@ -1726,7 +1765,8 @@ export async function saveResource(input: {
   tags?: string;
 }) {
   const { session } = await requireEmployee();
-  if (!["super_admin", "admin"].includes(session.role)) {
+  const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
+  if (!capabilitiesForRole(session.role, roleDefinitions).canManageResources) {
     return { success: false, error: "Only super admin/admin can publish resources." };
   }
   const { id, ...rest } = input;
@@ -1999,7 +2039,8 @@ export async function saveEmployeeDocument(input: {
   notes?: string;
 }) {
   const { session } = await requireEmployee();
-  if (!(await employeeSessionCanAccessFeature(session, "documents"))) {
+  const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
+  if (!capabilitiesForRole(session.role, roleDefinitions).canManageDocuments) {
     return { success: false, error: "Only admin/HR/operations can manage documents." };
   }
   const employeeId = input.employeeId ? Number(input.employeeId) : null;
@@ -2015,12 +2056,42 @@ export async function saveEmployeeDocument(input: {
     fileName: input.fileName,
     fileSize: input.fileSize ? Number(input.fileSize) : null,
     mimeType: input.mimeType,
-    visibilityRoles: input.visibilityRoles || "super_admin,admin,hr",
-    notes: input.notes,
+    visibilityRoles: input.visibilityRoles || "super_admin,director,authorized_signatory,admin,hr",
+    notes: input.notes?.includes("Approval status:")
+      ? input.notes
+      : `${documentApprovalPending}${input.notes?.trim() ? `\n${input.notes.trim()}` : ""}`,
     uploadedBy: Number(session.userId),
   };
   if (input.id) await prisma.employeeDocument.update({ where: { id: Number(input.id) }, data });
   else await prisma.employeeDocument.create({ data });
+  revalidatePath("/employee/portal");
+  return { success: true };
+}
+
+export async function approveEmployeeDocument(input: { id: string }) {
+  const { session } = await requireEmployee();
+  if (!(await employeeSessionCanAccessFeature(session, "sign_documents"))) {
+    return { success: false, error: "Only Director or Authorized Signatory roles can approve documents." };
+  }
+  const document = await prisma.employeeDocument.findUnique({ where: { id: Number(input.id) } });
+  if (!document) return { success: false, error: "Document not found." };
+  await prisma.employeeDocument.update({
+    where: { id: document.id },
+    data: {
+      notes: documentApprovalNotes(document.notes, session.name),
+      visibilityRoles: document.employeeId
+        ? "super_admin,director,authorized_signatory,admin,hr"
+        : document.visibilityRoles,
+    },
+  });
+  await logEmployeeAudit({
+    actorId: Number(session.userId),
+    actorName: session.name,
+    action: "document.approve",
+    entityType: "document",
+    entityId: input.id,
+    metadata: { title: document.title, employeeId: document.employeeId },
+  });
   revalidatePath("/employee/portal");
   return { success: true };
 }
@@ -2033,7 +2104,8 @@ export async function saveAnnouncement(input: {
   priority: string;
 }) {
   const { session } = await requireEmployee();
-  if (!["super_admin", "admin"].includes(session.role)) {
+  const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
+  if (!capabilitiesForRole(session.role, roleDefinitions).canPublishAnnouncements) {
     return { success: false, error: "Only super admin/admin can publish announcements." };
   }
   const data = {
@@ -2217,8 +2289,14 @@ export async function deleteEmployeeEntity(input: {
     if (["crm", "crmSheet"].includes(input.entityType) && session.role !== "super_admin") {
       return { success: false, error: "Only super admin can delete CRM records." };
     }
-    if (["resource", "announcement", "meeting"].includes(input.entityType) && !["super_admin", "admin"].includes(session.role)) {
-      return { success: false, error: "Only super admin/admin can delete this record." };
+    if (input.entityType === "resource" && !capabilitiesForRole(session.role, await getEmployeeRoleDefinitionsFromDatabase()).canManageResources) {
+      return { success: false, error: "Only mapped resource managers can delete resources." };
+    }
+    if (input.entityType === "announcement" && !capabilitiesForRole(session.role, await getEmployeeRoleDefinitionsFromDatabase()).canPublishAnnouncements) {
+      return { success: false, error: "Only mapped announcement publishers can delete announcements." };
+    }
+    if (input.entityType === "meeting" && !capabilitiesForRole(session.role, await getEmployeeRoleDefinitionsFromDatabase()).canScheduleMeetings) {
+      return { success: false, error: "Only mapped meeting schedulers can delete meetings." };
     }
     const deleteFeature: EmployeePortalFeature =
       ["employee", "department"].includes(input.entityType) ? "employees" :

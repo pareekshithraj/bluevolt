@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Bell, Briefcase, CalendarDays, ChevronRight, ClipboardList, Clock3, Code2, FileText, Handshake, LogOut, Menu, Moon, PenLine, RefreshCw, RotateCw, Search, Shield, Star, Sun, Target, UserCheck, Users, Video, WalletCards, X } from "lucide-react";
 import {
   appointApplicantAsEmployee,
+  approveEmployeeDocument,
   changeEmployeePassword,
   clockInEmployee,
   clockOutEmployee,
@@ -18,7 +19,6 @@ import {
   saveAnnouncement,
   saveApplicant,
   saveAttendance,
-  saveCrmRecord,
   saveCrmSheetRequest,
   saveEmployeeDocument,
   saveEmployeeRoleDefinition,
@@ -199,6 +199,22 @@ function formatWorkHours(value: number) {
   return `${value.toFixed(2)} hrs`;
 }
 
+function documentApproved(notes?: string | null) {
+  return (notes || "").includes("Approval status: Approved");
+}
+
+function documentPending(notes?: string | null) {
+  return (notes || "").includes("Approval status: Pending");
+}
+
+function cleanDocumentNotes(notes?: string | null) {
+  return (notes || "")
+    .split(/\r?\n/)
+    .filter((line) => !line.startsWith("Approval status:") && !line.startsWith("Approved by:") && !line.startsWith("Signature:"))
+    .join("\n")
+    .trim();
+}
+
 function inputDate(value: DateValue) {
   const date = validDate(value);
   return date ? date.toISOString().slice(0, 10) : "";
@@ -266,7 +282,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const [notice, setNotice] = useState("");
   const [crmSheetPaste, setCrmSheetPaste] = useState("");
   const [crmSheetFileName, setCrmSheetFileName] = useState("");
-  const [crmPanel, setCrmPanel] = useState<"none" | "source" | "record">("none");
+  const [crmPanel, setCrmPanel] = useState<"none" | "source">("none");
   const [activeCrmSheetId, setActiveCrmSheetId] = useState<number | null>(null);
   const [selectedCrmRowId, setSelectedCrmRowId] = useState<number | null>(null);
   const [selectedCrmCell, setSelectedCrmCell] = useState<SelectedCrmCell | null>(null);
@@ -282,6 +298,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const [selectedRoleKey, setSelectedRoleKey] = useState<string>("super_admin");
   const [isCreatingRole, setIsCreatingRole] = useState<boolean>(false);
   const [auditSearch, setAuditSearch] = useState("");
+  const [passwordAlertDismissed, setPasswordAlertDismissed] = useState(false);
 
   const [theme, setTheme] = useState<"dark" | "light">("light");
   const [now, setNow] = useState(new Date());
@@ -302,6 +319,11 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   useEffect(() => {
     setApplicationLink(`${window.location.origin}/employee/apply`);
   }, []);
+
+  useEffect(() => {
+    const key = `bluevolt-default-password-alert-dismissed:${data.session.email}`;
+    setPasswordAlertDismissed(localStorage.getItem(key) === "1");
+  }, [data.session.email]);
 
   // Auto-dismiss notices after 4 seconds
   useEffect(() => {
@@ -338,7 +360,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     if (item.id === "reports") return data.capabilities.canManage || data.capabilities.canManagePayroll || data.capabilities.canManageApplicants;
     if (item.id === "profile") return true;
     if (item.id === "reviews") return data.capabilities.canReviewPerformance;
-    if (item.id === "documents") return data.capabilities.canManageDocuments;
+    if (item.id === "documents") return data.capabilities.canViewDocuments || data.capabilities.canManageDocuments;
     if (item.id === "announcements") return data.capabilities.canViewAnnouncements || data.capabilities.canPublishAnnouncements;
     if (item.id === "meetings") return data.capabilities.canViewMeetings || data.capabilities.canScheduleMeetings;
     if (item.id === "resources") return data.capabilities.canViewResources || data.capabilities.canManageResources;
@@ -407,9 +429,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const openTasks = data.tasks.filter((task) => task.status !== "Done");
   const blockedTasks = data.tasks.filter((task) => task.status === "Blocked");
   const dueSoonTasks = data.tasks.filter((task) => task.dueAt && task.status !== "Done" && new Date(task.dueAt).getTime() <= Date.now() + 7 * 24 * 60 * 60 * 1000);
-  const hotLeads = data.crmRecords.filter((record) => record.leadRating === "Hot" || record.priority === "High");
-  const salesRecords = data.crmRecords.filter((record) => record.ownerRole === "sales");
-  const contentRecords = data.crmRecords.filter((record) => record.ownerRole === "content");
+  const actionableCrmRows = data.crmSheets.flatMap((sheet) => sheet.rows).filter((row) => ["Open", "Callback"].includes(row.status));
   const upcomingMeetings = data.meetings.filter((meeting) => new Date(meeting.startsAt).getTime() >= Date.now()).slice(0, 4);
   const recentResources = data.resources.slice(0, 4);
   const activeCrmSheet = activeCrmSheetId ? data.crmSheets.find((sheet) => sheet.id === activeCrmSheetId) : null;
@@ -960,13 +980,19 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
           {loadingTab && <div className={`${styles.toast} ${styles.toastInfo}`}><RotateCw size={14} className={styles.spinning} /> Loading {loadingTab === "crm" ? "CRM sheets" : loadingTab}...</div>}
         </div>
 
-        {data.mustChangePassword && (
+        {data.mustChangePassword && !passwordAlertDismissed && (
           <div className={styles.passwordAlert}>
             <div>
               <strong>Default password is still active</strong>
               <p>Reset it from your profile before using the portal for regular work.</p>
             </div>
-            <button className={styles.button} type="button" onClick={() => openPortalTab("profile")}>Change Password</button>
+            <div className={styles.alertActions}>
+              <button className={styles.ghostButton} type="button" onClick={() => {
+                localStorage.setItem(`bluevolt-default-password-alert-dismissed:${data.session.email}`, "1");
+                setPasswordAlertDismissed(true);
+              }}>Ignore forever</button>
+              <button className={styles.button} type="button" onClick={() => openPortalTab("profile")}>Change Password</button>
+            </div>
           </div>
         )}
 
@@ -991,7 +1017,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               </div>
             </div>
             <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}><h2 className={styles.cardTitle}>Open Tasks</h2><span className={styles.metricValue}>{openTasks.length}</span><p className={styles.muted}>{blockedTasks.length} blocked, {dueSoonTasks.length} due soon.</p></div>
-            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}><h2 className={styles.cardTitle}>Hot Leads</h2><span className={styles.metricValue}>{hotLeads.length}</span><p className={styles.muted}>High priority sales/content opportunities.</p></div>
+            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}><h2 className={styles.cardTitle}>CRM Rows</h2><span className={styles.metricValue}>{actionableCrmRows.length}</span><p className={styles.muted}>Open or callback rows from visible sheets.</p></div>
             <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}><h2 className={styles.cardTitle}>Upcoming Meets</h2><span className={styles.metricValue}>{upcomingMeetings.length}</span><p className={styles.muted}>Visible scheduled sessions.</p></div>
             <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}><h2 className={styles.cardTitle}>Team Online</h2><span className={styles.metricValue}>{onlineEmployees}</span><p className={styles.muted}>{workingEmployees} inside work window.</p></div>
             <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}><h2 className={styles.cardTitle}>Total Employees</h2><span className={styles.metricValue}>{employees.length}</span><p className={styles.muted}>{employees.filter((user) => user.employeeType === "Intern").length} interns, {employees.filter((user) => user.status === "Active").length} active.</p></div>
@@ -1073,31 +1099,34 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
             <div className={`${styles.card} ${styles.span4}`}>
               <div className={styles.rowHeader}>
                 <h2 className={styles.cardTitle}><PenLine size={16} /> Content</h2>
-                <span className={styles.pill}>{contentRecords.length} records</span>
+                <span className={styles.pill}>{data.tasks.filter((task) => task.ownerRole === "content" || task.title.toLowerCase().includes("content")).length} tasks</span>
               </div>
               <div className={styles.list}>
-                {contentRecords.slice(0, 3).map((record) => (
-                  <div className={styles.row} key={record.id}>
-                    <div className={styles.rowHeader}><strong>{record.company}</strong><span className={styles.pill}>{record.stage}</span></div>
-                    <p className={styles.muted}>{record.nextAction || "No next action set."}</p>
+                {data.tasks.filter((task) => task.ownerRole === "content" || task.title.toLowerCase().includes("content")).slice(0, 3).map((task) => (
+                  <div className={styles.row} key={task.id}>
+                    <div className={styles.rowHeader}><strong>{task.title}</strong><span className={styles.pill}>{task.status}</span></div>
+                    <p className={styles.muted}>{task.description || "Content task ready for update."}</p>
                   </div>
                 ))}
-                {contentRecords.length === 0 && <div className={styles.emptyState}>No content pipeline items.</div>}
+                {data.tasks.filter((task) => task.ownerRole === "content" || task.title.toLowerCase().includes("content")).length === 0 && <div className={styles.emptyState}>No content tasks.</div>}
               </div>
             </div>
             <div className={`${styles.card} ${styles.span4}`}>
               <div className={styles.rowHeader}>
                 <h2 className={styles.cardTitle}><Target size={16} /> Sales</h2>
-                <span className={styles.pill}>{salesRecords.length} records</span>
+                <span className={styles.pill}>{actionableCrmRows.length} CRM rows</span>
               </div>
               <div className={styles.list}>
-                {salesRecords.slice(0, 3).map((record) => (
-                  <div className={styles.row} key={record.id}>
-                    <div className={styles.rowHeader}><strong>{record.company}</strong><span className={record.leadRating === "Hot" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{record.leadRating}</span></div>
-                    <p className={styles.muted}>{record.stage} - {record.nextAction || "Follow up not set."}</p>
+                {actionableCrmRows.slice(0, 3).map((row) => {
+                  const rowData = row.data && typeof row.data === "object" ? row.data as Record<string, string> : {};
+                  return (
+                  <div className={styles.row} key={row.id}>
+                    <div className={styles.rowHeader}><strong>{rowData["School Name"] || rowData.Company || `Row ${row.rowNumber}`}</strong><span className={row.status === "Callback" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{row.status}</span></div>
+                    <p className={styles.muted}>{rowData["Phone Number"] || rowData.Phone || row.reason || "Open CRM follow-up."}</p>
                   </div>
-                ))}
-                {salesRecords.length === 0 && <div className={styles.emptyState}>No sales pipeline items.</div>}
+                  );
+                })}
+                {actionableCrmRows.length === 0 && <div className={styles.emptyState}>No open CRM rows.</div>}
               </div>
             </div>
 
@@ -1218,7 +1247,6 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 {canEditCrmSheet && (
                   <>
                     <button className={styles.button} type="button" onClick={() => { setActiveCrmSheetId(null); setCrmPanel(crmPanel === "source" ? "none" : "source"); }}>Import sheet</button>
-                    <button className={styles.ghostButton} type="button" onClick={() => { setActiveCrmSheetId(null); setCrmPanel(crmPanel === "record" ? "none" : "record"); }}>Add CRM card</button>
                   </>
                 )}
                 {activeCrmSheet && <button className={styles.ghostButton} type="button" onClick={() => setActiveCrmSheetId(null)}>Back to list</button>}
@@ -1246,29 +1274,9 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               </form>
             )}
 
-            {!activeCrmSheet && canEditCrmSheet && crmPanel === "record" && (
-              <form className={`${styles.card} ${styles.span12} ${styles.formGrid}`} onSubmit={submit(saveCrmRecord, () => setCrmPanel("none"))}>
-                <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Add CRM Card</h2>
-                <Field label="Company" name="company" required />
-                <Field label="Contact" name="contactName" required />
-                <Field label="Email" name="email" type="email" />
-                <Field label="Phone" name="phone" />
-                <Field label="Owner Role" name="ownerRole" options={roleOptions} />
-                <Field label="Stage" name="stage" options={["New", "Qualified", "Proposal", "Won", "Lost"]} />
-                <Field label="Source" name="source" defaultValue="Manual" />
-                <Field label="Priority" name="priority" options={["High", "Medium", "Low"]} />
-                <Field label="Lead Rating" name="leadRating" options={["Hot", "Warm", "Cold"]} />
-                <Field label="Estimated Value" name="estimatedValue" type="number" />
-                <Field label="Reminder At" name="reminderAt" type="datetime-local" />
-                <Field label="Next Action" name="nextAction" wide />
-                <Field label="Notes" name="notes" textarea wide />
-                <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save CRM Card</button>
-              </form>
-            )}
-
             {!activeCrmSheet && (
               <>
-                <div className={`${styles.card} ${styles.span8}`}>
+                <div className={`${styles.card} ${styles.span12}`}>
                   <div className={styles.sectionHeader}>
                     <div>
                       <h2 className={styles.cardTitle}>Sheet List</h2>
@@ -1294,26 +1302,6 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                       </button>
                     );
                   })}</div>
-                </div>
-                <div className={`${styles.card} ${styles.span4}`}>
-                  <div className={styles.sectionHeader}>
-                    <div>
-                      <h2 className={styles.cardTitle}>CRM Cards</h2>
-                      <p className={styles.muted}>Quick pipeline records separate from imported sheets.</p>
-                    </div>
-                    <span className={styles.pill}>{data.crmRecords.length} records</span>
-                  </div>
-                  <div className={styles.list}>{data.crmRecords.length === 0 ? <div className={styles.emptyState}>No CRM cards yet.</div> : data.crmRecords.slice(0, 8).map((record) => (
-                    <div className={styles.row} key={record.id}>
-                      <div className={styles.rowHeader}><strong>{record.company}</strong><span className={styles.pill}>{record.stage}</span></div>
-                      <p className={styles.muted}>{record.contactName} {record.email ? `- ${record.email}` : ""}</p>
-                      <div className={styles.compactMeta}>
-                        <span className={styles.pill}>{displayRole(record.ownerRole)}</span>
-                        <span className={record.priority === "High" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{record.priority}</span>
-                        <span className={record.leadRating === "Hot" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{record.leadRating}</span>
-                      </div>
-                    </div>
-                  ))}</div>
                 </div>
               </>
             )}
@@ -2002,7 +1990,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 <input type="hidden" name="fileName" value={uploadedFile?.fileName || ""} />
                 <input type="hidden" name="fileSize" value={uploadedFile?.fileSize || ""} />
                 <input type="hidden" name="mimeType" value={uploadedFile?.mimeType || ""} />
-                <Field label="Visibility Roles" name="visibilityRoles" defaultValue="super_admin,admin,hr" wide />
+                <Field label="Visibility Roles" name="visibilityRoles" defaultValue="super_admin,director,authorized_signatory,admin,hr" wide />
                 <Field label="Notes" name="notes" textarea wide />
                 <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Document</button>
               </form>
@@ -2017,9 +2005,21 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               </div>
               <div className={styles.list}>{data.documents.length === 0 ? <div className={styles.emptyState}>No documents yet.</div> : data.documents.map((document) => (
                 <div className={styles.row} key={document.id}>
-                  <div className={styles.rowHeader}><strong>{document.title}</strong><span className={styles.pill}>{document.documentType}</span></div>
+                  <div className={styles.rowHeader}>
+                    <strong>{document.title}</strong>
+                    <div className={styles.compactMeta}>
+                      <span className={styles.pill}>{document.documentType}</span>
+                      <span className={documentApproved(document.notes) ? `${styles.pill} ${styles.pillSuccess}` : documentPending(document.notes) ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>
+                        {documentApproved(document.notes) ? "Signed" : documentPending(document.notes) ? "Pending approval" : "General"}
+                      </span>
+                    </div>
+                  </div>
                   <p className={styles.muted}>{document.employeeName || "General"} - {document.visibilityRoles}</p>
+                  {cleanDocumentNotes(document.notes) && <p className={styles.muted}>{cleanDocumentNotes(document.notes)}</p>}
                   <a href={document.url} target="_blank" rel="noopener noreferrer">Open document</a>
+                  {data.capabilities.canSignDocuments && !documentApproved(document.notes) && (
+                    <button className={styles.button} type="button" onClick={() => runAction(() => approveEmployeeDocument({ id: document.id.toString() }))}>Approve & Sign</button>
+                  )}
                   {data.capabilities.canManageDocuments && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "document", id: document.id.toString() }))}>Delete</button>}
                   {data.capabilities.canManageDocuments && (
                     <details className={styles.editPanel}>
@@ -2272,7 +2272,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
           const featureGroups = [
             {
               title: "Staff & Organization Control",
-              features: EMPLOYEE_PORTAL_FEATURES.filter((f) => ["employees", "applicants", "announcements", "meetings"].includes(f.id)),
+              features: EMPLOYEE_PORTAL_FEATURES.filter((f) => ["employees", "access", "applicants", "announcements", "meetings"].includes(f.id)),
             },
             {
               title: "Business Workspace",
@@ -2280,7 +2280,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
             },
             {
               title: "Financial & Core Operations",
-              features: EMPLOYEE_PORTAL_FEATURES.filter((f) => ["ops", "expenses", "payroll", "reviews", "documents"].includes(f.id)),
+              features: EMPLOYEE_PORTAL_FEATURES.filter((f) => ["ops", "expenses", "payroll", "reviews", "documents", "sign_documents"].includes(f.id)),
             },
           ];
 

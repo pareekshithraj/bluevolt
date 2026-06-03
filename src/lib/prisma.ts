@@ -40,7 +40,6 @@ const createPrismaClient = () => {
     connectionTimeoutMillis: 5000,
     idleTimeoutMillis: 10000,
     max: 5,
-    options: "-c statement_timeout=15000",
   });
   const adapter = new PrismaPg(pool);
   return new PrismaClient({ adapter });

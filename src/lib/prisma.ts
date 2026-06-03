@@ -31,12 +31,25 @@ function createUnavailablePrismaClient(reason: string): PrismaClient {
   });
 }
 
+function normalizeDatabaseUrlForPg(value: string): string {
+  try {
+    const url = new URL(value);
+    const sslMode = url.searchParams.get("sslmode");
+    if (sslMode && ["prefer", "require", "verify-ca"].includes(sslMode)) {
+      url.searchParams.set("sslmode", "verify-full");
+    }
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+
 // Keep database failures short and clear in the UI instead of waiting on long network retries.
 const createPrismaClient = () => {
   if (!databaseUrl) return createUnavailablePrismaClient("DATABASE_URL is not set");
 
   const pool = new Pool({
-    connectionString: databaseUrl,
+    connectionString: normalizeDatabaseUrlForPg(databaseUrl),
     connectionTimeoutMillis: 5000,
     idleTimeoutMillis: 10000,
     max: 5,

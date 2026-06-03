@@ -312,7 +312,7 @@ export default function InfrastructureGlobe() {
 
     // 12. Animation loop
     let animationFrameId: number;
-    let clock = new THREE.Clock();
+    const clock = new THREE.Clock();
 
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);

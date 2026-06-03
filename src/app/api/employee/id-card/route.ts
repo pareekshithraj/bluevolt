@@ -34,7 +34,23 @@ function employeeCode(id: number) {
 async function localEmployeeById(id: number) {
   try {
     const raw = await fs.readFile(path.join(process.cwd(), ".bluevolt-employee-store.json"), "utf8");
-    const store = JSON.parse(raw) as { users?: any[] };
+    const store = JSON.parse(raw) as {
+      users?: Array<{
+        id: number;
+        name: string;
+        title: string;
+        department: string;
+        role: string;
+        employeeType: string;
+        compensationStatus: string;
+        workStartTime?: string | null;
+        workEndTime?: string | null;
+        employmentStart: string | null;
+        employmentEnd: string | null;
+        status: string;
+        email: string;
+      }>;
+    };
     const user = store.users?.find((employee) => employee.id === id);
     if (!user) return null;
     return {
@@ -247,7 +263,7 @@ export async function GET(request: NextRequest) {
         <div class="line"><span>Dept</span><span>${escapeHtml(employee.department)}</span></div>
         <div class="line"><span>Type</span><span>${escapeHtml(employee.employeeType)} / ${escapeHtml(employee.compensationStatus)}</span></div>
         <div class="line"><span>Valid</span><span>${formatDate(employee.employmentStart)} to ${formatDate(employee.employmentEnd)}</span></div>
-        <div class="line"><span>Hours</span><span>${escapeHtml(employee.workStartTime)} to ${escapeHtml(employee.workEndTime)}</span></div>
+        <div class="line"><span>Hours</span><span>${escapeHtml(employee.workStartTime || "Not set")} to ${escapeHtml(employee.workEndTime || "Not set")}</span></div>
       </div>
       <div class="footer">
         This ID card is valid only while the employee status is active in the BlueVolt employee portal.

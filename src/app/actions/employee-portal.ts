@@ -135,6 +135,9 @@ const defaultRolePermissions: Record<string, string> = {
   employee: "Own dashboard, check-in/out, documents, resources, tasks, leave, expenses, and ID card.",
 };
 
+const coreRoleKeys = new Set<string>(EMPLOYEE_ROLES);
+const defaultEmployeePassword = "abc123";
+
 function defaultRoleDefinitions(now = new Date().toISOString()): EmployeeRoleDefinition[] {
   return EMPLOYEE_ROLES.map((key, index) => ({
     id: index + 1,
@@ -162,9 +165,14 @@ function mergeRoleDefinitions(roles?: EmployeeRoleDefinition[]): EmployeeRoleDef
   return [...merged.values()].sort((first, second) => first.label.localeCompare(second.label));
 }
 
-function parseFeatureAccess(value?: string): EmployeePortalFeature[] {
+function isCoreRole(key: string) {
+  return coreRoleKeys.has(key);
+}
+
+function parseFeatureAccess(value?: string | string[]): EmployeePortalFeature[] {
   const valid = new Set(EMPLOYEE_PORTAL_FEATURES.map((feature) => feature.id));
-  const features = (value || "")
+  const serialized = Array.isArray(value) ? value.join(",") : (value || "");
+  const features = serialized
     .split(",")
     .map((feature) => feature.trim())
     .filter((feature): feature is EmployeePortalFeature => valid.has(feature as EmployeePortalFeature));
@@ -181,21 +189,28 @@ function capabilitiesForRole(role: string, roles: EmployeeRoleDefinition[]) {
   const canManage = roleCanAccessFeature(role, roles, "employees");
   const canUseCrm = roleCanAccessFeature(role, roles, "crm") || roleCanAccessFeature(role, roles, "crm_manage");
   const canManageCrm = roleCanAccessFeature(role, roles, "crm_manage");
+  const isAdmin = role === "super_admin" || role === "admin";
   return {
     canManage,
+    canManageAccess: role === "super_admin",
     canUseCrm,
     canRequestCrmSource: canManageCrm,
     canUpdateCrmSheetRows: canManageCrm,
     canManageCrmSheets: canManageCrm,
     canManageApplicants: roleCanAccessFeature(role, roles, "applicants"),
-    canManageResources: roleCanAccessFeature(role, roles, "resources"),
-    canScheduleMeetings: roleCanAccessFeature(role, roles, "meetings"),
+    canManageResources: isAdmin,
+    canScheduleMeetings: isAdmin,
     canManageOps: roleCanAccessFeature(role, roles, "ops"),
     canManagePayroll: roleCanAccessFeature(role, roles, "payroll"),
     canReviewPerformance: roleCanAccessFeature(role, roles, "reviews"),
     canManageDocuments: roleCanAccessFeature(role, roles, "documents"),
-    canPublishAnnouncements: roleCanAccessFeature(role, roles, "announcements"),
+    canViewAnnouncements: roleCanAccessFeature(role, roles, "announcements"),
+    canPublishAnnouncements: isAdmin,
+    canViewMeetings: roleCanAccessFeature(role, roles, "meetings"),
+    canViewResources: roleCanAccessFeature(role, roles, "resources"),
     canManageExpenses: roleCanAccessFeature(role, roles, "expenses"),
+    canAdminScheduleMeetings: isAdmin,
+    canAdminManageResources: isAdmin,
   };
 }
 
@@ -239,7 +254,7 @@ function localUserFromInput(input: {
     id,
     name: input.name.trim(),
     email: input.email.trim().toLowerCase(),
-    password: input.password?.trim() ? hashPassword(input.password) : existing?.password || hashPassword("abc123"),
+    password: input.password?.trim() ? hashPassword(input.password) : existing?.password || hashPassword(defaultEmployeePassword),
     role: normalizeRole(input.role),
     department: input.department.trim() || "General",
     departmentId: input.departmentId ? Number(input.departmentId) : null,
@@ -307,7 +322,10 @@ async function writeLocalEmployeeStore(store: LocalEmployeeStore) {
   await fs.writeFile(localEmployeeStorePath, `${JSON.stringify(store, null, 2)}\n`, "utf8");
 }
 
+let roleTableEnsured = false;
+
 async function ensureEmployeeRoleDefinitionTable() {
+  if (roleTableEnsured) return;
   await prisma.$executeRaw`
     CREATE TABLE IF NOT EXISTS "EmployeeRoleDefinition" (
       "id" SERIAL PRIMARY KEY,
@@ -325,16 +343,22 @@ async function ensureEmployeeRoleDefinitionTable() {
     ALTER TABLE "EmployeeRoleDefinition"
     ADD COLUMN IF NOT EXISTS "featureAccess" TEXT NOT NULL DEFAULT 'dashboard'
   `;
+  roleTableEnsured = true;
 }
+
+let defaultRolesSeeded = false;
 
 async function getEmployeeRoleDefinitionsFromDatabase(): Promise<EmployeeRoleDefinition[]> {
   await ensureEmployeeRoleDefinitionTable();
-  for (const role of defaultRoleDefinitions()) {
-    await prisma.$executeRaw`
-      INSERT INTO "EmployeeRoleDefinition" ("key", "label", "description", "permissions", "featureAccess", "status")
-      VALUES (${role.key}, ${role.label}, ${role.description}, ${role.permissions}, ${role.featureAccess}, ${role.status})
-      ON CONFLICT ("key") DO NOTHING
-    `;
+  if (!defaultRolesSeeded) {
+    for (const role of defaultRoleDefinitions()) {
+      await prisma.$executeRaw`
+        INSERT INTO "EmployeeRoleDefinition" ("key", "label", "description", "permissions", "featureAccess", "status")
+        VALUES (${role.key}, ${role.label}, ${role.description}, ${role.permissions}, ${role.featureAccess}, ${role.status})
+        ON CONFLICT ("key") DO NOTHING
+      `;
+    }
+    defaultRolesSeeded = true;
   }
 
   const roles = await prisma.$queryRaw<EmployeeRoleDefinition[]>`
@@ -353,6 +377,31 @@ async function getEmployeeRoleDefinitionsFromDatabase(): Promise<EmployeeRoleDef
   `;
 
   return mergeRoleDefinitions(roles);
+}
+
+export async function getEmployeeApplicationRoleOptions() {
+  const fallback = [
+    { label: "Sales", value: "Sales" },
+    { label: "Content Developer", value: "Content Developer" },
+    { label: "Operations", value: "Operations" },
+    { label: "HR", value: "HR" },
+    { label: "Employee", value: "Employee" },
+  ];
+
+  try {
+    const roles = await getEmployeeRoleDefinitionsFromDatabase();
+    const options = roles
+      .filter((role) => role.status !== "Inactive" && !["super_admin", "admin"].includes(role.key))
+      .map((role) => ({ label: role.label, value: role.label }));
+    return options.length ? options : fallback;
+  } catch (error) {
+    if (!isDatabaseUnavailable(error)) throw error;
+    const store = await readLocalEmployeeStore();
+    const options = mergeRoleDefinitions(store.roles)
+      .filter((role) => role.status !== "Inactive" && !["super_admin", "admin"].includes(role.key))
+      .map((role) => ({ label: role.label, value: role.label }));
+    return options.length ? options : fallback;
+  }
 }
 
 async function employeeSessionCanAccessFeature(session: { role: string }, feature: EmployeePortalFeature): Promise<boolean> {
@@ -392,15 +441,76 @@ function normalizePhoneValue(value: string): string {
   if (!trimmed) return "";
   const digits = trimmed.replace(/\D/g, "");
   if (!digits) return trimmed;
-  if (digits.length === 10 && digits.startsWith("11")) return `011-${digits.slice(2, 6)} ${digits.slice(6)}`;
-  if (digits.length === 11 && digits.startsWith("0")) return `${digits.slice(0, 3)}-${digits.slice(3, 7)} ${digits.slice(7)}`;
+  if (digits.length === 10 && digits.startsWith("11")) return `011-${digits.slice(2)}`;
+  if (digits.length === 11 && digits.startsWith("0")) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
   if (digits.length === 12 && digits.startsWith("91")) {
     const national = digits.slice(2);
-    if (national.startsWith("11")) return `+91 11 ${national.slice(2, 6)} ${national.slice(6)}`;
+    if (national.startsWith("11")) return `+91-11-${national.slice(2)}`;
     return `+91 ${national.slice(0, 5)} ${national.slice(5)}`;
   }
   if (digits.length === 10 && /^[6-9]/.test(digits)) return `${digits.slice(0, 5)} ${digits.slice(5)}`;
   return trimmed;
+}
+
+function roleKeyFromApplicantRole(roleApplied: string, roles: EmployeeRoleDefinition[]): string {
+  const normalized = normalizeRole(roleApplied);
+  const lower = roleApplied.trim().toLowerCase();
+  const match = mergeRoleDefinitions(roles).find((role) => (
+    role.key === normalized ||
+    role.label.toLowerCase() === lower ||
+    normalizeRole(role.label) === normalized
+  ));
+  return match?.key || normalized || "employee";
+}
+
+function applicantNoteValue(notes: string | null | undefined, label: string): string {
+  const pattern = new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:\\s*(.*)$`, "im");
+  return notes?.match(pattern)?.[1]?.trim() || "";
+}
+
+function applicantEmployeeType(notes: string | null | undefined): string {
+  const value = applicantNoteValue(notes, "Employee type");
+  return value || "Intern";
+}
+
+function applicantCompensationStatus(notes: string | null | undefined): string {
+  const value = applicantNoteValue(notes, "Paid preference").toLowerCase();
+  return value.includes("unpaid") ? "Unpaid" : "Paid";
+}
+
+function applicantStartDate(notes: string | null | undefined): Date | null {
+  const value = applicantNoteValue(notes, "Available from");
+  return optionalDate(value);
+}
+
+async function createEmployeeStarterDocuments(input: {
+  employeeId: number;
+  employeeName: string;
+  employeeType: string;
+  uploadedBy: number;
+}) {
+  const letterType = input.employeeType === "Intern" ? "Internship Offer Letter" : "Offer Letter";
+  const letterUrl = `/api/employee/letter?employeeId=${input.employeeId}&type=${encodeURIComponent(letterType)}`;
+  await prisma.employeeDocument.create({
+    data: {
+      employeeId: input.employeeId,
+      employeeName: input.employeeName,
+      title: letterType,
+      documentType: letterType,
+      url: letterUrl,
+      visibilityRoles: "super_admin,admin,hr",
+      notes: "Auto-generated when the employee account was created.",
+      uploadedBy: input.uploadedBy,
+    },
+  });
+  await prisma.employeeNotification.create({
+    data: {
+      employeeId: input.employeeId,
+      title: "Change your default password",
+      body: "Your account was created with the default password. Please reset it from Profile after login.",
+      createdBy: input.uploadedBy,
+    },
+  });
 }
 
 function parseSheetText(value?: string): { columns: string[]; rows: Record<string, string>[] } {
@@ -612,7 +722,8 @@ export async function logoutEmployee() {
   return { success: true };
 }
 
-async function getLocalEmployeePortalData(sortResources = "newest", activeTab = "dashboard") {
+async function getLocalEmployeePortalData(_sortResources = "newest", activeTab = "dashboard") {
+  void _sortResources;
   const session = await getEmployeeSession();
   if (!session) throw new Error("Employee login required.");
 
@@ -648,11 +759,12 @@ async function getLocalEmployeePortalData(sortResources = "newest", activeTab = 
 
   return {
     session: normalizedSession,
+    mustChangePassword: verifyPassword(defaultEmployeePassword, activeUser.password),
     capabilities,
     users,
     crmRecords: [],
     crmSheets: [],
-    applicants: canManage || ["applicants", "reports"].includes(activeTab)
+    applicants: canManage || ["admin", "applicants", "reports"].includes(activeTab)
       ? (store.applicants || []).map((applicant) => ({
         ...applicant,
         phone: applicant.phone || null,
@@ -695,8 +807,12 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
   const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
   const capabilities = capabilitiesForRole(session.role, roleDefinitions);
   const canManage = capabilities.canManage;
+  const canManageAccess = capabilities.canManageAccess;
   const canUseCrm = capabilities.canUseCrm;
   const canManagePayroll = capabilities.canManagePayroll;
+  const canViewMeetings = capabilities.canViewMeetings;
+  const canViewResources = capabilities.canViewResources;
+  const canViewAnnouncements = capabilities.canViewAnnouncements;
   const now = new Date();
 
   await prisma.employeeUser.update({
@@ -728,13 +844,13 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
           take: 30,
         })
       : Promise.resolve([]),
-    capabilities.canManageApplicants && ["applicants", "reports"].includes(activeTab)
+    capabilities.canManageApplicants && ["admin", "applicants", "reports"].includes(activeTab)
       ? prisma.employeeApplicant.findMany({ orderBy: { updatedAt: "desc" } })
       : Promise.resolve([]),
-    capabilities.canScheduleMeetings && ["dashboard", "meetings", "reports"].includes(activeTab)
+    canViewMeetings && ["dashboard", "meetings", "reports"].includes(activeTab)
       ? prisma.employeeMeeting.findMany({ orderBy: { startsAt: "asc" } })
       : Promise.resolve([]),
-    capabilities.canManageResources && ["dashboard", "resources", "reports"].includes(activeTab)
+    canViewResources && ["dashboard", "resources", "reports"].includes(activeTab)
       ? prisma.employeeResource.findMany({
           orderBy:
             sortResources === "title"
@@ -780,14 +896,14 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
     capabilities.canManageDocuments && ["dashboard", "documents", "reports"].includes(activeTab)
       ? prisma.employeeDocument.findMany({ orderBy: [{ updatedAt: "desc" }], take: 100 })
       : Promise.resolve([]),
-    capabilities.canPublishAnnouncements && ["dashboard", "announcements", "reports"].includes(activeTab)
+    canViewAnnouncements && ["dashboard", "announcements", "reports"].includes(activeTab)
       ? prisma.employeeAnnouncement.findMany({ orderBy: [{ createdAt: "desc" }], take: 40 })
       : Promise.resolve([]),
     capabilities.canManageOps && activeTab === "ops"
       ? prisma.employeeComment.findMany({ orderBy: { createdAt: "desc" }, take: 120 })
       : Promise.resolve([]),
     activeTab === "admin" && canManage ? prisma.employeeDepartment.findMany({ orderBy: { name: "asc" } }) : Promise.resolve([]),
-    ["dashboard", "admin"].includes(activeTab)
+    ["dashboard", "admin"].includes(activeTab) || (activeTab === "access" && canManageAccess)
       ? prisma.employeeNotification.findMany({
           where: {
             OR: [
@@ -805,7 +921,9 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
         ? prisma.employeeExpenseClaim.findMany({ orderBy: [{ updatedAt: "desc" }], take: 80 })
         : prisma.employeeExpenseClaim.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }], take: 40 }))
       : Promise.resolve([]),
-    ["admin", "reports"].includes(activeTab) && canManage ? prisma.employeeAuditEvent.findMany({ orderBy: { createdAt: "desc" }, take: 100 }) : Promise.resolve([]),
+    (activeTab === "access" && canManageAccess) || (["admin", "reports"].includes(activeTab) && canManage)
+      ? prisma.employeeAuditEvent.findMany({ orderBy: { createdAt: "desc" }, take: 100 })
+      : Promise.resolve([]),
   ]);
 
   const visibleMeetings = meetings
@@ -824,13 +942,18 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
 
   return {
     session,
+    mustChangePassword: verifyPassword(defaultEmployeePassword, user.password),
     capabilities,
-    users: users.map(({ password, ...employee }) => ({
-      ...employee,
-      isOnline: employee.lastSeenAt ? now.getTime() - employee.lastSeenAt.getTime() <= 5 * 60 * 1000 : false,
-      isWithinWorkHours: isWithinWorkHours(employee.workStartTime, employee.workEndTime, now),
-      durationLabel: employeeDurationLabel(employee.employmentStart, employee.employmentEnd),
-    })),
+    users: users.map((userRecord) => {
+      const { password, ...employee } = userRecord;
+      void password;
+      return {
+        ...employee,
+        isOnline: employee.lastSeenAt ? now.getTime() - employee.lastSeenAt.getTime() <= 5 * 60 * 1000 : false,
+        isWithinWorkHours: isWithinWorkHours(employee.workStartTime, employee.workEndTime, now),
+        durationLabel: employeeDurationLabel(employee.employmentStart, employee.employmentEnd),
+      };
+    }),
     crmRecords,
     crmSheets,
     applicants,
@@ -856,22 +979,23 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
   }
 }
 
-export async function saveEmployeeRoleDefinition(input: {
+export type EmployeeRoleDefinitionInput = {
   label: string;
   key?: string;
   description?: string;
   permissions?: string;
-  featureAccess?: string;
+  featureAccess?: string | string[];
   status?: string;
-}) {
-  const label = input.label.trim();
-  if (!label) return { success: false, error: "Role name is required." };
+};
 
-  const key = roleKey(input.key?.trim() || label);
-  const status = input.status === "Inactive" ? "Inactive" : "Active";
-  const description = input.description?.trim() || "Portal access role.";
-  const permissions = input.permissions?.trim() || "Access is controlled by Super Admin assignments.";
-  const featureAccess = parseFeatureAccess(input.featureAccess).join(",");
+export async function saveEmployeeRoleDefinition(input: EmployeeRoleDefinitionInput) {
+  const typedInput = {
+    ...input,
+    label: input.label?.trim() || "",
+    key: input.key?.trim() || "",
+    description: input.description?.trim(),
+    permissions: input.permissions?.trim(),
+  };
 
   try {
     const { session } = await requireEmployee();
@@ -879,7 +1003,26 @@ export async function saveEmployeeRoleDefinition(input: {
       return { success: false, error: "Only Super Admin can create roles and map feature access." };
     }
 
-    await ensureEmployeeRoleDefinitionTable();
+    const roles = await getEmployeeRoleDefinitionsFromDatabase();
+    const key = roleKey(typedInput.key || typedInput.label);
+    const existingRole = roles.find((role) => role.key === key);
+    const label = typedInput.label || existingRole?.label || defaultRoleLabels[key] || "";
+    if (!label) return { success: false, error: "Role name is required." };
+
+    const coreRole = isCoreRole(key);
+    const status = coreRole
+      ? existingRole?.status || "Active"
+      : typedInput.status === "Inactive"
+        ? "Inactive"
+        : existingRole?.status || "Active";
+    const description = coreRole
+      ? existingRole?.description || defaultRolePermissions[key] || "Portal access role."
+      : typedInput.description || existingRole?.description || "Portal access role.";
+    const permissions = coreRole
+      ? existingRole?.permissions || defaultRolePermissions[key] || "Access is controlled by Super Admin assignments."
+      : typedInput.permissions || existingRole?.permissions || "Access is controlled by Super Admin assignments.";
+    const featureAccess = parseFeatureAccess(input.featureAccess || existingRole?.featureAccess).join(",");
+
     await prisma.$executeRaw`
       INSERT INTO "EmployeeRoleDefinition" ("key", "label", "description", "permissions", "featureAccess", "status")
       VALUES (${key}, ${label}, ${description}, ${permissions}, ${featureAccess}, ${status})
@@ -902,7 +1045,7 @@ export async function saveEmployeeRoleDefinition(input: {
     });
 
     revalidatePath("/employee/portal");
-    return { success: true };
+    return { success: true, roleKey: key };
   } catch (error) {
     if (!isDatabaseUnavailable(error)) throw error;
     const session = await getEmployeeSession();
@@ -913,7 +1056,25 @@ export async function saveEmployeeRoleDefinition(input: {
     const store = await readLocalEmployeeStore();
     const now = new Date().toISOString();
     const roles = mergeRoleDefinitions(store.roles);
+    const key = roleKey(typedInput.key || typedInput.label);
     const existingIndex = roles.findIndex((role) => role.key === key);
+    const existingRole = existingIndex >= 0 ? roles[existingIndex] : undefined;
+    const label = typedInput.label || existingRole?.label || defaultRoleLabels[key] || "";
+    if (!label) return { success: false, error: "Role name is required." };
+
+    const coreRole = isCoreRole(key);
+    const status = coreRole
+      ? existingRole?.status || "Active"
+      : typedInput.status === "Inactive"
+        ? "Inactive"
+        : existingRole?.status || "Active";
+    const description = coreRole
+      ? existingRole?.description || defaultRolePermissions[key] || "Portal access role."
+      : typedInput.description || existingRole?.description || "Portal access role.";
+    const permissions = coreRole
+      ? existingRole?.permissions || defaultRolePermissions[key] || "Access is controlled by Super Admin assignments."
+      : typedInput.permissions || existingRole?.permissions || "Access is controlled by Super Admin assignments.";
+    const featureAccess = parseFeatureAccess(input.featureAccess || existingRole?.featureAccess).join(",");
     const nextId = Math.max(0, ...roles.map((role) => role.id || 0)) + 1;
     const role: EmployeeRoleDefinition = {
       id: existingIndex >= 0 ? roles[existingIndex].id : nextId,
@@ -931,11 +1092,61 @@ export async function saveEmployeeRoleDefinition(input: {
 
     await writeLocalEmployeeStore({ ...store, roles: mergeRoleDefinitions(roles) });
     revalidatePath("/employee/portal");
+    return { success: true, roleKey: key };
+  }
+}
+
+export async function deleteEmployeeRoleDefinition(input: { key: string }) {
+  const key = roleKey(input.key);
+  if (isCoreRole(key)) {
+    return { success: false, error: "System roles cannot be deleted." };
+  }
+
+  try {
+    const { session } = await requireEmployee();
+    if (session.role !== "super_admin") {
+      return { success: false, error: "Only Super Admin can delete custom roles." };
+    }
+
+    const assignedUsers = await prisma.employeeUser.count({ where: { role: key } });
+    if (assignedUsers > 0) {
+      return { success: false, error: "Reassign employees before deleting this role." };
+    }
+
+    await ensureEmployeeRoleDefinitionTable();
+    await prisma.$executeRaw`DELETE FROM "EmployeeRoleDefinition" WHERE "key" = ${key}`;
+    await logEmployeeAudit({
+      actorId: Number(session.userId),
+      actorName: session.name,
+      action: "role.delete",
+      entityType: "employee_role",
+      entityId: key,
+    });
+    revalidatePath("/employee/portal");
+    return { success: true };
+  } catch (error) {
+    if (!isDatabaseUnavailable(error)) throw error;
+    const session = await getEmployeeSession();
+    if (!session || session.role !== "super_admin") {
+      return { success: false, error: "Only Super Admin can delete custom roles." };
+    }
+
+    const store = await readLocalEmployeeStore();
+    if (store.users.some((user) => user.role === key)) {
+      return { success: false, error: "Reassign employees before deleting this role." };
+    }
+
+    await writeLocalEmployeeStore({
+      ...store,
+      roles: (store.roles || []).filter((role) => role.key !== key),
+    });
+    revalidatePath("/employee/portal");
     return { success: true };
   }
 }
 
 export async function saveEmployeeUser(input: {
+  id?: string;
   name: string;
   email: string;
   password?: string;
@@ -959,7 +1170,16 @@ export async function saveEmployeeUser(input: {
   }
 
   const email = input.email.trim().toLowerCase();
-  const existing = await prisma.employeeUser.findUnique({ where: { email } });
+  const requestedId = input.id ? Number(input.id) : null;
+  const existingById = requestedId ? await prisma.employeeUser.findUnique({ where: { id: requestedId } }) : null;
+  const existingByEmail = await prisma.employeeUser.findUnique({ where: { email } });
+  if (existingByEmail && existingById && existingByEmail.id !== existingById.id) {
+    return { success: false, error: "Another employee already uses this email." };
+  }
+  if (existingByEmail && !existingById && input.id) {
+    return { success: false, error: "Another employee already uses this email." };
+  }
+  const existing = existingById || existingByEmail;
   const data = {
     name: input.name.trim(),
     email,
@@ -985,31 +1205,13 @@ export async function saveEmployeeUser(input: {
       data: input.password?.trim() ? { ...data, password: hashPassword(input.password) } : data,
     });
   } else {
-    if (!input.password?.trim()) return { success: false, error: "Password is required for new employees." };
-    const created = await prisma.employeeUser.create({ data: { ...data, password: hashPassword(input.password) } });
+    const created = await prisma.employeeUser.create({ data: { ...data, password: hashPassword(input.password?.trim() || defaultEmployeePassword) } });
     employeeId = created.id;
-
-    const letterType = data.employeeType === "Intern" ? "Internship Offer Letter" : "Offer Letter";
-    const letterUrl = `/api/employee/letter?employeeId=${created.id}&type=${encodeURIComponent(letterType)}`;
-    await prisma.employeeDocument.create({
-      data: {
-        employeeId: created.id,
-        employeeName: created.name,
-        title: letterType,
-        documentType: letterType,
-        url: letterUrl,
-        visibilityRoles: "super_admin,admin,hr",
-        notes: "Auto-generated when the employee account was created.",
-        uploadedBy: Number(session.userId),
-      },
-    });
-    await prisma.employeeNotification.create({
-      data: {
-        employeeId: created.id,
-        title: letterType,
-        body: `Your ${letterType.toLowerCase()} is available in the Documents section.`,
-        createdBy: Number(session.userId),
-      },
+    await createEmployeeStarterDocuments({
+      employeeId: created.id,
+      employeeName: created.name,
+      employeeType: data.employeeType,
+      uploadedBy: Number(session.userId),
     });
   }
   await logEmployeeAudit({
@@ -1031,9 +1233,13 @@ export async function saveEmployeeUser(input: {
     }
     const store = await readLocalEmployeeStore();
     const email = input.email.trim().toLowerCase();
-    const existingIndex = store.users.findIndex((employee) => employee.email === email);
-    if (existingIndex === -1 && !input.password?.trim()) {
-      return { success: false, error: "Password is required for new employees." };
+    const requestedId = input.id ? Number(input.id) : null;
+    const existingIndex = requestedId
+      ? store.users.findIndex((employee) => employee.id === requestedId)
+      : store.users.findIndex((employee) => employee.email === email);
+    const emailOwner = store.users.find((employee) => employee.email === email);
+    if (emailOwner && emailOwner.id !== (requestedId || emailOwner.id)) {
+      return { success: false, error: "Another employee already uses this email." };
     }
     const nextId = existingIndex >= 0 ? store.users[existingIndex].id : Math.max(0, ...store.users.map((employee) => employee.id)) + 1;
     const employee = localUserFromInput(input, nextId, existingIndex >= 0 ? store.users[existingIndex] : undefined);
@@ -1317,6 +1523,143 @@ export async function submitEmployeeApplication(input: {
   }
 }
 
+export async function appointApplicantAsEmployee(input: {
+  applicantId: string;
+  department?: string;
+  title?: string;
+  workStartTime?: string;
+  workEndTime?: string;
+}) {
+  try {
+    const { session } = await requireEmployee();
+    if (!(await employeeSessionCanAccessFeature(session, "employees"))) {
+      return { success: false, error: "Only super admins/admins can appoint employees." };
+    }
+
+    const applicant = await prisma.employeeApplicant.findUnique({ where: { id: Number(input.applicantId) } });
+    if (!applicant) return { success: false, error: "Applicant not found." };
+
+    const roles = await getEmployeeRoleDefinitionsFromDatabase();
+    const role = roleKeyFromApplicantRole(applicant.roleApplied, roles);
+    const existing = await prisma.employeeUser.findUnique({ where: { email: applicant.email.toLowerCase() } });
+    if (existing) return { success: false, error: "An employee already exists with this email." };
+
+    const employeeType = applicantEmployeeType(applicant.notes);
+    const created = await prisma.employeeUser.create({
+      data: {
+        name: applicant.name,
+        email: applicant.email.toLowerCase(),
+        password: hashPassword(defaultEmployeePassword),
+        role,
+        department: input.department?.trim() || "General",
+        title: input.title?.trim() || applicant.roleApplied || "Team Member",
+        employeeType,
+        compensationStatus: applicantCompensationStatus(applicant.notes),
+        employmentStart: applicantStartDate(applicant.notes) || new Date(),
+        workStartTime: input.workStartTime?.trim() || "09:00",
+        workEndTime: input.workEndTime?.trim() || "18:00",
+        status: "Active",
+      },
+    });
+
+    await prisma.employeeApplicant.update({ where: { id: applicant.id }, data: { stage: "Appointed" } });
+    await createEmployeeStarterDocuments({
+      employeeId: created.id,
+      employeeName: created.name,
+      employeeType,
+      uploadedBy: Number(session.userId),
+    });
+    await logEmployeeAudit({
+      actorId: Number(session.userId),
+      actorName: session.name,
+      action: "applicant.appoint",
+      entityType: "applicant",
+      entityId: applicant.id.toString(),
+      metadata: { employeeId: created.id, email: created.email, role },
+    });
+    revalidatePath("/employee/portal");
+    return { success: true };
+  } catch (error) {
+    if (!isDatabaseUnavailable(error)) throw error;
+    const session = await getEmployeeSession();
+    if (!session || !(await employeeSessionCanAccessFeature(session, "employees"))) {
+      return { success: false, error: "Only super admins/admins can appoint employees." };
+    }
+    const store = await readLocalEmployeeStore();
+    const applicants = store.applicants || [];
+    const applicantIndex = applicants.findIndex((applicant) => applicant.id === Number(input.applicantId));
+    const applicant = applicantIndex >= 0 ? applicants[applicantIndex] : null;
+    if (!applicant) return { success: false, error: "Applicant not found." };
+    if (store.users.some((user) => user.email === applicant.email.toLowerCase())) {
+      return { success: false, error: "An employee already exists with this email." };
+    }
+    const now = new Date().toISOString();
+    const roles = mergeRoleDefinitions(store.roles);
+    const nextId = Math.max(0, ...store.users.map((employee) => employee.id)) + 1;
+    const employee: LocalEmployeeUser = {
+      id: nextId,
+      name: applicant.name,
+      email: applicant.email.toLowerCase(),
+      password: hashPassword(defaultEmployeePassword),
+      role: roleKeyFromApplicantRole(applicant.roleApplied, roles),
+      department: input.department?.trim() || "General",
+      departmentId: null,
+      managerId: null,
+      title: input.title?.trim() || applicant.roleApplied || "Team Member",
+      employeeType: applicantEmployeeType(applicant.notes),
+      compensationStatus: applicantCompensationStatus(applicant.notes),
+      employmentStart: applicantStartDate(applicant.notes)?.toISOString() || now,
+      employmentEnd: null,
+      workStartTime: input.workStartTime?.trim() || "09:00",
+      workEndTime: input.workEndTime?.trim() || "18:00",
+      status: "Active",
+      lastLogin: null,
+      lastSeenAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    applicants[applicantIndex] = { ...applicant, stage: "Appointed", updatedAt: now };
+    await writeLocalEmployeeStore({ ...store, users: [employee, ...store.users], applicants });
+    revalidatePath("/employee/portal");
+    return { success: true };
+  }
+}
+
+export async function changeEmployeePassword(input: {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}) {
+  const session = await getEmployeeSession();
+  if (!session) return { success: false, error: "Please log in again to change your password." };
+  const newPassword = input.newPassword?.trim() || "";
+  if (newPassword.length < 8) return { success: false, error: "Use at least 8 characters for the new password." };
+  if (newPassword !== input.confirmPassword) return { success: false, error: "New password and confirmation do not match." };
+  if (newPassword === defaultEmployeePassword) return { success: false, error: "Choose a password different from the default password." };
+
+  try {
+    const user = await prisma.employeeUser.findUnique({ where: { id: Number(session.userId) } });
+    if (!user || !verifyPassword(input.currentPassword, user.password)) {
+      return { success: false, error: "Current password is incorrect." };
+    }
+    await prisma.employeeUser.update({ where: { id: user.id }, data: { password: hashPassword(newPassword) } });
+    revalidatePath("/employee/portal");
+    return { success: true };
+  } catch (error) {
+    if (!isDatabaseUnavailable(error)) throw error;
+    const store = await readLocalEmployeeStore();
+    const userIndex = store.users.findIndex((user) => user.id === Number(session.userId));
+    const user = userIndex >= 0 ? store.users[userIndex] : null;
+    if (!user || !verifyPassword(input.currentPassword, user.password)) {
+      return { success: false, error: "Current password is incorrect." };
+    }
+    store.users[userIndex] = { ...user, password: hashPassword(newPassword), updatedAt: new Date().toISOString() };
+    await writeLocalEmployeeStore(store);
+    revalidatePath("/employee/portal");
+    return { success: true };
+  }
+}
+
 export async function saveMeeting(input: {
   id?: string;
   title: string;
@@ -1329,8 +1672,8 @@ export async function saveMeeting(input: {
   notes?: string;
 }) {
   const { session } = await requireEmployee();
-  if (!(await employeeSessionCanAccessFeature(session, "meetings"))) {
-    return { success: false, error: "Only super admin/admin, HR, or sales can schedule meetings." };
+  if (!["super_admin", "admin"].includes(session.role)) {
+    return { success: false, error: "Only super admin/admin can schedule meetings." };
   }
   const { id, ...rest } = input;
   const data = {
@@ -1355,8 +1698,8 @@ export async function saveResource(input: {
   tags?: string;
 }) {
   const { session } = await requireEmployee();
-  if (!(await employeeSessionCanAccessFeature(session, "resources"))) {
-    return { success: false, error: "You do not have permission to publish resources." };
+  if (!["super_admin", "admin"].includes(session.role)) {
+    return { success: false, error: "Only super admin/admin can publish resources." };
   }
   const { id, ...rest } = input;
   const data = { ...rest, createdBy: Number(session.userId) };
@@ -1662,8 +2005,8 @@ export async function saveAnnouncement(input: {
   priority: string;
 }) {
   const { session } = await requireEmployee();
-  if (!(await employeeSessionCanAccessFeature(session, "announcements"))) {
-    return { success: false, error: "Only admin/HR/operations can publish announcements." };
+  if (!["super_admin", "admin"].includes(session.role)) {
+    return { success: false, error: "Only super admin/admin can publish announcements." };
   }
   const data = {
     title: input.title,
@@ -1720,6 +2063,7 @@ export async function saveExpenseClaim(input: {
 }
 
 export async function saveDepartment(input: {
+  id?: string;
   name: string;
   managerId?: string;
   description?: string;
@@ -1729,21 +2073,33 @@ export async function saveDepartment(input: {
   if (!(await employeeSessionCanAccessFeature(session, "employees"))) {
     return { success: false, error: "Only HR/admin roles can manage departments." };
   }
-  await prisma.employeeDepartment.upsert({
-    where: { name: input.name.trim() },
-    update: {
-      managerId: input.managerId ? Number(input.managerId) : null,
-      description: input.description,
-      active: input.active !== "Inactive",
-    },
-    create: {
-      name: input.name.trim(),
-      managerId: input.managerId ? Number(input.managerId) : null,
-      description: input.description,
-      active: input.active !== "Inactive",
-    },
-  });
-  await logEmployeeAudit({ actorId: Number(session.userId), actorName: session.name, action: "department.upsert", entityType: "department", entityId: input.name });
+  const name = input.name.trim();
+  if (!name) {
+    return { success: false, error: "Department name is required." };
+  }
+  const data = {
+    name,
+    managerId: input.managerId ? Number(input.managerId) : null,
+    description: input.description,
+    active: input.active !== "Inactive",
+  };
+  if (input.id) {
+    await prisma.employeeDepartment.update({
+      where: { id: Number(input.id) },
+      data,
+    });
+  } else {
+    await prisma.employeeDepartment.upsert({
+      where: { name },
+      update: {
+        managerId: data.managerId,
+        description: data.description,
+        active: data.active,
+      },
+      create: data,
+    });
+  }
+  await logEmployeeAudit({ actorId: Number(session.userId), actorName: session.name, action: "department.upsert", entityType: "department", entityId: input.id || name });
   revalidatePath("/employee/portal");
   return { success: true };
 }
@@ -1832,6 +2188,9 @@ export async function deleteEmployeeEntity(input: {
     const { session } = await requireEmployee();
     if (["crm", "crmSheet"].includes(input.entityType) && session.role !== "super_admin") {
       return { success: false, error: "Only super admin can delete CRM records." };
+    }
+    if (["resource", "announcement", "meeting"].includes(input.entityType) && !["super_admin", "admin"].includes(session.role)) {
+      return { success: false, error: "Only super admin/admin can delete this record." };
     }
     const deleteFeature: EmployeePortalFeature =
       ["employee", "department"].includes(input.entityType) ? "employees" :

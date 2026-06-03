@@ -1,12 +1,15 @@
-"use client";
+﻿"use client";
 
-import { FormEvent, useEffect, useMemo, useState, useTransition } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, Briefcase, CalendarDays, ClipboardList, Clock3, Code2, FileText, Handshake, LogOut, PenLine, Search, Star, Target, UserCheck, Users, Video, WalletCards } from "lucide-react";
+import { Bell, Briefcase, CalendarDays, ChevronRight, ClipboardList, Clock3, Code2, FileText, Handshake, LogOut, Menu, Moon, PenLine, RefreshCw, RotateCw, Search, Shield, Star, Sun, Target, UserCheck, Users, Video, WalletCards, X } from "lucide-react";
 import {
+  appointApplicantAsEmployee,
+  changeEmployeePassword,
   clockInEmployee,
   clockOutEmployee,
   approveCrmSheet,
+  deleteEmployeeRoleDefinition,
   deleteEmployeeEntity,
   getEmployeePortalData,
   logoutEmployee,
@@ -30,6 +33,7 @@ import {
   updateCrmSheetRowStatus,
   updateCrmSheetRowData,
   updateEmployeeRecordStatus,
+  type EmployeeRoleDefinitionInput,
 } from "@/app/actions/employee-portal";
 import { EMPLOYEE_PORTAL_FEATURES } from "@/lib/employee/roles";
 import styles from "../portal.module.css";
@@ -61,11 +65,13 @@ const tabs = [
   { id: "expenses", label: "Expenses", icon: WalletCards },
   { id: "payroll", label: "Payroll", icon: WalletCards },
   { id: "reports", label: "Reports", icon: FileText },
+  { id: "profile", label: "Profile", icon: UserCheck },
   { id: "reviews", label: "Reviews", icon: Star },
   { id: "documents", label: "Documents", icon: FileText },
   { id: "announcements", label: "Announcements", icon: Bell },
   { id: "meetings", label: "Meetings", icon: Video },
   { id: "resources", label: "Resources", icon: FileText },
+  { id: "access", label: "Privileges", icon: UserCheck },
   { id: "admin", label: "Employees", icon: CalendarDays },
 ] as const;
 
@@ -123,7 +129,9 @@ function values(form: HTMLFormElement) {
   return output;
 }
 
-type SaveHandler = (payload: any) => Promise<{ success: boolean; error?: string }>;
+type FormValues = ReturnType<typeof values>;
+type ActionResult = { success: boolean; error?: string };
+type SaveHandler<T extends FormValues = FormValues> = (payload: T) => Promise<ActionResult>;
 type PortalTab = (typeof tabs)[number]["id"];
 type SelectedCrmCell = {
   rowId: number;
@@ -204,6 +212,19 @@ function featureAccessSet(value?: string | null) {
   return new Set((value || "").split(",").map((feature) => feature.trim()).filter(Boolean));
 }
 
+function simplePortalError(error: unknown, fallback = "The portal could not complete that request. Please try again.") {
+  const text = error instanceof Error ? error.message : String(error || "");
+  if (!text || text === "[object Event]" || text === "[object Object]") {
+    return "The portal hit a temporary issue. Refresh and try again.";
+  }
+  if (
+    /server action|failed to fetch|network|prisma|database|neon|timeout|temporarily unavailable/i.test(text)
+  ) {
+    return "The portal is temporarily unavailable. Refresh and try again.";
+  }
+  return text || fallback;
+}
+
 function mergePortalData(previous: PortalData, incoming: PortalData, activeTab: PortalTab): PortalData {
   return {
     ...previous,
@@ -211,7 +232,7 @@ function mergePortalData(previous: PortalData, incoming: PortalData, activeTab: 
     users: ["dashboard", "admin", "ops", "reports"].includes(activeTab) ? incoming.users : previous.users,
     crmRecords: ["dashboard", "crm", "reports"].includes(activeTab) ? incoming.crmRecords : previous.crmRecords,
     crmSheets: activeTab === "crm" ? incoming.crmSheets : previous.crmSheets,
-    applicants: ["applicants", "reports"].includes(activeTab) ? incoming.applicants : previous.applicants,
+    applicants: ["applicants", "admin", "reports"].includes(activeTab) ? incoming.applicants : previous.applicants,
     meetings: ["dashboard", "meetings", "reports"].includes(activeTab) ? incoming.meetings : previous.meetings,
     resources: ["dashboard", "resources", "reports"].includes(activeTab) ? incoming.resources : previous.resources,
     attendance: ["dashboard", "ops", "reports"].includes(activeTab) ? incoming.attendance : previous.attendance,
@@ -223,10 +244,10 @@ function mergePortalData(previous: PortalData, incoming: PortalData, activeTab: 
     announcements: ["dashboard", "announcements", "reports"].includes(activeTab) ? incoming.announcements : previous.announcements,
     comments: activeTab === "ops" ? incoming.comments : previous.comments,
     departments: activeTab === "admin" ? incoming.departments : previous.departments,
-    roleDefinitions: activeTab === "admin" ? incoming.roleDefinitions : previous.roleDefinitions,
-    notifications: ["dashboard", "admin"].includes(activeTab) ? incoming.notifications : previous.notifications,
+    roleDefinitions: ["admin", "access"].includes(activeTab) ? incoming.roleDefinitions : previous.roleDefinitions,
+    notifications: ["dashboard", "admin", "access"].includes(activeTab) ? incoming.notifications : previous.notifications,
     expenses: ["expenses", "reports"].includes(activeTab) ? incoming.expenses : previous.expenses,
-    auditEvents: ["admin", "reports"].includes(activeTab) ? incoming.auditEvents : previous.auditEvents,
+    auditEvents: ["admin", "access", "reports"].includes(activeTab) ? incoming.auditEvents : previous.auditEvents,
   };
 }
 
@@ -253,6 +274,24 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const [applicationLink, setApplicationLink] = useState("/employee/apply");
   const [pending, startTransition] = useTransition();
   const [uploadedFile, setUploadedFile] = useState<{ url: string; fileName: string; fileSize: string; mimeType: string } | null>(null);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [userManagementOpen, setUserManagementOpen] = useState(false);
+  const [applicantSort, setApplicantSort] = useState("newest");
+  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [selectedRoleKey, setSelectedRoleKey] = useState<string>("super_admin");
+  const [isCreatingRole, setIsCreatingRole] = useState<boolean>(false);
+  const [auditSearch, setAuditSearch] = useState("");
+
+  const [theme, setTheme] = useState<"dark" | "light">("light");
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    setTheme("light");
+    localStorage.setItem("bluevolt-theme", "light");
+
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     setSelectedCrmRowId(null);
@@ -263,6 +302,31 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     setApplicationLink(`${window.location.origin}/employee/apply`);
   }, []);
 
+  // Auto-dismiss notices after 4 seconds
+  useEffect(() => {
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    if (notice) {
+      noticeTimerRef.current = setTimeout(() => setNotice(""), 4000);
+    }
+    return () => { if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current); };
+  }, [notice]);
+
+  // Escape key closes CRM sheet view
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && activeCrmSheetId) {
+        setActiveCrmSheetId(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeCrmSheetId]);
+
+  // Close mobile sidebar on tab change
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [tab]);
+
   const visibleTabs = useMemo(() => tabs.filter((item) => {
     if (item.id === "dashboard") return true;
     if (item.id === "crm") return data.capabilities.canRequestCrmSource || data.capabilities.canUseCrm;
@@ -271,33 +335,40 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     if (item.id === "expenses") return data.capabilities.canManageExpenses;
     if (item.id === "payroll") return data.capabilities.canManagePayroll;
     if (item.id === "reports") return data.capabilities.canManage || data.capabilities.canManagePayroll || data.capabilities.canManageApplicants;
+    if (item.id === "profile") return true;
     if (item.id === "reviews") return data.capabilities.canReviewPerformance;
     if (item.id === "documents") return data.capabilities.canManageDocuments;
-    if (item.id === "announcements") return data.capabilities.canPublishAnnouncements;
-    if (item.id === "meetings") return data.capabilities.canScheduleMeetings;
-    if (item.id === "resources") return data.capabilities.canManageResources;
+    if (item.id === "announcements") return data.capabilities.canViewAnnouncements || data.capabilities.canPublishAnnouncements;
+    if (item.id === "meetings") return data.capabilities.canViewMeetings || data.capabilities.canScheduleMeetings;
+    if (item.id === "resources") return data.capabilities.canViewResources || data.capabilities.canManageResources;
+    if (item.id === "access") return data.capabilities.canManageAccess;
     if (item.id === "admin") return data.capabilities.canManage;
     return true;
   }), [data.capabilities]);
 
   const refresh = (sort = sortResources, currentTab = tab) => startTransition(async () => {
-    const newData = await getEmployeePortalData(sort, currentTab);
-    setData(prev => mergePortalData(prev, newData, currentTab));
+    try {
+      const newData = await getEmployeePortalData(sort, currentTab);
+      setData(prev => mergePortalData(prev, newData, currentTab));
+      setClockOverride("");
+    } catch (refreshError) {
+      setError(simplePortalError(refreshError));
+    }
   });
 
   const openPortalTab = (nextTab: PortalTab) => {
-    if (nextTab === "crm") {
-      setLoadingTab("crm");
-      startTransition(async () => {
-        const newData = await getEmployeePortalData(sortResources, "crm");
-        setData(prev => mergePortalData(prev, newData, "crm"));
-        setTab("crm");
+    setLoadingTab(nextTab);
+    startTransition(async () => {
+      try {
+        const newData = await getEmployeePortalData(sortResources, nextTab);
+        setData(prev => mergePortalData(prev, newData, nextTab));
+        setTab(nextTab);
+      } catch (tabError) {
+        setError(simplePortalError(tabError));
+      } finally {
         setLoadingTab("");
-      });
-      return;
-    }
-    setTab(nextTab);
-    refresh(sortResources, nextTab);
+      }
+    });
   };
 
   const employees = data.users as EmployeeListItem[];
@@ -323,6 +394,14 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const ownerRoleOptions = [{ label: "All roles", value: "all" }, ...roleOptions];
   const roleNameByKey = new Map(roleDefinitions.map((role) => [role.key, role.label]));
   const displayRole = (role: string) => roleNameByKey.get(role) || role.replace(/_/g, " ");
+  const roleOptionsForValue = (value?: string) => {
+    if (!value || roleOptions.some((role) => role.value === value)) return roleOptions;
+    return [{ label: `${displayRole(value)} (${value}) - inactive`, value }, ...roleOptions];
+  };
+  const audienceOptionsForValue = (value?: string) => {
+    if (!value || ownerRoleOptions.some((role) => role.value === value)) return ownerRoleOptions;
+    return [{ label: `${displayRole(value)} (${value}) - inactive`, value }, ...ownerRoleOptions];
+  };
   const roleLabel = displayRole(data.session.role);
   const openTasks = data.tasks.filter((task) => task.status !== "Done");
   const blockedTasks = data.tasks.filter((task) => task.status === "Blocked");
@@ -347,9 +426,15 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     .reduce((total, entry) => total + Number(entry.totalHours || 0), 0);
   const completedSessions = data.attendance.filter((entry) => entry.logoutAt).length;
   const selectedEmployeeSessions = data.attendance.filter((entry) => entry.employeeId === selectedHoursEmployeeId).length;
-  const pendingApplicants = data.applicants.filter((applicant) => !["Offer", "Rejected"].includes(applicant.stage));
-  const approvedApplicants = data.applicants.filter((applicant) => applicant.stage === "Offer");
+  const pendingApplicants = data.applicants.filter((applicant) => !["Offer", "Appointed", "Rejected"].includes(applicant.stage));
+  const approvedApplicants = data.applicants.filter((applicant) => ["Offer", "Appointed"].includes(applicant.stage));
   const rejectedApplicants = data.applicants.filter((applicant) => applicant.stage === "Rejected");
+  const sortedApplicants = [...data.applicants].sort((first, second) => {
+    if (applicantSort === "name") return first.name.localeCompare(second.name);
+    if (applicantSort === "role") return first.roleApplied.localeCompare(second.roleApplied);
+    if (applicantSort === "status") return first.stage.localeCompare(second.stage);
+    return new Date(second.updatedAt).getTime() - new Date(first.updatedAt).getTime();
+  });
   const payrollTotal = data.payrollInputs.reduce((total, item) => total + Number(item.amount || 0), 0);
   const payrollReady = data.payrollInputs.filter((item) => item.status === "Ready").length;
   const payrollPaid = data.payrollInputs.filter((item) => item.status === "Paid").length;
@@ -417,26 +502,30 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     notes: entry.notes || "",
   }));
 
-  const submit = (handler: SaveHandler, onSuccessOptimistic?: () => void) => (event: FormEvent<HTMLFormElement>) => {
+  const submit = <T extends FormValues>(handler: SaveHandler<T>, onSuccessOptimistic?: () => void) => (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
     setNotice("Processing your request...");
     const form = event.currentTarget;
-    const formValues = values(form);
+    const formValues = values(form) as T;
     if (onSuccessOptimistic) onSuccessOptimistic();
     startTransition(async () => {
-      const result = await handler(formValues);
-      if (!result.success) {
-        setError(result.error || "Save failed.");
-        return;
+      try {
+        const result = await handler(formValues);
+        if (!result.success) {
+          setError(result.error || "Save failed.");
+          return;
+        }
+        form.reset();
+        setUploadedFile(null);
+        setCrmSheetPaste("");
+        setCrmSheetFileName("");
+        setNotice("Saved successfully.");
+        const newData = await getEmployeePortalData(sortResources, tab);
+        setData(prev => mergePortalData(prev, newData, tab));
+      } catch (submitError) {
+        setError(simplePortalError(submitError, "Save failed. Please try again."));
       }
-      form.reset();
-      setUploadedFile(null);
-      setCrmSheetPaste("");
-      setCrmSheetFileName("");
-      setNotice("Saved successfully.");
-      const newData = await getEmployeePortalData(sortResources, tab);
-      setData(prev => mergePortalData(prev, newData, tab));
     });
   };
 
@@ -444,31 +533,39 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     setError("");
     setNotice("");
     startTransition(async () => {
-      const result = await handler();
-      if (!result.success) setError(result.error || "Action failed.");
-      else setNotice("Updated successfully.");
-      const newData = await getEmployeePortalData(sortResources, tab);
-      setData(prev => mergePortalData(prev, newData, tab));
+      try {
+        const result = await handler();
+        if (!result.success) setError(result.error || "Action failed.");
+        else setNotice("Updated successfully.");
+        const newData = await getEmployeePortalData(sortResources, tab);
+        setData(prev => mergePortalData(prev, newData, tab));
+      } catch (actionError) {
+        setError(simplePortalError(actionError, "Action failed. Please try again."));
+      }
     });
   };
 
   const uploadFile = async (file?: File) => {
     if (!file) return;
-    const formData = new FormData();
-    formData.set("file", file);
-    const response = await fetch("/api/employee/upload", { method: "POST", body: formData });
-    const result = await response.json();
-    if (!result.success) {
-      setError(result.error || "Upload failed.");
-      return;
+    try {
+      const formData = new FormData();
+      formData.set("file", file);
+      const response = await fetch("/api/employee/upload", { method: "POST", body: formData });
+      const result = await response.json();
+      if (!result.success) {
+        setError(result.error || "Upload failed.");
+        return;
+      }
+      setNotice(`${result.fileName} uploaded.`);
+      setUploadedFile({
+        url: result.url,
+        fileName: result.fileName,
+        fileSize: String(result.fileSize),
+        mimeType: result.mimeType,
+      });
+    } catch {
+      setError("Upload failed. Please check your connection and try again.");
     }
-    setNotice(`${result.fileName} uploaded.`);
-    setUploadedFile({
-      url: result.url,
-      fileName: result.fileName,
-      fileSize: String(result.fileSize),
-      mimeType: result.mimeType,
-    });
   };
 
   const handleClockIn = () => {
@@ -499,12 +596,18 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
       };
     });
     startTransition(async () => {
-      const result = await clockInEmployee();
-      if (!result.success) {
-        setError(result.error || "Clock in failed.");
+      try {
+        const result = await clockInEmployee();
+        if (!result.success) {
+          setError(result.error || "Clock in failed.");
+          setClockOverride("off");
+        }
+      } catch (clockError) {
+        setError(simplePortalError(clockError, "Clock in failed. Please try again."));
         setClockOverride("off");
+      } finally {
+        setClockSaving(false);
       }
-      setClockSaving(false);
     });
   };
 
@@ -533,12 +636,18 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
       };
     });
     startTransition(async () => {
-      const result = await clockOutEmployee();
-      if (!result.success) {
-        setError(result.error || "Clock out failed.");
+      try {
+        const result = await clockOutEmployee();
+        if (!result.success) {
+          setError(result.error || "Clock out failed.");
+          setClockOverride("working");
+        }
+      } catch (clockError) {
+        setError(simplePortalError(clockError, "Clock out failed. Please try again."));
         setClockOverride("working");
+      } finally {
+        setClockSaving(false);
       }
-      setClockSaving(false);
     });
   };
 
@@ -583,17 +692,21 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     if (!file) return;
     setError("");
     setNotice("");
-    const formData = new FormData();
-    formData.set("file", file);
-    const response = await fetch("/api/employee/import", { method: "POST", body: formData });
-    const result = await response.json();
-    if (!result.success) {
-      setError(result.error || "Import failed.");
-      return;
+    try {
+      const formData = new FormData();
+      formData.set("file", file);
+      const response = await fetch("/api/employee/import", { method: "POST", body: formData });
+      const result = await response.json();
+      if (!result.success) {
+        setError(result.error || "Import failed.");
+        return;
+      }
+      setNotice(`${result.imported} employee records imported or updated.`);
+      const newData = await getEmployeePortalData(sortResources, tab);
+      setData(prev => mergePortalData(prev, newData, tab));
+    } catch {
+      setError("Import failed. Please check your connection and try again.");
     }
-    setNotice(`${result.imported} employee records imported or updated.`);
-    const newData = await getEmployeePortalData(sortResources, tab);
-    setData(prev => mergePortalData(prev, newData, tab));
   };
 
   const letterUrlFor = (user: EmployeeListItem) => {
@@ -610,9 +723,13 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   };
 
   const copyApplicationLink = async () => {
-    const message = `BlueVolt application link:\n${applicationLink}\n\nPlease fill this form if you are applying for an employee or internship role.`;
-    await navigator.clipboard.writeText(message);
-    setNotice("Application link copied. Paste it in WhatsApp.");
+    try {
+      const message = `BlueVolt application link:\n${applicationLink}\n\nPlease fill this form if you are applying for an employee or internship role.`;
+      await navigator.clipboard.writeText(message);
+      setNotice("Application link copied. Paste it in WhatsApp.");
+    } catch {
+      setError("Copy failed. Please copy the link manually.");
+    }
   };
 
   const idCardUrlFor = (user: EmployeeListItem, download = false) => (
@@ -668,11 +785,11 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     if (!trimmed) return "";
     const digits = trimmed.replace(/\D/g, "");
     if (!digits) return trimmed;
-    if (digits.length === 10 && digits.startsWith("11")) return `011-${digits.slice(2, 6)} ${digits.slice(6)}`;
-    if (digits.length === 11 && digits.startsWith("0")) return `${digits.slice(0, 3)}-${digits.slice(3, 7)} ${digits.slice(7)}`;
+    if (digits.length === 10 && digits.startsWith("11")) return `011-${digits.slice(2)}`;
+    if (digits.length === 11 && digits.startsWith("0")) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
     if (digits.length === 12 && digits.startsWith("91")) {
       const national = digits.slice(2);
-      if (national.startsWith("11")) return `+91 11 ${national.slice(2, 6)} ${national.slice(6)}`;
+      if (national.startsWith("11")) return `+91-11-${national.slice(2)}`;
       return `+91 ${national.slice(0, 5)} ${national.slice(5)}`;
     }
     if (digits.length === 10 && /^[6-9]/.test(digits)) return `${digits.slice(0, 5)} ${digits.slice(5)}`;
@@ -703,13 +820,76 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     return "";
   };
 
+  const greetingHour = now.getHours();
+  const greeting = greetingHour < 12 ? "Good morning" : greetingHour < 17 ? "Good afternoon" : "Good evening";
+  const userInitials = data.session.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+
+  const confirmDelete = (entityType: string, id: string, name?: string) => {
+    const label = name || entityType;
+    if (!confirm(`Delete this ${label}? This action cannot be undone.`)) return;
+    runAction(() => deleteEmployeeEntity({ entityType, id }));
+  };
+
   return (
-    <div className={styles.shell}>
-      <aside className={styles.sidebar}>
-        <div className={styles.eyebrow}>Internal Console</div>
-        <div className={styles.brand}>BlueVolt Employee</div>
-        <div className={styles.muted}>{data.session.name}</div>
-        <div className={styles.pill} style={{ marginTop: 10 }}>{data.session.role.replace("_", " ")}</div>
+    <div className={`${styles.shell} ${theme === "light" ? styles.themeLight : styles.themeDark}`}>
+      {/* Mobile hamburger button */}
+      <button className={styles.mobileMenuButton} type="button" onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)} aria-label="Toggle navigation">
+        {mobileSidebarOpen ? <X size={22} /> : <Menu size={22} />}
+      </button>
+
+      {/* Mobile overlay */}
+      {mobileSidebarOpen && <div className={styles.sidebarOverlay} onClick={() => setMobileSidebarOpen(false)} />}
+
+      {userManagementOpen && (
+        <div className={styles.modalOverlay} role="dialog" aria-modal="true" aria-label="Appoint or add user">
+          <div className={styles.modalPanel}>
+            <div className={styles.modalHeader}>
+              <div>
+                <h2 className={styles.cardTitle}>Appoint / Add User</h2>
+                <p className={styles.muted}>Share the public form link or create direct portal access. New accounts use default password abc123.</p>
+              </div>
+              <button className={styles.refreshIconButton} type="button" onClick={() => setUserManagementOpen(false)} aria-label="Close"><X size={18} /></button>
+            </div>
+            <div className={styles.modalLinkBox}>
+              <input className={styles.input} value={applicationLink} readOnly />
+              <button className={styles.button} type="button" onClick={copyApplicationLink}>Copy Link</button>
+              <a className={styles.ghostButton} href={applicationLink} target="_blank" rel="noopener noreferrer">Open Form</a>
+            </div>
+            <form className={styles.formGrid} onSubmit={submit(saveEmployeeUser)}>
+              <Field label="Name" name="name" required />
+              <Field label="Email" name="email" type="email" required />
+              <input type="hidden" name="password" value="abc123" />
+              <Field label="Role" name="role" options={roleOptions} defaultValue={roleOptions.some((role) => role.value === "employee") ? "employee" : roleOptions[0]?.value} />
+              <Field label="Department" name="department" defaultValue="General" />
+              <Field label="Title" name="title" defaultValue="Team Member" />
+              <Field label="Employee Type" name="employeeType" options={["Full-time", "Part-time", "Intern", "Contractor", "Consultant"]} />
+              <Field label="Paid Status" name="compensationStatus" options={["Paid", "Unpaid"]} />
+              <Field label="Employment Start" name="employmentStart" type="date" />
+              <Field label="Employment End" name="employmentEnd" type="date" />
+              <Field label="Work Starts" name="workStartTime" type="time" defaultValue="09:00" />
+              <Field label="Work Ends" name="workEndTime" type="time" defaultValue="18:00" />
+              <Field label="Status" name="status" options={["Active", "Inactive"]} />
+              <div className={`${styles.notice} ${styles.fieldWide}`}>Default password: abc123. User will be warned to change it after first login.</div>
+              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Create User Access</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <aside className={`${styles.sidebar} ${mobileSidebarOpen ? styles.sidebarOpen : ""}`}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 28, paddingBottom: 16, borderBottom: "1px solid var(--border-color)" }}>
+          <img src="/logo.png" alt="BlueVolt Logo" style={{ height: 52, width: "auto", objectFit: "contain" }} />
+        </div>
+        <div className={styles.sidebarProfile}>
+          <div className={styles.sidebarAvatar}>
+            <span>{userInitials}</span>
+            {isWorking && <span className={styles.sidebarOnlineDot} />}
+          </div>
+          <div className={styles.sidebarProfileInfo}>
+            <div className={styles.sidebarName} style={{ margin: 0, fontWeight: 700, fontSize: "0.95rem" }}>{data.session.name}</div>
+            <div className={styles.pill} style={{ marginTop: 4, fontSize: "0.68rem", textTransform: "uppercase" }}>{roleLabel}</div>
+          </div>
+        </div>
         <nav className={styles.nav}>
           {visibleTabs.map((item) => {
             const Icon = item.icon;
@@ -717,52 +897,90 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               <button key={item.id} className={`${styles.navButton} ${tab === item.id ? styles.navButtonActive : ""}`} onClick={() => {
                 openPortalTab(item.id);
               }} type="button">
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><Icon size={15} /> {loadingTab === item.id ? "Loading..." : item.label}</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}><Icon size={16} /> {loadingTab === item.id ? "Loading..." : item.label}</span>
+                {tab === item.id && <ChevronRight size={14} className={styles.navChevron} />}
               </button>
             );
           })}
         </nav>
-        <button className={styles.ghostButton} type="button" onClick={() => startTransition(async () => {
+        <button className={styles.logoutButton} type="button" onClick={() => startTransition(async () => {
           await logoutEmployee();
           router.push("/employee/login");
         })}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><LogOut size={15} /> Logout</span>
+          <LogOut size={16} /> Sign out
         </button>
       </aside>
 
       <main className={styles.main}>
         <header className={styles.topbar}>
           <div>
+            <p className={styles.greetingText}>{greeting}, {data.session.name.split(" ")[0]}</p>
             <h1 className={styles.title}>Employee Portal</h1>
-            <p className={styles.muted}>People operations, CRM, applicants, meetings, and resources in one private workspace.</p>
+            <p className={styles.muted}>{now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
           </div>
           <div className={styles.workIsland}>
+            <div style={{ display: "flex", alignItems: "center", gap: 16, marginRight: 8, paddingRight: 16, borderRight: "1px solid var(--border-color)" }}>
+              <div style={{ textAlign: "right", display: "none" }} className="headerClock">
+                <div style={{ fontSize: "1.1rem", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{now.toLocaleTimeString("en-US", { hour12: true, hour: "numeric", minute: "2-digit" })}</div>
+                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{now.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div>
+              </div>
+              <style>{`@media (min-width: 768px) { .headerClock { display: block !important; } }`}</style>
+              <button type="button" className={styles.refreshIconButton} onClick={() => {
+                const newTheme = theme === "dark" ? "light" : "dark";
+                setTheme(newTheme);
+                localStorage.setItem("bluevolt-theme", newTheme);
+              }} aria-label="Toggle Theme">
+                {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
+              <button type="button" className={styles.refreshIconButton} onClick={() => setNotice("No new notifications")} aria-label="Notifications" style={{ position: "relative" }}>
+                <Bell size={18} />
+                <span style={{ position: "absolute", top: 4, right: 4, width: 8, height: 8, background: "#ef4444", borderRadius: "50%", border: "1px solid var(--bg-card)" }} />
+              </button>
+            </div>
             <div className={styles.workIslandMeta}>
               <span className={`${styles.workDot} ${isWorking ? styles.workDotOn : ""}`} />
               <div>
                 <strong>{isWorking ? "Working now" : "Off work"}</strong>
-                <span>{currentEmployee?.workStartTime || "09:00"} - {currentEmployee?.workEndTime || "18:00"} {clockSaving ? "saving..." : ""}</span>
+                <span>{currentEmployee?.workStartTime || "09:00"} â€“ {currentEmployee?.workEndTime || "18:00"} {clockSaving ? "saving..." : ""}</span>
               </div>
             </div>
             <button className={`${styles.workSwitch} ${isWorking ? styles.workSwitchOn : ""}`} type="button" onClick={isWorking ? handleClockOut : handleClockIn} aria-pressed={isWorking} disabled={clockSaving}>
               <span>{isWorking ? "Working" : "Off"}</span>
               <i />
             </button>
-            <button className={styles.refreshIconButton} type="button" onClick={() => refresh(sortResources, tab)} disabled={pending} aria-label="Refresh portal">R</button>
+            <button className={styles.refreshIconButton} type="button" onClick={() => refresh(sortResources, tab)} disabled={pending} aria-label="Refresh portal"><RefreshCw size={16} className={pending ? styles.spinning : ""} /></button>
           </div>
         </header>
 
-        {error && <div className={styles.error}>{error}</div>}
-        {notice && <div className={styles.notice}>{notice}</div>}
-        {loadingTab && <div className={styles.notice}>Loading {loadingTab === "crm" ? "CRM sheets" : loadingTab}...</div>}
+        {/* Toast notifications */}
+        <div className={styles.toastContainer}>
+          {error && <div className={`${styles.toast} ${styles.toastError}`}><span>{error}</span><button type="button" onClick={() => setError("")} className={styles.toastClose}><X size={14} /></button></div>}
+          {notice && <div className={`${styles.toast} ${styles.toastSuccess}`}><span>{notice}</span><button type="button" onClick={() => setNotice("")} className={styles.toastClose}><X size={14} /></button></div>}
+          {loadingTab && <div className={`${styles.toast} ${styles.toastInfo}`}><RotateCw size={14} className={styles.spinning} /> Loading {loadingTab === "crm" ? "CRM sheets" : loadingTab}...</div>}
+        </div>
+
+        {data.mustChangePassword && (
+          <div className={styles.passwordAlert}>
+            <div>
+              <strong>Default password is still active</strong>
+              <p>Reset it from your profile before using the portal for regular work.</p>
+            </div>
+            <button className={styles.button} type="button" onClick={() => openPortalTab("profile")}>Change Password</button>
+          </div>
+        )}
 
         {tab === "dashboard" && (
           <section className={styles.grid}>
             <div className={`${styles.card} ${styles.span12} ${styles.dashboardHero}`}>
-              <div>
-                <span className={styles.eyebrow}>Today Command Center</span>
-                <h2 className={styles.heroTitle}>Work queue for {roleLabel}</h2>
-                <p className={styles.muted}>Tasks, meetings, resources, and team signals grouped for engineering, content, and sales workflows.</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+                <div style={{ flexShrink: 0, width: 96, height: 86, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-shell)", padding: 12, borderRadius: "18px", border: "1px solid var(--border-color)", boxShadow: "var(--shadow-sm)" }}>
+                  <img src="/logo.png" alt="BlueVolt Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                </div>
+                <div>
+                  <span className={styles.eyebrow}>Today Command Center</span>
+                  <h2 className={styles.heroTitle} style={{ margin: "4px 0" }}>Work queue for {roleLabel}</h2>
+                  <p className={styles.muted} style={{ margin: 0 }}>Tasks, meetings, resources, and team signals grouped for engineering, content, and sales workflows.</p>
+                </div>
               </div>
               <div className={styles.heroActions}>
                 <button className={styles.button} type="button" onClick={() => openPortalTab("ops")}>Open tasks</button>
@@ -943,6 +1161,48 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 ))}
               </div>
             </div>
+          </section>
+        )}
+
+        {tab === "profile" && (
+          <section className={styles.grid}>
+            <div className={`${styles.dashboardHero} ${styles.span12}`}>
+              <div>
+                <div className={styles.eyebrow}>My Profile</div>
+                <h1 className={styles.heroTitle}>Account, ID card, and password security.</h1>
+                <p className={styles.muted}>Update your password after first login and keep your account access private.</p>
+              </div>
+              <div className={styles.heroActions}>
+                {currentEmployee && <a className={styles.ghostButton} href={idCardUrlFor(currentEmployee)} target="_blank" rel="noopener noreferrer">Open ID Card</a>}
+                {currentEmployee && <a className={styles.ghostButton} href={idCardUrlFor(currentEmployee, true)}>Download ID Card</a>}
+              </div>
+            </div>
+            <div className={`${styles.card} ${styles.span5}`}>
+              <h2 className={styles.cardTitle}>Profile Summary</h2>
+              <div className={styles.profileCard}>
+                <div className={styles.profileAvatar}>{data.session.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</div>
+                <div>
+                  <strong>{data.session.name}</strong>
+                  <p className={styles.muted}>{data.session.email}</p>
+                  <span className={styles.pill}>{roleLabel}</span>
+                </div>
+              </div>
+              {currentEmployee && (
+                <div className={styles.list}>
+                  <div className={styles.row}><span className={styles.label}>Department</span><strong>{currentEmployee.department}</strong></div>
+                  <div className={styles.row}><span className={styles.label}>Employee Type</span><strong>{currentEmployee.employeeType}</strong></div>
+                  <div className={styles.row}><span className={styles.label}>Work Window</span><strong>{currentEmployee.workStartTime} to {currentEmployee.workEndTime}</strong></div>
+                </div>
+              )}
+            </div>
+            <form className={`${styles.card} ${styles.span7} ${styles.formGrid}`} onSubmit={submit(changeEmployeePassword)}>
+              <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Reset Password</h2>
+              <p className={`${styles.muted} ${styles.fieldWide}`}>Default password for new accounts is abc123. Replace it with a private password after first login.</p>
+              <Field label="Current Password" name="currentPassword" type="password" required wide />
+              <Field label="New Password" name="newPassword" type="password" required />
+              <Field label="Confirm Password" name="confirmPassword" type="password" required />
+              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Password</button>
+            </form>
           </section>
         )}
 
@@ -1199,9 +1459,9 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                                         {shownValue}
                                       </div>
                                     ) : (
-                                      <input 
+                                      <input
                                         className={styles.sheetCellInput}
-                                        type="text" 
+                                        type="text"
                                         defaultValue={shownValue}
                                         onFocus={() => {
                                           setSelectedCrmRowId(row.id);
@@ -1733,8 +1993,11 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   <span className={styles.label}>Upload File</span>
                   <input className={styles.input} type="file" onChange={(event) => uploadFile(event.target.files?.[0])} />
                 </label>
-                <Field label="URL" name="url" type="url" defaultValue={uploadedFile?.url || ""} wide />
-                {uploadedFile && <input type="hidden" name="url" value={uploadedFile.url} />}
+                {uploadedFile ? (
+                  <input type="hidden" name="url" value={uploadedFile.url} />
+                ) : (
+                  <Field label="URL" name="url" type="url" wide />
+                )}
                 <input type="hidden" name="fileName" value={uploadedFile?.fileName || ""} />
                 <input type="hidden" name="fileSize" value={uploadedFile?.fileSize || ""} />
                 <input type="hidden" name="mimeType" value={uploadedFile?.mimeType || ""} />
@@ -1784,7 +2047,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveAnnouncement)}>
                 <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Publish Announcement</h2>
                 <Field label="Title" name="title" required wide />
-                <Field label="Audience Roles" name="audienceRoles" defaultValue="all" wide />
+                <Field label="Audience Roles" name="audienceRoles" options={ownerRoleOptions} defaultValue="all" wide />
                 <Field label="Priority" name="priority" options={["Normal", "Important", "Urgent"]} />
                 <Field label="Body" name="body" textarea wide required />
                 <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Publish</button>
@@ -1810,7 +2073,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                       <form className={styles.formGrid} onSubmit={submit(saveAnnouncement)}>
                         <input type="hidden" name="id" value={announcement.id} />
                         <Field label="Title" name="title" defaultValue={announcement.title} required wide />
-                        <Field label="Audience Roles" name="audienceRoles" defaultValue={announcement.audienceRoles} wide />
+                        <Field label="Audience Roles" name="audienceRoles" options={audienceOptionsForValue(announcement.audienceRoles)} defaultValue={announcement.audienceRoles} wide />
                         <Field label="Priority" name="priority" options={["Normal", "Important", "Urgent"]} defaultValue={announcement.priority} />
                         <Field label="Body" name="body" textarea defaultValue={announcement.body} wide required />
                         <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Announcement</button>
@@ -1832,7 +2095,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 <Field label="Starts At" name="startsAt" type="datetime-local" required />
                 <Field label="Ends At" name="endsAt" type="datetime-local" required />
                 <Field label="Meet URL" name="meetUrl" type="url" wide />
-                <Field label="Audience Roles" name="audienceRoles" defaultValue="all" wide />
+                <Field label="Audience Roles" name="audienceRoles" options={ownerRoleOptions} defaultValue="all" wide />
                 <Field label="Applicant Name" name="applicantName" />
                 <Field label="Applicant Email" name="applicantEmail" type="email" />
                 <Field label="Notes" name="notes" textarea wide />
@@ -1865,7 +2128,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                         <Field label="Starts At" name="startsAt" type="datetime-local" defaultValue={inputDateTime(meeting.startsAt)} required />
                         <Field label="Ends At" name="endsAt" type="datetime-local" defaultValue={inputDateTime(meeting.endsAt)} required />
                         <Field label="Meet URL" name="meetUrl" type="url" defaultValue={meeting.meetUrl || ""} wide />
-                        <Field label="Audience Roles" name="audienceRoles" defaultValue={meeting.audienceRoles} wide />
+                        <Field label="Audience Roles" name="audienceRoles" options={audienceOptionsForValue(meeting.audienceRoles)} defaultValue={meeting.audienceRoles} wide />
                         <Field label="Applicant Name" name="applicantName" defaultValue={meeting.applicantName || ""} />
                         <Field label="Applicant Email" name="applicantEmail" type="email" defaultValue={meeting.applicantEmail || ""} />
                         <Field label="Notes" name="notes" textarea defaultValue={meeting.notes || ""} wide />
@@ -1886,8 +2149,17 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Publish Resource</h2>
                 <Field label="Title" name="title" required />
                 <Field label="Type" name="resourceType" options={["Link", "PDF", "Excel", "PowerPoint", "Document", "Image", "Video", "Other"]} />
-                <Field label="URL" name="url" type="url" required wide />
-                <Field label="Audience Roles" name="audienceRoles" defaultValue="all" wide />
+                <label className={`${styles.field} ${styles.fieldWide}`}>
+                  <span className={styles.label}>Upload File</span>
+                  <input className={styles.input} type="file" onChange={(event) => uploadFile(event.target.files?.[0])} />
+                  {uploadedFile && <span className={styles.muted}>Uploaded: {uploadedFile.fileName}. This link will be saved as the resource.</span>}
+                </label>
+                {uploadedFile ? (
+                  <input type="hidden" name="url" value={uploadedFile.url} />
+                ) : (
+                  <Field label="URL" name="url" type="url" required wide />
+                )}
+                <Field label="Audience Roles" name="audienceRoles" options={ownerRoleOptions} defaultValue="all" wide />
                 <Field label="Tags" name="tags" wide />
                 <Field label="Description" name="description" textarea wide />
                 <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Publish Resource</button>
@@ -1918,7 +2190,10 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 <div className={styles.row} key={resource.id}>
                   <div className={styles.rowHeader}><strong>{resource.title}</strong><span className={styles.pill}>{resource.resourceType}</span></div>
                   <p className={styles.muted}>{resource.audienceRoles} {resource.tags ? `- ${resource.tags}` : ""}</p>
-                  <a href={resource.url} target="_blank" rel="noopener noreferrer">Open Resource</a>
+                  <div className={styles.resourceActions}>
+                    <a className={styles.ghostButton} href={resource.url} target="_blank" rel="noopener noreferrer">Open / Download</a>
+                    {resource.description && <span className={styles.muted}>{resource.description}</span>}
+                  </div>
                   {data.capabilities.canManageResources && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "resource", id: resource.id.toString() }))}>Delete</button>}
                   {data.capabilities.canManageResources && (
                     <details className={styles.editPanel}>
@@ -1928,7 +2203,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                         <Field label="Title" name="title" defaultValue={resource.title} required />
                         <Field label="Type" name="resourceType" options={["Link", "PDF", "Excel", "PowerPoint", "Document", "Image", "Video", "Other"]} defaultValue={resource.resourceType} />
                         <Field label="URL" name="url" type="url" defaultValue={resource.url} required wide />
-                        <Field label="Audience Roles" name="audienceRoles" defaultValue={resource.audienceRoles} wide />
+                        <Field label="Audience Roles" name="audienceRoles" options={audienceOptionsForValue(resource.audienceRoles)} defaultValue={resource.audienceRoles} wide />
                         <Field label="Tags" name="tags" defaultValue={resource.tags || ""} wide />
                         <Field label="Description" name="description" textarea defaultValue={resource.description || ""} wide />
                         <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Resource</button>
@@ -1941,13 +2216,413 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
           </section>
         )}
 
+        {tab === "access" && (() => {
+          const activeRole = roleDefinitions.find((r) => r.key === selectedRoleKey) || roleDefinitions.find((r) => r.key === "super_admin") || roleDefinitions[0];
+          const selectedFeatures = activeRole ? featureAccessSet(activeRole.featureAccess) : new Set<string>();
+
+          const getRoleIcon = (roleKey: string) => {
+            switch (roleKey) {
+              case "super_admin":
+                return <Shield size={16} />;
+              case "admin":
+                return <Shield size={16} style={{ color: "#ef4444" }} />;
+              case "hr":
+                return <Users size={16} />;
+              case "sales":
+                return <Handshake size={16} />;
+              case "content":
+                return <PenLine size={16} />;
+              case "operations":
+                return <ClipboardList size={16} />;
+              case "employee":
+                return <UserCheck size={16} />;
+              default:
+                return <Star size={16} />;
+            }
+          };
+
+          const submitRole = (event: FormEvent<HTMLFormElement>) => {
+            event.preventDefault();
+            setError("");
+            setNotice("Processing your request...");
+            const form = event.currentTarget;
+            const formValues = values(form) as EmployeeRoleDefinitionInput;
+            startTransition(async () => {
+              try {
+                const result = await saveEmployeeRoleDefinition(formValues);
+                if (!result.success) {
+                  setError(result.error || "Save failed.");
+                  return;
+                }
+                form.reset();
+                setNotice("Role definition saved successfully.");
+                const newData = await getEmployeePortalData(sortResources, tab);
+                setData(prev => mergePortalData(prev, newData, tab));
+                if (isCreatingRole) {
+                  setSelectedRoleKey(result.roleKey || formValues.key || "role");
+                  setIsCreatingRole(false);
+                }
+              } catch (roleError) {
+                setError(simplePortalError(roleError, "Role update failed. Please try again."));
+              }
+            });
+          };
+
+          const featureGroups = [
+            {
+              title: "Staff & Organization Control",
+              features: EMPLOYEE_PORTAL_FEATURES.filter((f) => ["employees", "applicants", "announcements", "meetings"].includes(f.id)),
+            },
+            {
+              title: "Business Workspace",
+              features: EMPLOYEE_PORTAL_FEATURES.filter((f) => ["crm", "crm_manage", "resources", "dashboard"].includes(f.id)),
+            },
+            {
+              title: "Financial & Core Operations",
+              features: EMPLOYEE_PORTAL_FEATURES.filter((f) => ["ops", "expenses", "payroll", "reviews", "documents"].includes(f.id)),
+            },
+          ];
+
+          const filteredAuditEvents = data.auditEvents.filter((event) => {
+            if (!auditSearch) return true;
+            const search = auditSearch.toLowerCase();
+            return (
+              (event.action || "").toLowerCase().includes(search) ||
+              (event.entityType || "").toLowerCase().includes(search) ||
+              (event.actorName || "").toLowerCase().includes(search) ||
+              (event.entityId || "").toLowerCase().includes(search)
+            );
+          });
+
+          return (
+            <section className={styles.grid}>
+              <div className={`${styles.dashboardHero} ${styles.span12}`}>
+                <div>
+                  <div className={styles.eyebrow}>Privilege Matrix</div>
+                  <h1 className={styles.heroTitle}>Role & Feature Authorization Control</h1>
+                  <p className={styles.muted}>Manage roles, map granular workspace features, and review security audits.</p>
+                </div>
+              </div>
+
+              {/* Left Column: Role Directory (span 4) */}
+              <div className={`${styles.card} ${styles.span4}`} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h2 className={styles.cardTitle} style={{ margin: 0 }}>Role Directory</h2>
+                  <button
+                    className={styles.button}
+                    type="button"
+                    onClick={() => setIsCreatingRole(true)}
+                    style={{ minHeight: 34, padding: "0 14px", fontSize: "0.85rem", background: "linear-gradient(135deg, #635bff, #4f46e5)" }}
+                  >
+                    + Create Role
+                  </button>
+                </div>
+                <div className={styles.roleDirectoryList}>
+                  {roleDefinitions.map((role) => {
+                    const isSelected = selectedRoleKey === role.key && !isCreatingRole;
+                    const totalFeatures = EMPLOYEE_PORTAL_FEATURES.length;
+                    const featuresCount = role.key === "super_admin" ? totalFeatures : featureAccessSet(role.featureAccess).size;
+                    const progressPct = Math.round((featuresCount / totalFeatures) * 100);
+                    const assignedCount = employees.filter((user) => user.role === role.key).length;
+                    return (
+                      <button
+                        key={role.key}
+                        onClick={() => {
+                          setSelectedRoleKey(role.key);
+                          setIsCreatingRole(false);
+                        }}
+                        className={`${styles.roleItemCard} ${isSelected ? styles.roleItemCardActive : ""}`}
+                        type="button"
+                      >
+                        <div className={styles.roleCardHeader}>
+                          <div className={styles.roleCardTitleGroup}>
+                            <span className={styles.roleIconWrapper}>{getRoleIcon(role.key)}</span>
+                            <strong style={{ fontSize: "0.95rem", color: isSelected ? "var(--text-brand)" : "var(--text-primary)" }}>{role.label}</strong>
+                          </div>
+                          <span className={role.status === "Active" ? `${styles.pill} ${styles.pillSuccess}` : `${styles.pill} ${styles.pillMuted}`} style={{ fontSize: "0.65rem", padding: "2px 6px" }}>
+                            {role.status}
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.76rem", width: "100%", paddingLeft: 42 }}>
+                          <code style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>{role.key}</code>
+                          <span style={{ color: isSelected ? "var(--text-brand)" : "var(--text-muted)", fontWeight: 600 }}>{assignedCount} mapped</span>
+                        </div>
+                        <div style={{ width: "100%", paddingLeft: 42 }}>
+                          <div className={styles.progressBarContainer}>
+                            <div className={styles.progressBarFill} style={{ width: `${progressPct}%` }} />
+                          </div>
+                          <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", gap: 12, fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                            <span>{featuresCount}/{totalFeatures} features</span>
+                            <span>{role.status}</span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Right Column: Detail Editor / Create Form (span 8) */}
+              <div className={`${styles.card} ${styles.span8}`}>
+                {isCreatingRole ? (
+                  <form onSubmit={submitRole} className={styles.formGrid}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gridColumn: "1 / -1", marginBottom: 12, borderBottom: "1px solid var(--border-color)", paddingBottom: 12 }}>
+                      <div>
+                        <h2 className={styles.cardTitle} style={{ margin: 0 }}>Create Custom Role</h2>
+                        <p className={styles.muted} style={{ margin: "4px 0 0", fontSize: "0.85rem" }}>Define a new role and select its portal privileges.</p>
+                      </div>
+                      <button className={styles.ghostButton} type="button" onClick={() => setIsCreatingRole(false)} style={{ minHeight: 34, padding: "0 14px", fontSize: "0.85rem" }}>Cancel</button>
+                    </div>
+
+                    <Field label="Role Name" name="label" placeholder="Content Lead" required />
+                    <Field label="Role Key" name="key" placeholder="content_lead" />
+                    <Field label="Status" name="status" options={["Active", "Inactive"]} />
+                    <Field label="Description" name="description" placeholder="Short description of the role's purpose." textarea wide />
+                    <Field label="Access Notes / Restrictions" name="permissions" placeholder="Example: View only access to CRM." textarea wide />
+
+                    <div className={`${styles.field} ${styles.fieldWide}`} style={{ marginTop: 12 }}>
+                      <span className={styles.label} style={{ marginBottom: 10, display: "block" }}>Select Feature Access</span>
+                      <div className={styles.accessGrid}>
+                        {EMPLOYEE_PORTAL_FEATURES.map((feature) => (
+                          <div className={styles.accessOption} key={feature.id} style={{ padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+                              <strong style={{ fontSize: "0.9rem", color: "var(--text-primary)" }}>{feature.label}</strong>
+                              <small style={{ fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: 1.35 }}>{feature.description}</small>
+                            </div>
+                            <label className={styles.toggleSwitch}>
+                              <input
+                                type="checkbox"
+                                name="featureAccess"
+                                value={feature.id}
+                                defaultChecked={feature.id === "dashboard"}
+                              />
+                              <span className={styles.switchSlider} />
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button className={`${styles.button} ${styles.fieldWide}`} type="submit" style={{ marginTop: 16 }}>Save Role</button>
+                  </form>
+                ) : activeRole ? (
+                  <form onSubmit={submitRole} className={styles.formGrid}>
+                    <input type="hidden" name="key" value={activeRole.key} />
+                    <input type="hidden" name="label" value={activeRole.label} />
+
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gridColumn: "1 / -1", marginBottom: 12, borderBottom: "1px solid var(--border-color)", paddingBottom: 12 }}>
+                      <div>
+                        <h2 className={styles.cardTitle} style={{ margin: 0 }}>Privilege Editor: {activeRole.label}</h2>
+                        <p className={styles.muted} style={{ margin: "4px 0 0", fontSize: "0.85rem" }}>
+                          {activeRole.key === "super_admin"
+                            ? "Super Admin has full system capabilities."
+                            : `Modify features mapped to the ${activeRole.label} role.`
+                          }
+                        </p>
+                      </div>
+                      <span className={styles.pill} style={{ fontFamily: "var(--font-mono)" }}>{activeRole.key}</span>
+                    </div>
+
+                    {["super_admin", "admin", "hr", "sales", "content", "operations", "employee"].includes(activeRole.key) && (
+                      <div className={styles.systemAlertBanner}>
+                        <Shield size={20} />
+                        <div className={styles.systemAlertContent}>
+                          <strong>Core System Role ({activeRole.label})</strong>
+                          <p>
+                            This is a system-protected access role. Basic definitions (such as role name, unique key, status, and description) are locked to maintain database schema stability. Mapped feature capabilities below can still be modified.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className={styles.field}>
+                      <span className={styles.label}>Role Name</span>
+                      <input className={styles.input} name="label_display" value={activeRole.label} disabled style={{ opacity: 0.8 }} />
+                    </div>
+                    <div className={styles.field}>
+                      <span className={styles.label}>Status</span>
+                      <select
+                        className={styles.select}
+                        name="status"
+                        defaultValue={activeRole.status}
+                        disabled={["super_admin", "admin", "hr", "sales", "content", "operations", "employee"].includes(activeRole.key)}
+                      >
+                        <option>Active</option>
+                        <option>Inactive</option>
+                      </select>
+                    </div>
+
+                    <div className={`${styles.field} ${styles.fieldWide}`}>
+                      <span className={styles.label}>Description</span>
+                      <textarea
+                        className={styles.textarea}
+                        name="description"
+                        defaultValue={activeRole.description}
+                        disabled={["super_admin", "admin", "hr", "sales", "content", "operations", "employee"].includes(activeRole.key)}
+                        placeholder="Role description..."
+                      />
+                    </div>
+
+                    <div className={`${styles.field} ${styles.fieldWide}`}>
+                      <span className={styles.label}>Access Notes / Restrictions</span>
+                      <textarea
+                        className={styles.textarea}
+                        name="permissions"
+                        defaultValue={activeRole.permissions}
+                        disabled={["super_admin", "admin", "hr", "sales", "content", "operations", "employee"].includes(activeRole.key)}
+                        placeholder="Restrictions..."
+                      />
+                    </div>
+
+                    {/* Privilege Mapping Categories */}
+                    <div className={`${styles.field} ${styles.fieldWide}`} style={{ marginTop: 12 }}>
+                      <span className={styles.label} style={{ marginBottom: 12, display: "block" }}>Feature Privilege Mapping</span>
+
+                      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                        {featureGroups.map((group) => (
+                          <div key={group.title} style={{ background: "var(--bg-shell)", borderRadius: 16, padding: 18, border: "1px solid var(--border-color)" }}>
+                            <strong style={{ fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-brand)", display: "block", marginBottom: 12 }}>
+                              {group.title}
+                            </strong>
+                            <div className={styles.accessGrid}>
+                              {group.features.map((feature) => (
+                                <div className={styles.accessOption} key={feature.id} style={{ background: "var(--bg-card)", padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
+                                  <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+                                    <strong style={{ fontSize: "0.9rem", color: "var(--text-primary)" }}>{feature.label}</strong>
+                                    <small style={{ fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: 1.35 }}>{feature.description}</small>
+                                  </div>
+                                  <label className={styles.toggleSwitch}>
+                                    <input
+                                      type="checkbox"
+                                      name="featureAccess"
+                                      value={feature.id}
+                                      defaultChecked={activeRole.key === "super_admin" || selectedFeatures.has(feature.id)}
+                                      disabled={activeRole.key === "super_admin"}
+                                    />
+                                    <span className={styles.switchSlider} />
+                                  </label>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {activeRole.key !== "super_admin" && (
+                      <div className={`${styles.fieldWide} ${styles.toolbar}`} style={{ marginTop: 16 }}>
+                        <button className={styles.button} type="submit">
+                          Update Privileges
+                        </button>
+                        {!["admin", "hr", "sales", "content", "operations", "employee"].includes(activeRole.key) && (
+                          <button
+                            className={styles.ghostButton}
+                            type="button"
+                            onClick={() => {
+                              if (!confirm(`Delete the ${activeRole.label} role? This cannot be undone.`)) return;
+                              setSelectedRoleKey("super_admin");
+                              runAction(() => deleteEmployeeRoleDefinition({ key: activeRole.key }));
+                            }}
+                          >
+                            Delete Custom Role
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </form>
+                ) : (
+                  <div className={styles.emptyState}>Select a role from the directory to edit.</div>
+                )}
+              </div>
+
+              {/* Bottom Row: Access Audit (span 12) */}
+              <div className={`${styles.card} ${styles.span12}`}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 20, marginBottom: 16, flexWrap: "wrap" }}>
+                  <div>
+                    <h2 className={styles.cardTitle} style={{ margin: 0 }}>Access Security Audit</h2>
+                    <p className={styles.muted} style={{ margin: "4px 0 0" }}>Chronological system events relating to authorization changes.</p>
+                  </div>
+                  <div className={styles.auditSearchWrapper}>
+                    <Search size={14} />
+                    <input
+                      className={`${styles.input} ${styles.auditSearchInput}`}
+                      value={auditSearch}
+                      onChange={(e) => setAuditSearch(e.target.value)}
+                      placeholder="Filter audit logs..."
+                    />
+                  </div>
+                </div>
+                <div style={{ maxHeight: "360px", overflowY: "auto", paddingRight: 4 }}>
+                  {filteredAuditEvents.length === 0 ? (
+                    <div className={styles.emptyState}>No audit events match search or exist yet.</div>
+                  ) : (
+                    <div className={styles.timelineContainer}>
+                      {filteredAuditEvents.map((event) => {
+                        let badgeColorClass = styles.timelineBadgeBlue;
+                        if (event.action.includes("create")) {
+                          badgeColorClass = styles.timelineBadgeGreen;
+                        } else if (event.action.includes("delete")) {
+                          badgeColorClass = styles.timelineBadgeRed;
+                        }
+                        return (
+                          <div className={styles.timelineItem} key={event.id}>
+                            <div className={`${styles.timelineBadge} ${badgeColorClass}`} />
+                            <div className={styles.timelineMeta}>
+                              <div className={styles.timelineActionGroup}>
+                                <span className={styles.pill} style={{ fontSize: "0.65rem", padding: "2px 8px" }}>{event.entityType}</span>
+                                <strong style={{ fontSize: "0.95rem", color: "var(--text-primary)" }}>{event.action}</strong>
+                              </div>
+                              <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                                {formatPortalDateTime(event.createdAt)}
+                              </span>
+                            </div>
+                            <p className={styles.timelineDetails}>
+                              Entity Key/ID: <code style={{ fontFamily: "var(--font-mono)", color: "var(--text-brand)" }}>{event.entityId}</code> &bull; Performed by <strong>{event.actorName || "System"}</strong> (ID: {event.actorId})
+                            </p>
+                            {event.metadata && (() => {
+                              try {
+                                const meta = typeof event.metadata === "string" ? JSON.parse(event.metadata) : event.metadata;
+                                if (meta && Object.keys(meta).length) {
+                                  return (
+                                    <div style={{ marginTop: 8, fontSize: "0.75rem", background: "var(--bg-shell)", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border-color)", fontFamily: "var(--font-mono)", overflowX: "auto" }}>
+                                      {JSON.stringify(meta)}
+                                    </div>
+                                  );
+                                }
+                              } catch {}
+                              return null;
+                            })()}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+          );
+        })()}
+
         {tab === "admin" && (
           <section className={styles.grid}>
+            <div className={`${styles.dashboardHero} ${styles.span12}`}>
+              <div>
+                <div className={styles.eyebrow}>Employee Access Workflow</div>
+                <h1 className={styles.heroTitle}>Create roles once, share the hiring link, then onboard only approved people.</h1>
+                <p className={styles.muted}>Use Privileges for role design, use the public form for applicant intake, and keep manual employee entry for direct hires or immediate access needs.</p>
+              </div>
+              <div className={styles.heroActions}>
+                <button className={styles.button} type="button" onClick={() => setUserManagementOpen(true)}>Appoint / Add User</button>
+                <button className={styles.button} type="button" onClick={copyApplicationLink}>Copy Hiring Link</button>
+                {data.capabilities.canManageAccess && <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("access")}>Open Privileges</button>}
+                <a className={styles.ghostButton} href={applicationLink} target="_blank" rel="noopener noreferrer">Preview Form</a>
+              </div>
+            </div>
             <div className={`${styles.card} ${styles.span12}`}>
               <div className={styles.sectionHeader}>
                 <div>
                   <h2 className={styles.cardTitle}>Simple Hiring Link</h2>
-                  <p className={styles.muted}>Copy this link and paste it in WhatsApp. Applicants fill the form and appear in the Applicants board.</p>
+                  <p className={styles.muted}>Paste this in WhatsApp groups or hiring posts. Applicants submit role, type, pay preference, availability, and profile links up front.</p>
                 </div>
                 <button className={styles.button} type="button" onClick={copyApplicationLink}>Copy WhatsApp Link</button>
               </div>
@@ -1956,102 +2631,92 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 <a className={styles.ghostButton} href={applicationLink} target="_blank" rel="noopener noreferrer">Open Form</a>
               </div>
             </div>
-            <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveEmployeeRoleDefinition)}>
-              <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>1. Create Role</h2>
-              <p className={`${styles.muted} ${styles.fieldWide}`}>Create the access role first, then assign employees to that role below.</p>
-              <Field label="Role Name" name="label" placeholder="Content Lead" required />
-              <Field label="Role Key" name="key" placeholder="content_lead" />
-              <Field label="Status" name="status" options={["Active", "Inactive"]} />
-              <Field label="Permissions / Access Notes" name="permissions" textarea wide />
-              <Field label="Description" name="description" textarea wide />
-              <div className={`${styles.field} ${styles.fieldWide}`}>
-                <span className={styles.label}>Feature Access</span>
-                <div className={styles.accessGrid}>
-                  {EMPLOYEE_PORTAL_FEATURES.map((feature) => (
-                    <label className={styles.accessOption} key={feature.id}>
-                      <input type="checkbox" name="featureAccess" value={feature.id} defaultChecked={feature.id === "dashboard"} />
-                      <span>
-                        <strong>{feature.label}</strong>
-                        <small>{feature.description}</small>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Role</button>
-            </form>
-            <div className={`${styles.card} ${styles.span8}`}>
+            <div className={`${styles.card} ${styles.span12}`}>
               <div className={styles.sectionHeader}>
                 <div>
-                  <h2 className={styles.cardTitle}>Created Roles</h2>
-                  <p className={styles.muted}>Use the role key when importing employees by CSV.</p>
+                  <h2 className={styles.cardTitle}>Application Submissions</h2>
+                  <p className={styles.muted}>Review public form entries here, then appoint as portal users or reject.</p>
                 </div>
-                <span className={styles.pill}>{roleDefinitions.length} roles</span>
+                <div className={styles.toolbar}>
+                  <select className={styles.select} style={{ maxWidth: 160 }} value={applicantSort} onChange={(event) => setApplicantSort(event.target.value)}>
+                    <option value="newest">Newest</option>
+                    <option value="name">Name</option>
+                    <option value="role">Role</option>
+                    <option value="status">Status</option>
+                  </select>
+                  <button className={styles.ghostButton} type="button" onClick={() => downloadCsv("bluevolt-applicants.csv", applicantRows)}>Download CSV</button>
+                </div>
               </div>
-              <div className={styles.list}>{roleDefinitions.length === 0 ? <div className={styles.emptyState}>No roles yet.</div> : roleDefinitions.map((role) => {
-                const selectedFeatures = featureAccessSet(role.featureAccess);
-                return (
-                <form className={styles.row} key={role.key} onSubmit={submit(saveEmployeeRoleDefinition)}>
-                  <input type="hidden" name="label" value={role.label} />
-                  <input type="hidden" name="key" value={role.key} />
-                  <input type="hidden" name="description" value={role.description} />
-                  <input type="hidden" name="permissions" value={role.permissions} />
-                  <input type="hidden" name="status" value={role.status} />
-                  <div className={styles.rowHeader}>
-                    <strong>{role.label}</strong>
-                    <span style={{ display: "inline-flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                      <span className={styles.pill}>{role.key}</span>
-                      <span className={role.status === "Active" ? `${styles.pill} ${styles.pillSuccess}` : `${styles.pill} ${styles.pillMuted}`}>{role.status}</span>
+              <div className={`${styles.smartTable} ${styles.applicantSmartTable}`}>
+                <div className={styles.smartTableHeader}>
+                  <span>Applicant</span>
+                  <span>Role</span>
+                  <span>Details</span>
+                  <span>Status</span>
+                  <span>Action</span>
+                </div>
+                {sortedApplicants.length === 0 ? <div className={styles.emptyState}>No submissions yet. Use Appoint / Add User to copy the public link.</div> : sortedApplicants.map((applicant) => (
+                  <div className={styles.smartTableRow} key={`admin-applicant-${applicant.id}`}>
+                    <div className={styles.identityCell}>
+                      <span className={styles.avatar}>{applicant.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
+                      <span><strong>{applicant.name}</strong><small>{applicant.email}</small></span>
+                    </div>
+                    <span>{applicant.roleApplied}</span>
+                    <span className={styles.muted}>{applicant.phone || "No phone"}{applicant.notes ? ` - ${applicant.notes.slice(0, 100)}` : ""}</span>
+                    <span className={applicant.stage === "Appointed" ? `${styles.pill} ${styles.pillSuccess}` : applicant.stage === "Rejected" ? `${styles.pill} ${styles.pillMuted}` : `${styles.pill} ${styles.pillWarn}`}>{applicant.stage}</span>
+                    <span className={styles.actionStack}>
+                      {applicant.stage !== "Appointed" && applicant.stage !== "Rejected" && (
+                        <button className={styles.button} type="button" onClick={() => runAction(() => appointApplicantAsEmployee({ applicantId: applicant.id.toString() }))}>Add as Employee</button>
+                      )}
+                      {applicant.stage !== "Rejected" && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "applicant", id: applicant.id.toString(), status: "Rejected" }))}>Reject</button>}
+                      <details className={styles.editPanel}>
+                        <summary>Edit</summary>
+                        <form className={styles.formGrid} onSubmit={submit(saveApplicant)}>
+                          <input type="hidden" name="id" value={applicant.id} />
+                          <Field label="Name" name="name" defaultValue={applicant.name} required />
+                          <Field label="Email" name="email" type="email" defaultValue={applicant.email} required />
+                          <Field label="Phone" name="phone" defaultValue={applicant.phone || ""} />
+                          <Field label="Role Applied" name="roleApplied" defaultValue={applicant.roleApplied} required />
+                          <Field label="Stage" name="stage" options={["New", "Screening", "Interview", "Offer", "Appointed", "Rejected"]} defaultValue={applicant.stage} />
+                          <Field label="Source" name="source" defaultValue={applicant.source} />
+                          <Field label="Meet URL" name="meetUrl" type="url" defaultValue={applicant.meetUrl || ""} wide />
+                          <Field label="Notes" name="notes" textarea defaultValue={applicant.notes || ""} wide />
+                          <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Submission</button>
+                        </form>
+                      </details>
                     </span>
                   </div>
-                  <p className={styles.muted}>{role.description}</p>
-                  <p className={styles.muted}>{role.permissions}</p>
-                  <div className={styles.accessGrid}>
-                    {EMPLOYEE_PORTAL_FEATURES.map((feature) => (
-                      <label className={styles.accessOption} key={feature.id}>
-                        <input
-                          type="checkbox"
-                          name="featureAccess"
-                          value={feature.id}
-                          defaultChecked={role.key === "super_admin" || selectedFeatures.has(feature.id)}
-                          disabled={role.key === "super_admin"}
-                        />
-                        <span>
-                          <strong>{feature.label}</strong>
-                          <small>{feature.description}</small>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                  {role.key === "super_admin" ? (
-                    <p className={styles.muted}>Super Admin always has full access.</p>
-                  ) : (
-                    <button className={styles.ghostButton} type="submit">Update Access</button>
-                  )}
-                </form>
-              );
-              })}</div>
+                ))}
+              </div>
             </div>
-            <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveEmployeeUser)}>
-              <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>2. Register Employee</h2>
-              <p className={`${styles.muted} ${styles.fieldWide}`}>Pick from the roles created above, then set employee type, paid status, and work hours.</p>
-              <Field label="Name" name="name" required />
-              <Field label="Email" name="email" type="email" required />
-              <Field label="Password" name="password" type="password" />
-              <Field label="Role" name="role" options={roleOptions} defaultValue={roleOptions.some((role) => role.value === "employee") ? "employee" : roleOptions[0]?.value} />
-              <Field label="Department" name="department" defaultValue="General" />
-              <Field label="Department Record" name="departmentId" options={[{ label: "No department record", value: "" }, ...data.departments.map((dept) => ({ label: dept.name, value: dept.id.toString() }))]} />
-              <Field label="Manager" name="managerId" options={[{ label: "No manager", value: "" }, ...employeeOptions]} />
-              <Field label="Title" name="title" defaultValue="Team Member" />
-              <Field label="Employee Type" name="employeeType" options={["Full-time", "Part-time", "Intern", "Contractor", "Consultant"]} />
-              <Field label="Paid Status" name="compensationStatus" options={["Paid", "Unpaid"]} />
-              <Field label="Employment Start" name="employmentStart" type="date" />
-              <Field label="Employment End" name="employmentEnd" type="date" />
-              <Field label="Work Starts" name="workStartTime" type="time" defaultValue="09:00" />
-              <Field label="Work Ends" name="workEndTime" type="time" defaultValue="18:00" />
-              <Field label="Status" name="status" options={["Active", "Inactive"]} />
-              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Employee</button>
-            </form>
+            <details className={`${styles.card} ${styles.span4} ${styles.collapsibleCard}`} open={employees.length <= 1}>
+              <summary className={styles.collapsibleSummary}>
+                <div>
+                  <h2 className={styles.cardTitle}>Manual Employee Access</h2>
+                  <p className={styles.muted}>Use this only for direct hires or immediate internal access.</p>
+                </div>
+                <span className={styles.pill}>Direct entry</span>
+              </summary>
+              <form className={styles.formGrid} onSubmit={submit(saveEmployeeUser)}>
+                <p className={`${styles.muted} ${styles.fieldWide}`}>Assign a prepared role, then set employee type, paid status, and work hours.</p>
+                <Field label="Name" name="name" required />
+                <Field label="Email" name="email" type="email" required />
+                <Field label="Password" name="password" type="password" />
+                <Field label="Role" name="role" options={roleOptions} defaultValue={roleOptions.some((role) => role.value === "employee") ? "employee" : roleOptions[0]?.value} />
+                <Field label="Department" name="department" defaultValue="General" />
+                <Field label="Department Record" name="departmentId" options={[{ label: "No department record", value: "" }, ...data.departments.map((dept) => ({ label: dept.name, value: dept.id.toString() }))]} />
+                <Field label="Manager" name="managerId" options={[{ label: "No manager", value: "" }, ...employeeOptions]} />
+                <Field label="Title" name="title" defaultValue="Team Member" />
+                <Field label="Employee Type" name="employeeType" options={["Full-time", "Part-time", "Intern", "Contractor", "Consultant"]} />
+                <Field label="Paid Status" name="compensationStatus" options={["Paid", "Unpaid"]} />
+                <Field label="Employment Start" name="employmentStart" type="date" />
+                <Field label="Employment End" name="employmentEnd" type="date" />
+                <Field label="Work Starts" name="workStartTime" type="time" defaultValue="09:00" />
+                <Field label="Work Ends" name="workEndTime" type="time" defaultValue="18:00" />
+                <Field label="Status" name="status" options={["Active", "Inactive"]} />
+                <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Employee</button>
+              </form>
+            </details>
             <div className={`${styles.card} ${styles.span8}`}>
               <div className={styles.sectionHeader}>
                 <div>
@@ -2097,15 +2762,16 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                     <a className={styles.ghostButton} href={mailtoFor(user)}>Send letter email</a>
                     <a className={styles.ghostButton} href={idCardUrlFor(user)} target="_blank" rel="noopener noreferrer">Open ID card</a>
                     <a className={styles.ghostButton} href={idCardUrlFor(user, true)}>Download ID card</a>
-                    {user.id !== currentUserId && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "employee", id: user.id.toString() }))}>Delete</button>}
+                    {user.id !== currentUserId && <button className={styles.ghostButton} type="button" onClick={() => confirmDelete("employee", user.id.toString(), user.name)}>Delete</button>}
                   </div>
                   <details className={styles.editPanel}>
                     <summary>Edit employee</summary>
                     <form className={styles.formGrid} onSubmit={submit(saveEmployeeUser)}>
+                      <input type="hidden" name="id" value={user.id} />
                       <Field label="Name" name="name" defaultValue={user.name} required />
                       <Field label="Email" name="email" type="email" defaultValue={user.email} required />
                       <Field label="New Password" name="password" type="password" />
-                      <Field label="Role" name="role" options={roleOptions} defaultValue={user.role} />
+                      <Field label="Role" name="role" options={roleOptionsForValue(user.role)} defaultValue={user.role} />
                       <Field label="Department" name="department" defaultValue={user.department} />
                       <Field label="Department Record" name="departmentId" options={[{ label: "No department record", value: "" }, ...data.departments.map((dept) => ({ label: dept.name, value: dept.id.toString() }))]} defaultValue={user.departmentId?.toString() || ""} />
                       <Field label="Manager" name="managerId" options={[{ label: "No manager", value: "" }, ...employeeOptions]} defaultValue={user.managerId?.toString() || ""} />
@@ -2128,30 +2794,40 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               <p className={styles.muted}>CSV headers: name,email,password,role,department,title,employeeType,compensationStatus. Role must match a Role Key from Created Roles. New accounts get default offer/internship letter access through Documents.</p>
               <input className={styles.input} type="file" accept=".csv,text/csv" onChange={(event) => importEmployees(event.target.files?.[0])} />
             </div>
-            <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveDepartment)}>
-              <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Department</h2>
-              <Field label="Name" name="name" required />
-              <Field label="Manager" name="managerId" options={[{ label: "No manager", value: "" }, ...employeeOptions]} />
-              <Field label="Status" name="active" options={["Active", "Inactive"]} />
-              <Field label="Description" name="description" textarea wide />
-              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Department</button>
-            </form>
+            <details className={`${styles.card} ${styles.span4} ${styles.collapsibleCard}`}>
+              <summary className={styles.collapsibleSummary}>
+                <div>
+                  <h2 className={styles.cardTitle}>Department Setup</h2>
+                  <p className={styles.muted}>Create or update the reporting structure without leaving this page.</p>
+                </div>
+                <span className={styles.pill}>Team structure</span>
+              </summary>
+              <form className={styles.formGrid} onSubmit={submit(saveDepartment)}>
+                <Field label="Name" name="name" required />
+                <Field label="Manager" name="managerId" options={[{ label: "No manager", value: "" }, ...employeeOptions]} />
+                <Field label="Status" name="active" options={["Active", "Inactive"]} />
+                <Field label="Description" name="description" textarea wide />
+                <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Department</button>
+              </form>
+            </details>
             <div className={`${styles.card} ${styles.span8}`}>
               <h2 className={styles.cardTitle}>Departments</h2>
               <div className={styles.list}>{data.departments.length === 0 ? <div className={styles.emptyState}>No departments yet.</div> : data.departments.map((department) => (
                 <div className={styles.row} key={department.id}>
                   <div className={styles.rowHeader}><strong>{department.name}</strong><span className={department.active ? `${styles.pill} ${styles.pillSuccess}` : `${styles.pill} ${styles.pillMuted}`}>{department.active ? "Active" : "Inactive"}</span></div>
                   {department.description && <p className={styles.muted}>{department.description}</p>}
-                  <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "department", id: department.id.toString() }))}>Delete</button>
-                </div>
-              ))}</div>
-            </div>
-            <div className={`${styles.card} ${styles.span12}`}>
-              <h2 className={styles.cardTitle}>Audit Logs</h2>
-              <div className={styles.list}>{data.auditEvents.length === 0 ? <div className={styles.emptyState}>No audit events yet.</div> : data.auditEvents.map((event) => (
-                <div className={styles.row} key={event.id}>
-                  <div className={styles.rowHeader}><strong>{event.action}</strong><span className={styles.pill}>{event.entityType}</span></div>
-                  <p className={styles.muted}>{event.actorName || "System"} - {formatPortalDateTime(event.createdAt)}</p>
+                  <details className={styles.editPanel}>
+                    <summary>Edit department</summary>
+                    <form className={styles.formGrid} onSubmit={submit(saveDepartment)}>
+                      <input type="hidden" name="id" value={department.id} />
+                      <Field label="Name" name="name" defaultValue={department.name} required />
+                      <Field label="Manager" name="managerId" options={[{ label: "No manager", value: "" }, ...employeeOptions]} defaultValue={department.managerId?.toString() || ""} />
+                      <Field label="Status" name="active" options={["Active", "Inactive"]} defaultValue={department.active ? "Active" : "Inactive"} />
+                      <Field label="Description" name="description" textarea defaultValue={department.description || ""} wide />
+                      <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Department</button>
+                    </form>
+                  </details>
+                  <button className={styles.ghostButton} type="button" onClick={() => confirmDelete("department", department.id.toString(), department.name)}>Delete</button>
                 </div>
               ))}</div>
             </div>
@@ -2161,4 +2837,3 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     </div>
   );
 }
-

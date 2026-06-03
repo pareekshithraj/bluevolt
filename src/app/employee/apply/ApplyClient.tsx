@@ -1,7 +1,6 @@
 "use client";
 
-import { FormEvent, useState, useTransition } from "react";
-import { Briefcase } from "lucide-react";
+import { FormEvent, useEffect, useState, useTransition } from "react";
 import { submitEmployeeApplication } from "@/app/actions/employee-portal";
 import styles from "../portal.module.css";
 
@@ -9,10 +8,16 @@ function values(form: HTMLFormElement) {
   return Object.fromEntries(new FormData(form).entries()) as Record<string, string>;
 }
 
-export default function ApplyClient() {
+export default function ApplyClient({ roleOptions }: { roleOptions: Array<{ label: string; value: string }> }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
+  const [theme, setTheme] = useState<"dark" | "light">("light");
+
+  useEffect(() => {
+    setTheme("light");
+    localStorage.setItem("bluevolt-theme", "light");
+  }, []);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -50,13 +55,17 @@ export default function ApplyClient() {
   };
 
   return (
-    <main className={styles.login}>
+    <main className={`${styles.login} ${theme === "light" ? styles.themeLight : styles.themeDark}`}>
       <section className={styles.loginCard}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-          <Briefcase size={20} color="#635bff" />
-          <h1 className={styles.title}>Apply to BlueVolt</h1>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, marginBottom: 28 }}>
+          <div style={{ width: 100, height: 100, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <img src="/logo.png" alt="BlueVolt Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <h1 className={styles.title} style={{ fontSize: "1.8rem", marginBottom: 4 }}>Apply for Work</h1>
+            <p className={styles.muted}>Submit your details for employee or internship review</p>
+          </div>
         </div>
-        <p className={styles.muted} style={{ marginBottom: 20 }}>Submit your details for employee or internship review.</p>
         {error && <div className={styles.error}>{error}</div>}
         {message && <div className={styles.notice}>{message}</div>}
         <form onSubmit={submit} className={styles.formGrid}>
@@ -76,13 +85,9 @@ export default function ApplyClient() {
             <span className={styles.label}>Role applying for</span>
             <select className={styles.select} name="roleApplied" required defaultValue="">
               <option value="" disabled>Select a role</option>
-              <option>Engineering</option>
-              <option>Sales</option>
-              <option>Content Developer</option>
-              <option>Operations</option>
-              <option>HR</option>
-              <option>Design</option>
-              <option>Internship</option>
+              {roleOptions.map((role) => (
+                <option key={role.value} value={role.value}>{role.label}</option>
+              ))}
             </select>
           </label>
           <label className={styles.field}>

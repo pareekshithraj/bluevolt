@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Lock } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import styles from "../portal.module.css";
 
 function simpleLoginError(message?: string) {
@@ -24,8 +24,19 @@ export default function LoginClient() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
+  const [, setLoginAttempts] = useState(0);
+  const [lockoutUntil, setLockoutUntil] = useState(0);
+  const [lockoutRemaining, setLockoutRemaining] = useState(0);
+  const [theme, setTheme] = useState<"dark" | "light">("light");
+  const isLockedOut = lockoutRemaining > 0;
+
+  useEffect(() => {
+    setTheme("light");
+    localStorage.setItem("bluevolt-theme", "light");
+  }, []);
 
   useEffect(() => {
     const showSimpleFailure = (event: ErrorEvent | PromiseRejectionEvent) => {
@@ -49,9 +60,36 @@ export default function LoginClient() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!lockoutUntil) {
+      setLockoutRemaining(0);
+      return;
+    }
+
+    const syncLockout = () => {
+      const remaining = Math.max(0, lockoutUntil - Date.now());
+      setLockoutRemaining(remaining);
+      if (remaining === 0) {
+        setLockoutUntil(0);
+        setLoginAttempts(0);
+      }
+    };
+
+    syncLockout();
+    const timer = window.setInterval(syncLockout, 1000);
+    return () => window.clearInterval(timer);
+  }, [lockoutUntil]);
+
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setError("");
+
+    if (isLockedOut) {
+      const remainingSeconds = Math.ceil(lockoutRemaining / 1000);
+      setError(`Too many attempts. Please wait ${remainingSeconds} seconds.`);
+      return;
+    }
+
     startTransition(async () => {
       try {
         const response = await fetch("/api/employee/login", {
@@ -60,11 +98,29 @@ export default function LoginClient() {
           body: JSON.stringify({ email, password }),
         });
         const result = await response.json();
-        if (result.success && result.redirectTo) {
+        if (response.ok && result.success && result.redirectTo) {
+          setLoginAttempts(0);
+          setLockoutUntil(0);
+          setLockoutRemaining(0);
           router.push(result.redirectTo);
-        } else {
-          setError(simpleLoginError(result.error));
+          return;
         }
+
+        if (response.status >= 500) {
+          setError(simpleLoginError(result.error));
+          return;
+        }
+
+        setLoginAttempts((previousAttempts) => {
+          const nextAttempts = previousAttempts + 1;
+          if (nextAttempts >= 3) {
+            setLockoutUntil(Date.now() + 60000);
+            setError("Too many failed attempts. Please wait 1 minute before trying again.");
+          } else {
+            setError(simpleLoginError(result.error));
+          }
+          return nextAttempts;
+        });
       } catch {
         setError("The employee portal is temporarily unavailable. Please try again in a minute.");
       }
@@ -72,28 +128,49 @@ export default function LoginClient() {
   };
 
   return (
-    <main className={styles.login}>
-      <section className={styles.loginCard}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-          <Lock size={20} color="#f59e0b" />
-          <h1 className={styles.title}>Employee Gateway</h1>
+    <main className={`${styles.loginWrapper} ${theme === "light" ? styles.themeLight : styles.themeDark}`}>
+      <div className={styles.loginVisual}>
+        <div className={styles.loginVisualContent}>
+          <img src="/logo.png" alt="BlueVolt Logo" style={{ height: 56, filter: "brightness(0) invert(1)", opacity: 0.95 }} />
         </div>
-        <p className={styles.muted} style={{ marginBottom: 20 }}>Private BlueVolt workspace access</p>
-        {error && <div className={styles.error}>{error}</div>}
-        <form onSubmit={submit} className={styles.formGrid}>
-          <label className={`${styles.field} ${styles.fieldWide}`}>
-            <span className={styles.label}>Employee email</span>
-            <input className={styles.input} type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
-          </label>
-          <label className={`${styles.field} ${styles.fieldWide}`}>
-            <span className={styles.label}>Password</span>
-            <input className={styles.input} type="password" value={password} onChange={(event) => setPassword(event.target.value)} required />
-          </label>
-          <button className={`${styles.button} ${styles.fieldWide}`} type="submit" disabled={pending}>
-            {pending ? "Authorizing..." : "Enter Portal"}
-          </button>
-        </form>
-      </section>
+        <div className={`${styles.loginVisualContent} ${styles.loginQuote}`}>
+          BlueVolt internal<br />workspace access.
+        </div>
+      </div>
+      <div className={styles.loginFormContainer}>
+        <section className={styles.loginCardPremium}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, marginBottom: 30 }}>
+            <span className={styles.loginStatusPill}>Private employee access</span>
+            <div className={styles.loginLogoMark}>
+              <img src="/logo.png" alt="BlueVolt Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <h1 className={styles.title} style={{ fontSize: "2.15rem", marginBottom: 6 }}>Employee Gateway</h1>
+              <p className={styles.muted}>Sign in to dashboard, CRM, resources, meetings, and attendance.</p>
+            </div>
+          </div>
+          {error && <div className={`${styles.toast} ${styles.toastError}`} style={{ position: "relative", top: 0, right: 0, marginBottom: 20 }}><span>{error}</span></div>}
+          <form onSubmit={submit} className={styles.formGrid}>
+            <label className={`${styles.field} ${styles.fieldWide}`}>
+              <span className={styles.label}>Employee Email</span>
+              <input className={styles.input} type="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={isLockedOut} />
+            </label>
+            <label className={`${styles.field} ${styles.fieldWide}`}>
+              <span className={styles.label}>Password</span>
+              <div style={{ position: "relative" }}>
+                <input className={styles.input} type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} required disabled={isLockedOut} style={{ paddingRight: 40 }} />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#64748b", display: "flex" }}>
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </label>
+            <button className={`${styles.button} ${styles.fieldWide}`} type="submit" disabled={pending || isLockedOut} style={{ marginTop: 8 }}>
+              {pending ? "Authorizing..." : "Secure Login"}
+            </button>
+            <p className={`${styles.loginSecurityHint} ${styles.fieldWide}`}>New employees use the default password, then reset it from Profile after first login.</p>
+          </form>
+        </section>
+      </div>
     </main>
   );
 }

@@ -16,8 +16,9 @@ if (!databaseUrl) {
 const pool = new Pool({
   connectionString: databaseUrl,
   connectionTimeoutMillis: 5000,
-  idleTimeoutMillis: 30000,
+  idleTimeoutMillis: 10000,
   max: 5,
+  options: "-c statement_timeout=15000",
 });
 const adapter = new PrismaPg(pool);
 

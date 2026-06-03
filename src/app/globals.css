@@ -1825,12 +1825,13 @@ main {
 @media (max-width: 1100px) {
   .mac-window-container {
     height: auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(120px, 0.42fr);
+    align-items: start;
+    justify-items: center;
+    gap: clamp(0.75rem, 2.5vw, 1.5rem);
     margin-top: 4rem;
-    padding: 0 1rem;
+    padding: 0 clamp(0.5rem, 2vw, 1rem);
   }
   
   .mac-window-wrapper {
@@ -1846,6 +1847,20 @@ main {
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4), 
                 inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
   }
+
+  .mac-window-wrapper:first-child {
+    grid-column: 1;
+  }
+
+  .phone-simulator-bezel {
+    grid-column: 2;
+  }
+
+  .mac-window-wrapper:last-child {
+    grid-column: 1 / -1;
+    max-width: min(560px, 100%) !important;
+    min-height: 180px;
+  }
   
   .mac-window-aura-glow {
     inset: -10px !important;
@@ -1858,10 +1873,51 @@ main {
   }
   
   .phone-simulator-bezel {
-    max-width: 280px !important;
+    max-width: 230px !important;
     margin: 0 auto;
     aspect-ratio: 9 / 19.5;
-    height: 520px !important;
+    height: auto !important;
+    min-height: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .mac-window-container {
+    grid-template-columns: minmax(0, 1fr) minmax(92px, 0.38fr);
+    gap: 0.65rem;
+    margin-top: 2.25rem;
+  }
+
+  .mac-window-wrapper {
+    min-height: 150px;
+  }
+
+  .mac-window-header {
+    height: 28px;
+    padding: 0 0.7rem;
+  }
+
+  .mac-window-dot {
+    width: 9px;
+    height: 9px;
+  }
+
+  .mac-window-title {
+    font-size: 0.52rem;
+  }
+
+  .phone-simulator-bezel {
+    border-width: 6px !important;
+    border-radius: 26px !important;
+    max-width: 124px !important;
+  }
+
+  .phone-simulator-screen {
+    border-radius: 20px;
+  }
+
+  .mac-window-wrapper:last-child {
+    min-height: 128px;
   }
 }
 

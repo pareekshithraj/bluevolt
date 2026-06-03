@@ -156,7 +156,7 @@ export default function FuturisticHero3D() {
 
     // --- ANIMATION LOOP ---
     let animationFrameId: number;
-    let clock = new THREE.Clock();
+    const clock = new THREE.Clock();
 
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
@@ -164,7 +164,7 @@ export default function FuturisticHero3D() {
       // Skip render if offscreen to optimize performance
       if (isOffscreen.current) return;
 
-      const delta = clock.getDelta();
+      clock.getDelta();
       const elapsed = clock.getElapsedTime();
 
       // 1. Gentle continuous rotations (Opposing directions for outer and inner structures)

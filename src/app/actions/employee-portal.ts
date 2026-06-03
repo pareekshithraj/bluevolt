@@ -115,6 +115,12 @@ type LocalEmployeeStore = {
   applicants?: LocalEmployeeApplicant[];
 };
 
+const globalForLocalEmployeeStore = globalThis as unknown as {
+  bluevoltLocalEmployeeStore?: LocalEmployeeStore;
+};
+
+let localStoreWriteWarningShown = false;
+
 const defaultRoleLabels: Record<string, string> = {
   super_admin: "Super Admin",
   admin: "Admin",
@@ -217,6 +223,10 @@ function capabilitiesForRole(role: string, roles: EmployeeRoleDefinition[]) {
 function isDatabaseUnavailable(error: unknown): boolean {
   const text = error instanceof Error ? error.message : String(error || "");
   return [
+    "database_url is not set",
+    "p1001",
+    "econnrefused",
+    "enotfound",
     "connection timeout",
     "timeout expired",
     "can't reach database",
@@ -279,10 +289,16 @@ async function readLocalEmployeeStore(): Promise<LocalEmployeeStore> {
     const raw = await fs.readFile(localEmployeeStorePath, "utf8");
     const parsed = JSON.parse(raw) as LocalEmployeeStore;
     if (Array.isArray(parsed.users)) {
-      return { ...parsed, roles: mergeRoleDefinitions(parsed.roles) };
+      const store = { ...parsed, roles: mergeRoleDefinitions(parsed.roles) };
+      globalForLocalEmployeeStore.bluevoltLocalEmployeeStore = store;
+      return store;
     }
   } catch {
     // The local store is created on first use when Neon is not reachable.
+  }
+
+  if (globalForLocalEmployeeStore.bluevoltLocalEmployeeStore) {
+    return globalForLocalEmployeeStore.bluevoltLocalEmployeeStore;
   }
 
   const now = new Date().toISOString();
@@ -319,7 +335,17 @@ async function readLocalEmployeeStore(): Promise<LocalEmployeeStore> {
 }
 
 async function writeLocalEmployeeStore(store: LocalEmployeeStore) {
-  await fs.writeFile(localEmployeeStorePath, `${JSON.stringify(store, null, 2)}\n`, "utf8");
+  const normalizedStore = { ...store, roles: mergeRoleDefinitions(store.roles) };
+  globalForLocalEmployeeStore.bluevoltLocalEmployeeStore = normalizedStore;
+
+  try {
+    await fs.writeFile(localEmployeeStorePath, `${JSON.stringify(normalizedStore, null, 2)}\n`, "utf8");
+  } catch (error) {
+    if (!localStoreWriteWarningShown) {
+      localStoreWriteWarningShown = true;
+      console.warn("Employee local fallback store is running in memory only.", error);
+    }
+  }
 }
 
 let roleTableEnsured = false;
@@ -658,9 +684,11 @@ async function requireEmployee() {
 
 async function ensureFirstSuperAdmin(email: string, password: string) {
   const bootstrapEmail = (process.env.EMPLOYEE_BOOTSTRAP_EMAIL || "pareekshithraj@schools24.in").toLowerCase();
-  const bootstrapPassword = process.env.EMPLOYEE_BOOTSTRAP_PASSWORD || "Pareek@Schools24";
+  const bootstrapPasswords = process.env.EMPLOYEE_BOOTSTRAP_PASSWORD
+    ? [process.env.EMPLOYEE_BOOTSTRAP_PASSWORD]
+    : [defaultEmployeePassword, "Pareek@Schools24"];
 
-  if (email !== bootstrapEmail || password !== bootstrapPassword) return;
+  if (email !== bootstrapEmail || !bootstrapPasswords.includes(password)) return;
 
   const count = await prisma.employeeUser.count();
   if (count > 0) return;

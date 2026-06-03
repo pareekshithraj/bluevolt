@@ -377,6 +377,7 @@
   box-sizing: border-box;
   box-shadow: 4px 0 24px var(--border-color);
   z-index: 10;
+  overflow: hidden;
 }
 
 .brand {
@@ -410,6 +411,31 @@
   display: grid;
   gap: 6px;
   margin: 32px 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb-bg) transparent;
+}
+
+.nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+.nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.nav::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-bg);
+  border-radius: 999px;
+}
+
+.nav::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }
 
 .navButton {
@@ -687,8 +713,10 @@
 }
 
 .span4 { grid-column: span 4; }
+.span5 { grid-column: span 5; }
 .span3 { grid-column: span 3; }
 .span6 { grid-column: span 6; }
+.span7 { grid-column: span 7; }
 .span8 { grid-column: span 8; }
 .span9 { grid-column: span 9; }
 .span12 { grid-column: span 12; }
@@ -2276,6 +2304,8 @@
     z-index: 75;
     padding: 84px 20px 20px;
     box-shadow: var(--shadow-lg);
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .sidebarOpen {
@@ -2310,7 +2340,9 @@
 
   .span3,
   .span4,
+  .span5,
   .span6,
+  .span7,
   .span8,
   .span9 {
     grid-column: span 12;

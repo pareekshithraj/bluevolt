@@ -1,4 +1,4 @@
-﻿@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
 
 /* --- Theme Variables --- */
 .themeDark {
@@ -178,8 +178,16 @@
   flex: 1.25;
   display: none;
   position: relative;
-  background: linear-gradient(135deg, #0b0f19 0%, #020617 100%);
+  background: linear-gradient(-45deg, #0b0f19, #020617, #1e1b4b, #020617);
+  background-size: 400% 400%;
+  animation: loginGradientShift 15s ease infinite;
   overflow: hidden;
+}
+
+@keyframes loginGradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
 .loginVisual::before {
@@ -265,6 +273,13 @@
     0 40px 80px rgba(99, 91, 255, 0.08);
   position: relative;
   z-index: 10;
+  animation: loginFloat 6s ease-in-out infinite;
+}
+
+@keyframes loginFloat {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+  100% { transform: translateY(0px); }
 }
 
 .loginStatusPill {
@@ -353,13 +368,16 @@
 }
 
 .shell {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   background: var(--bg-shell);
   color: var(--text-primary);
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   font-family: 'Outfit', system-ui, -apple-system, sans-serif;
   letter-spacing: 0.02em;
+  transition: grid-template-columns 0.3s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .sidebar {
@@ -382,6 +400,7 @@
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb-bg) transparent;
+  transition: padding 0.3s cubic-bezier(0.25, 1, 0.5, 1), width 0.3s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .sidebar::-webkit-scrollbar {
@@ -432,10 +451,37 @@
   display: grid;
   gap: 6px;
   margin: 32px 0;
-  flex: 0 0 auto;
-  min-height: auto;
-  overflow: visible;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding-right: 4px;
+}
+
+.logoutButton {
+  width: 100%;
+  margin-top: auto;
+  border: 0;
+  border-top: 1px solid var(--border-color);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 16px 18px 0;
+  font-weight: 700;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.logoutButton:hover {
+  background: var(--button-ghost-hover);
+  color: #f87171;
 }
 
 .nav::-webkit-scrollbar {
@@ -487,7 +533,12 @@
 .main {
   padding: 40px;
   min-width: 0;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
   overflow-x: hidden;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
 }
 
 .topbar {
@@ -2201,7 +2252,7 @@
 .googleSheetGrid thead tr:first-child th {
   position: sticky;
   top: 0;
-  z-index: 5;
+  z-index: 10;
   text-align: center;
   color: var(--text-muted);
   background: var(--sheet-header-bg);
@@ -2212,7 +2263,7 @@
 .googleSheetGrid thead tr:nth-child(2) th {
   position: sticky;
   top: 42px;
-  z-index: 5;
+  z-index: 10;
   color: var(--sheet-header-color);
   background: var(--sheet-header-bg);
   font-size: 0.76rem;
@@ -2221,11 +2272,10 @@
   padding: 0 12px;
 }
 
-.sheetCornerCell,
 .sheetRowNumber {
   position: sticky;
   left: 0;
-  z-index: 6;
+  z-index: 9;
   min-width: 52px !important;
   width: 52px;
   text-align: center !important;
@@ -2236,7 +2286,18 @@
 }
 
 .sheetCornerCell {
+  position: sticky;
+  left: 0;
   top: 0;
+  z-index: 11 !important;
+  min-width: 52px !important;
+  width: 52px;
+  background: var(--sheet-header-bg) !important;
+}
+
+.googleSheetGrid thead th.sheetRowNumber {
+  z-index: 11 !important;
+  top: 42px;
 }
 
 .sheetCellReadOnly {
@@ -2297,6 +2358,11 @@
 @media (max-width: 960px) {
   .shell {
     grid-template-columns: 1fr;
+  }
+
+  .googleSheetGrid th,
+  .googleSheetGrid td {
+    min-width: 140px;
   }
 
   .mobileMenuButton {
@@ -2467,3 +2533,158 @@
     width: 100%;
   }
 }
+
+/* --- Resource Card Grid --- */
+.resourceCardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.resourceCard {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.resourceCard:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-color-hover);
+}
+
+/* --- Meeting Timeline Cards --- */
+.meetingTimeline {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: relative;
+  padding-left: 20px;
+  border-left: 2px solid var(--border-color);
+  margin-top: 16px;
+}
+
+.meetingTimelineCard {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 16px;
+  position: relative;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.meetingTimelineCard::before {
+  content: "";
+  position: absolute;
+  left: -27px;
+  top: 24px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-brand);
+  border: 2px solid var(--bg-shell);
+}
+
+.meetingTimelineCard:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-color-hover);
+}
+
+/* --- Announcement Priority Borders --- */
+.announcementCard {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--border-color);
+  border-radius: 14px;
+  padding: 18px;
+  margin-bottom: 16px;
+  transition: border-color 0.2s ease;
+}
+
+.announcementCardUrgent {
+  border-left-color: #ef4444 !important;
+}
+
+.announcementCardImportant {
+  border-left-color: #f59e0b !important;
+}
+
+.announcementCardNormal {
+  border-left-color: #635bff !important;
+}
+
+/* --- COLLAPSIBLE SIDEBAR RULES --- */
+.sidebarCollapseToggle {
+  position: absolute;
+  top: 24px;
+  right: -12px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 100;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.sidebarCollapseToggle:hover {
+  background: var(--bg-shell);
+  color: var(--text-brand);
+  border-color: var(--border-color-hover);
+}
+
+@media (max-width: 960px) {
+  .sidebarCollapseToggle {
+    display: none !important;
+  }
+}
+
+/* --- COLLAPSIBLE SIDEBAR STATE --- */
+.shellCollapsed {
+  grid-template-columns: 84px minmax(0, 1fr) !important;
+}
+
+.sidebarCollapsed {
+  padding: 28px 12px !important;
+  align-items: center !important;
+}
+
+.sidebarCollapsed .sidebarProfile {
+  padding: 8px !important;
+  justify-content: center !important;
+  width: 100% !important;
+}
+
+.sidebarCollapsed .nav {
+  align-items: center !important;
+  width: 100% !important;
+}
+
+.sidebarCollapsed .navButton {
+  justify-content: center !important;
+  padding: 10px !important;
+  width: 42px !important;
+  height: 42px !important;
+}
+
+.sidebarCollapsed .logoutButton {
+  justify-content: center !important;
+  padding: 10px !important;
+  width: 42px !important;
+  height: 42px !important;
+  border-top: none !important;
+}
+

@@ -5,6 +5,7 @@ import Image from "next/image";
 
 export default function FloatingHeroWindows() {
   const [scrollY, setScrollY] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
 
   // Individual window hover/tilt states
   const [win1Tilt, setWin1Tilt] = useState({ x: 0, y: 0, isHovered: false });
@@ -16,6 +17,7 @@ export default function FloatingHeroWindows() {
     e: React.MouseEvent<HTMLDivElement>,
     setTilt: React.Dispatch<React.SetStateAction<{ x: number; y: number; isHovered: boolean }>>
   ) => {
+    if (isMobile) return;
     const card = e.currentTarget;
     const rect = card.getBoundingClientRect();
     const x = e.clientX - rect.left; // relative cursor X
@@ -33,6 +35,7 @@ export default function FloatingHeroWindows() {
   const handleCardMouseLeave = (
     setTilt: React.Dispatch<React.SetStateAction<{ x: number; y: number; isHovered: boolean }>>
   ) => {
+    if (isMobile) return;
     setTilt({ x: 0, y: 0, isHovered: false });
   };
 
@@ -41,9 +44,16 @@ export default function FloatingHeroWindows() {
       setScrollY(window.scrollY);
     };
 
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1100);
+    };
+
+    checkMobile();
     window.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("resize", checkMobile);
     return () => {
       window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("resize", checkMobile);
     };
   }, []);
 
@@ -61,11 +71,11 @@ export default function FloatingHeroWindows() {
         onMouseMove={(e) => handleCardMouseMove(e, setWin2Tilt)}
         onMouseLeave={() => handleCardMouseLeave(setWin2Tilt)}
         style={{
-          transform: `translateY(${offsetWin2}px) translateY(80px) rotateX(${win2Tilt.x}deg) rotateY(${win2Tilt.y}deg) scale(${win2Tilt.isHovered ? 1.025 : 1})`,
+          transform: isMobile ? "none" : `translateY(${offsetWin2}px) translateY(80px) rotateX(${win2Tilt.x}deg) rotateY(${win2Tilt.y}deg) scale(${win2Tilt.isHovered ? 1.025 : 1})`,
           zIndex: win2Tilt.isHovered ? 10 : 2,
-          width: "760px",
-          height: "440px",
-          top: "12%",
+          width: isMobile ? undefined : "760px",
+          height: isMobile ? undefined : "440px",
+          top: isMobile ? undefined : "12%",
           transition: "transform 0.1s cubic-bezier(0.25, 1, 0.5, 1), border-color 0.3s ease, box-shadow 0.3s ease"
         }}
       >
@@ -88,7 +98,7 @@ export default function FloatingHeroWindows() {
           <div style={{ width: "52px" }} />
         </div>
 
-        <div className="mac-window-body" style={{ padding: 0, overflow: "hidden", display: "flex", height: "calc(100% - 36px)", position: "relative" }}>
+        <div className="mac-window-body" style={{ padding: 0, overflow: "hidden", display: "flex", height: isMobile ? undefined : "calc(100% - 36px)", position: "relative" }}>
           <Image
             src="/Assets/img_1.png"
             alt="Schools24 Desktop Dashboard"
@@ -106,11 +116,11 @@ export default function FloatingHeroWindows() {
         onMouseMove={(e) => handleCardMouseMove(e, setWin1Tilt)}
         onMouseLeave={() => handleCardMouseLeave(setWin1Tilt)}
         style={{
-          transform: `translateY(${offsetWin1}px) translateY(120px) translateX(300px) rotateX(${win1Tilt.x}deg) rotateY(${win1Tilt.y}deg) scale(${win1Tilt.isHovered ? 1.025 : 1})`,
+          transform: isMobile ? "none" : `translateY(${offsetWin1}px) translateY(120px) translateX(300px) rotateX(${win1Tilt.x}deg) rotateY(${win1Tilt.y}deg) scale(${win1Tilt.isHovered ? 1.025 : 1})`,
           zIndex: win1Tilt.isHovered ? 11 : 4,
-          width: "250px",
-          height: "480px",
-          top: "8%",
+          width: isMobile ? undefined : "250px",
+          height: isMobile ? undefined : "480px",
+          top: isMobile ? undefined : "8%",
           transition: "transform 0.1s cubic-bezier(0.25, 1, 0.5, 1), border-color 0.3s ease, box-shadow 0.3s ease",
           border: "none",
         }}
@@ -172,11 +182,11 @@ export default function FloatingHeroWindows() {
         onMouseMove={(e) => handleCardMouseMove(e, setWin3Tilt)}
         onMouseLeave={() => handleCardMouseLeave(setWin3Tilt)}
         style={{
-          transform: `translateY(${offsetWin3}px) translateY(240px) translateX(-240px) rotateX(${win3Tilt.x}deg) rotateY(${win3Tilt.y}deg) scale(${win3Tilt.isHovered ? 1.025 : 1})`,
+          transform: isMobile ? "none" : `translateY(${offsetWin3}px) translateY(240px) translateX(-240px) rotateX(${win3Tilt.x}deg) rotateY(${win3Tilt.y}deg) scale(${win3Tilt.isHovered ? 1.025 : 1})`,
           zIndex: win3Tilt.isHovered ? 11 : 5,
-          width: "440px",
-          height: "280px",
-          top: "46%",
+          width: isMobile ? undefined : "440px",
+          height: isMobile ? undefined : "280px",
+          top: isMobile ? undefined : "46%",
           transition: "transform 0.1s cubic-bezier(0.25, 1, 0.5, 1), border-color 0.3s ease, box-shadow 0.3s ease",
           background: "rgba(10, 10, 12, 0.65)",
           backdropFilter: "blur(30px) saturate(190%)",
@@ -203,7 +213,7 @@ export default function FloatingHeroWindows() {
           <div style={{ width: "52px" }} />
         </div>
 
-        <div className="mac-window-body" style={{ padding: 0, overflow: "hidden", display: "flex", height: "calc(100% - 36px)", position: "relative" }}>
+        <div className="mac-window-body" style={{ padding: 0, overflow: "hidden", display: "flex", height: isMobile ? undefined : "calc(100% - 36px)", position: "relative" }}>
           <Image
             src="/Assets/img_3.png"
             alt="Schools24 Route Planner"

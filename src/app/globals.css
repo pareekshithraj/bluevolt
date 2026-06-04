@@ -123,7 +123,43 @@
 
 .light-theme .hero-wrapper {
   background: #ffffff;
-  background-image: radial-gradient(ellipse 80% 50% at 50% 0%, rgba(99, 91, 255, 0.06) 0%, transparent 60%);
+  overflow: hidden;
+  position: relative;
+}
+
+.light-theme .hero-wrapper::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: 
+    radial-gradient(at 10% 20%, rgba(99, 91, 255, 0.05) 0px, transparent 50%),
+    radial-gradient(at 90% 10%, rgba(14, 165, 233, 0.04) 0px, transparent 50%),
+    radial-gradient(at 50% 80%, rgba(236, 72, 153, 0.04) 0px, transparent 50%);
+  filter: blur(80px);
+  opacity: 0.95;
+  z-index: 1;
+  pointer-events: none;
+  animation: lightThemeBgDrift 25s infinite alternate ease-in-out;
+}
+
+@keyframes lightThemeBgDrift {
+  0% {
+    transform: scale(1) translate(0px, 0px);
+  }
+  50% {
+    transform: scale(1.08) translate(30px, -20px);
+  }
+  100% {
+    transform: scale(0.92) translate(-30px, 20px);
+  }
+}
+
+.light-theme .editorial-h1 {
+  background: linear-gradient(135deg, #0f172a 20%, #312e81 60%, #635bff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent !important;
 }
 
 .light-theme .bento-item {
@@ -573,11 +609,34 @@ main {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image: linear-gradient(var(--border-subtle) 1px, transparent 1px),
-                    linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px);
-  background-size: 80px 80px;
+  background-image: 
+    linear-gradient(to right, rgba(99, 91, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(99, 91, 255, 0.04) 1px, transparent 1px),
+    radial-gradient(rgba(99, 91, 255, 0.12) 1.5px, transparent 1.5px);
+  background-size: 64px 64px, 64px 64px, 64px 64px;
   background-position: center;
-  opacity: 0.7;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 30%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 30%, transparent 100%);
+}
+
+.hero-glow-blob-1 {
+  animation: floatBlob1 18s infinite alternate ease-in-out;
+}
+
+.hero-glow-blob-2 {
+  animation: floatBlob2 22s infinite alternate ease-in-out;
+}
+
+@keyframes floatBlob1 {
+  0% { transform: translate(-50%, 0) scale(1); }
+  50% { transform: translate(-40%, -30px) scale(1.1); }
+  100% { transform: translate(-60%, 20px) scale(0.9); }
+}
+
+@keyframes floatBlob2 {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(40px, 30px) scale(0.85); }
+  100% { transform: translate(-40px, -30px) scale(1.15); }
 }
 
 .hero-vignette-editorial {
@@ -606,13 +665,17 @@ main {
 }
 
 .editorial-h1 {
-  font-family: var(--font-serif);
-  font-size: clamp(3rem, 7.5vw, 6.2rem);
-  font-weight: 300;
-  line-height: 0.98;
-  letter-spacing: -0.02em;
-  color: var(--text-primary);
+  font-family: var(--font-sans, sans-serif);
+  font-size: clamp(2.25rem, 4.5vw, 3.75rem);
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
   margin-bottom: 2.5rem;
+  background: linear-gradient(135deg, #ffffff 40%, #c7d2fe 75%, #818cf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent !important;
 }
 
 .editorial-p {
@@ -673,7 +736,7 @@ main {
 
 @media (max-width: 768px) {
   .hero-wrapper {
-    padding: 10rem 2rem 6rem;
+    padding: 7rem 2rem 6rem;
   }
   .editorial-cta-row {
     flex-direction: column;
@@ -683,6 +746,19 @@ main {
   .editorial-btn-primary, .editorial-btn-secondary {
     text-align: center;
     padding: 1rem;
+  }
+  .logo-strip-section {
+    padding: 3rem 1.5rem;
+  }
+  .logo-strip-title {
+    margin-bottom: 2rem;
+  }
+  .logo-strip-row {
+    gap: 2.5rem;
+  }
+  .logo-strip-item img {
+    max-height: 28px !important;
+    width: auto !important;
   }
 }
 
@@ -2325,4 +2401,14 @@ main {
   .stat-card {
     padding: 2rem 1.5rem;
   }
+}
+
+/* Lock body scroll in portal */
+.portal-body-lock,
+body.portal-body-lock,
+html.portal-body-lock {
+  overflow: hidden !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  width: 100% !important;
 }

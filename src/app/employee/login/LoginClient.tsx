@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail, Info } from "lucide-react";
 import styles from "../portal.module.css";
 
 function simpleLoginError(message?: string) {
@@ -155,12 +155,20 @@ export default function LoginClient() {
           <form onSubmit={submit} className={styles.formGrid}>
             <label className={`${styles.field} ${styles.fieldWide}`}>
               <span className={styles.label}>Employee Email</span>
-              <input className={styles.input} type="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={isLockedOut} />
+              <div style={{ position: "relative" }}>
+                <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", display: "flex", pointerEvents: "none" }}>
+                  <Mail size={18} />
+                </span>
+                <input className={styles.input} type="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={isLockedOut} style={{ paddingLeft: 42 }} />
+              </div>
             </label>
             <label className={`${styles.field} ${styles.fieldWide}`}>
               <span className={styles.label}>Password</span>
               <div style={{ position: "relative" }}>
-                <input className={styles.input} type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} required disabled={isLockedOut} style={{ paddingRight: 40 }} />
+                <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", display: "flex", pointerEvents: "none" }}>
+                  <Lock size={18} />
+                </span>
+                <input className={styles.input} type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} required disabled={isLockedOut} style={{ paddingLeft: 42, paddingRight: 40 }} />
                 <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#64748b", display: "flex" }}>
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -169,7 +177,12 @@ export default function LoginClient() {
             <button className={`${styles.button} ${styles.fieldWide}`} type="submit" disabled={pending || isLockedOut} style={{ marginTop: 8 }}>
               {pending ? "Authorizing..." : "Secure Login"}
             </button>
-            <p className={`${styles.loginSecurityHint} ${styles.fieldWide}`}>New employees use the default password, then reset it from Profile after first login.</p>
+            <div className={`${styles.loginSecurityHint} ${styles.fieldWide}`} style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "center", background: "var(--bg-shell)", padding: "10px 14px", borderRadius: 10, border: "1px dashed var(--border-color)", marginTop: 12 }}>
+              <Info size={16} style={{ color: "var(--text-brand)", flexShrink: 0 }} />
+              <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-muted)", textAlign: "left", lineHeight: "1.4" }}>
+                New employees use the default password, then reset it from Profile after first login.
+              </p>
+            </div>
           </form>
         </section>
       </div>

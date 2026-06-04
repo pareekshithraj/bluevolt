@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import FloatingHeroWindows from "@/components/FloatingHeroWindows";
 import StatsSection from "@/components/StatsSection";
+import { ArrowRight } from "lucide-react";
 
 export default async function Home() {
   const host = (await headers()).get("host")?.toLowerCase() ?? "";
@@ -19,16 +20,51 @@ export default async function Home() {
     <main>
       
       {/* --- PREMIUM LUXURY HERO SECTION --- */}
-      <div className="hero-wrapper" style={{ padding: "10rem 4rem 6rem" }}>
+      <div className="hero-wrapper" style={{ 
+        padding: "80px 24px 60px 24px", 
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        alignItems: "center",
+        minHeight: "100vh"
+      }}>
         
-        <div className="hero-vignette-editorial"></div>
+        {/* Subtle background grid pattern */}
+        <div className="structural-grid-overlay" style={{ pointerEvents: "none" }}></div>
+        
+        {/* Elegant blurred background glow blobs */}
+        <div className="hero-glow-blob-1" style={{
+          position: "absolute",
+          top: "35%",
+          left: "50%",
+          width: "min(680px, 95vw)",
+          height: "320px",
+          background: "radial-gradient(circle, rgba(99, 91, 255, 0.16) 0%, rgba(14, 165, 233, 0.06) 50%, transparent 100%)",
+          filter: "blur(100px)",
+          pointerEvents: "none",
+          zIndex: 1
+        }} />
+        <div className="hero-glow-blob-2" style={{
+          position: "absolute",
+          top: "25%",
+          left: "20%",
+          width: "min(350px, 80vw)",
+          height: "280px",
+          background: "radial-gradient(circle, rgba(236, 72, 153, 0.08) 0%, transparent 80%)",
+          filter: "blur(80px)",
+          pointerEvents: "none",
+          zIndex: 1
+        }} />
 
-        <section className="hero">
+        <div className="hero-vignette-editorial" style={{ zIndex: 2 }}></div>
+
+        <section className="hero" style={{ position: "relative", zIndex: 10, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", width: "100%", flex: 1 }}>
           {/* Centered SaaS Hero Layout (inspired by Untitled UI) */}
-          <div className="hero-layout-centered">
+          <div className="hero-layout-centered" style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", width: "100%", flex: 1 }}>
             
             {/* Centered SaaS Copywriting & Action Buttons */}
-            <div className="hero-text-container" style={{ textAlign: "center", padding: 0, background: "transparent", backdropFilter: "none", margin: "0 auto 4rem auto", maxWidth: "800px" }}>
+            <div className="hero-text-container" style={{ textAlign: "center", padding: 0, background: "transparent", backdropFilter: "none", margin: 0, maxWidth: "800px", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center" }}>
               <Reveal delay={0.1}>
                 <div style={{ marginBottom: "1.5rem", display: "flex", justifyContent: "center" }}>
                   <span style={{ 
@@ -37,11 +73,11 @@ export default async function Home() {
                     gap: "0.5rem", 
                     borderRadius: "9999px", 
                     padding: "0.45rem 1.25rem", 
-                    border: "1px solid var(--border-main)", 
-                    background: "var(--bg-secondary)", 
+                    border: "1px solid rgba(99, 91, 255, 0.18)", 
+                    background: "rgba(99, 91, 255, 0.06)", 
                     fontSize: "0.82rem", 
-                    color: "var(--text-secondary)", 
-                    fontWeight: 500,
+                    color: "#635bff", 
+                    fontWeight: 600,
                     letterSpacing: "0.02em", 
                     backdropFilter: "blur(10px)",
                     WebkitBackdropFilter: "blur(10px)"
@@ -52,43 +88,84 @@ export default async function Home() {
               </Reveal>
 
               <Reveal delay={0.2}>
-                <h1 className="editorial-h1" style={{ textAlign: "center", textWrap: "balance", fontWeight: 800, lineHeight: 1.05, marginBottom: "1.5rem", color: "var(--text-primary)" }}>
-                  The workspace for
-                  <br />
-                  <span style={{ color: "#635bff" }}>next-gen schools.</span>
+                <h1 className="editorial-h1" style={{ 
+                  textAlign: "center", 
+                  textWrap: "balance", 
+                  lineHeight: 1.1, 
+                  marginBottom: "1.5rem"
+                }}>
+                  The workspace for next-gen digital operations.
                 </h1>
               </Reveal>
 
               <Reveal delay={0.3}>
-                <p className="editorial-p" style={{ textAlign: "center", margin: "0 auto 2.5rem auto", maxWidth: "650px", fontSize: "1.15rem", lineHeight: 1.6, color: "var(--text-secondary)" }}>
-                  BlueVolt Studio is the unified workspace built for modern school operations, learning ecosystems, and campus management. Drive institution growth all in one place.
+                <p className="editorial-p" style={{ 
+                  textAlign: "center", 
+                  margin: "0 auto 2.5rem auto", 
+                  maxWidth: "700px", 
+                  fontSize: "1.2rem", 
+                  lineHeight: 1.65, 
+                  color: "#475569",
+                  fontWeight: 400
+                }}>
+                  BlueVolt Studio orchestrates education, e-commerce, healthcare diagnostics, events, and modern SaaS networks in a single unified platform. Built to automate complex workflows and accelerate growth.
                 </p>
               </Reveal>
 
               <Reveal delay={0.4} width="100%">
                 <div className="editorial-cta-row" style={{ justifyContent: "center", gap: "1.5rem", width: "100%", display: "flex", alignItems: "center" }}>
-                  <Link href="/studio" className="firebase-btn-primary btn-pill">
-                    Open BlueVolt Studio
+                  <Link href="/studio" className="firebase-btn-primary btn-pill" style={{ 
+                    display: "inline-flex", 
+                    alignItems: "center", 
+                    gap: "8px",
+                    background: "linear-gradient(135deg, #635bff 0%, #4f46e5 100%)",
+                    color: "#ffffff",
+                    border: "none",
+                    boxShadow: "0 4px 14px rgba(99, 91, 255, 0.3)",
+                    padding: "1rem 2.5rem",
+                    fontWeight: 600,
+                    borderRadius: "9999px"
+                  }}>
+                    Open BlueVolt Studio <ArrowRight size={16} />
                   </Link>
-                  <Link href="/contact" className="firebase-btn-secondary btn-pill">
+                  <Link href="/contact" className="firebase-btn-secondary btn-pill" style={{
+                    borderColor: "rgba(99, 91, 255, 0.25)",
+                    color: "#4f46e5",
+                    background: "rgba(99, 91, 255, 0.03)",
+                    padding: "1rem 2.5rem",
+                    fontWeight: 600,
+                    borderRadius: "9999px"
+                  }}>
                     Board Inquiry
                   </Link>
                 </div>
               </Reveal>
             </div>
 
-
-
-          </div>
-
-          {/* Full-width Product Showcase Cascading Windows */}
-          <div style={{ marginTop: "4rem", position: "relative", zIndex: 10 }}>
-            <Reveal delay={0.5} width="100%">
-              <FloatingHeroWindows />
-            </Reveal>
           </div>
 
         </section>
+      </div>
+
+      {/* --- PRODUCT SHOWCASE WINDOWS SECTION (SCROLL REVEAL) --- */}
+      <div className="showcase-section" style={{
+        position: "relative",
+        padding: "0 24px 6rem 24px",
+        background: "var(--bg-base)",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        width: "100%",
+        overflow: "hidden"
+      }}>
+        <div className="structural-grid-overlay" style={{ opacity: 0.12, pointerEvents: "none" }}></div>
+        <div className="hero-vignette-editorial" style={{ transform: "rotate(180deg)", top: "-100px", height: "200px", pointerEvents: "none" }}></div>
+        
+        <div style={{ maxWidth: "1400px", width: "100%", position: "relative", zIndex: 10 }}>
+          <Reveal delay={0.2} width="100%">
+            <FloatingHeroWindows />
+          </Reveal>
+        </div>
       </div>
 
       {/* --- ANIMATED STATS METRICS BAR --- */}

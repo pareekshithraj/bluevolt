@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Image from "next/image";
@@ -191,6 +191,20 @@ function formatPortalDateTime(value: DateValue) {
   return date ? portalDateTimeFormatter.format(date) : "--";
 }
 
+function formatPortalTimeAgo(value: DateValue) {
+  const date = validDate(value);
+  if (!date) return "--";
+  const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return portalDateFormatter.format(date);
+}
+
 function formatPortalNumber(value: number) {
   return portalNumberFormatter.format(value);
 }
@@ -276,6 +290,8 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const [error, setError] = useState("");
   const [sortResources, setSortResources] = useState("newest");
   const [employeeSearch, setEmployeeSearch] = useState("");
+  const [activeEmployeeMenuId, setActiveEmployeeMenuId] = useState<number | null>(null);
+  const [checkedFeatures, setCheckedFeatures] = useState<Set<string>>(new Set());
   const [employeeTypeFilter, setEmployeeTypeFilter] = useState("all");
   const [workHoursEmployeeId, setWorkHoursEmployeeId] = useState("");
   const [resourceTypeFilter, setResourceTypeFilter] = useState("all");
@@ -302,13 +318,35 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
 
   const [theme, setTheme] = useState<"dark" | "light">("light");
   const [now, setNow] = useState(new Date());
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("bluevolt-sidebar-collapsed") === "true";
+    }
+    return false;
+  });
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem("bluevolt-sidebar-collapsed", String(next));
+      return next;
+    });
+  };
 
   useEffect(() => {
     setTheme("light");
     localStorage.setItem("bluevolt-theme", "light");
 
+    // Lock page scrolling when in the portal
+    document.body.classList.add("portal-body-lock");
+    document.documentElement.classList.add("portal-body-lock");
+
     const timer = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      document.body.classList.remove("portal-body-lock");
+      document.documentElement.classList.remove("portal-body-lock");
+    };
   }, []);
 
   useEffect(() => {
@@ -349,6 +387,25 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   useEffect(() => {
     setMobileSidebarOpen(false);
   }, [tab]);
+
+  // Close employee actions menu on click outside
+  useEffect(() => {
+    const handleOutsideClick = () => {
+      setActiveEmployeeMenuId(null);
+    };
+    window.addEventListener("click", handleOutsideClick);
+    return () => window.removeEventListener("click", handleOutsideClick);
+  }, []);
+
+  // Sync checkedFeatures state with selected role
+  useEffect(() => {
+    if (tab === "access" && data.roleDefinitions) {
+      const activeRole = data.roleDefinitions.find((r) => r.key === selectedRoleKey) || data.roleDefinitions[0];
+      if (activeRole) {
+        setCheckedFeatures(new Set((activeRole.featureAccess || "").split(",").map((f) => f.trim()).filter(Boolean)));
+      }
+    }
+  }, [selectedRoleKey, tab, data.roleDefinitions]);
 
   const visibleTabs = useMemo(() => tabs.filter((item) => {
     if (item.id === "dashboard") return true;
@@ -852,7 +909,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   };
 
   return (
-    <div className={`${styles.shell} ${theme === "light" ? styles.themeLight : styles.themeDark}`}>
+    <div className={`${styles.shell} ${theme === "light" ? styles.themeLight : styles.themeDark} ${sidebarCollapsed ? styles.shellCollapsed : ""}`}>
       {/* Mobile hamburger button */}
       <button className={styles.mobileMenuButton} type="button" onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)} aria-label="Toggle navigation">
         {mobileSidebarOpen ? <X size={22} /> : <Menu size={22} />}
@@ -897,38 +954,69 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
         </div>
       )}
 
-      <aside className={`${styles.sidebar} ${mobileSidebarOpen ? styles.sidebarOpen : ""}`}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 28, paddingBottom: 16, borderBottom: "1px solid var(--border-color)" }}>
-          <Image src="/logo.png" alt="BlueVolt Logo" width={110} height={52} style={{ height: 52, width: "auto", objectFit: "contain" }} />
+      <aside className={`${styles.sidebar} ${mobileSidebarOpen ? styles.sidebarOpen : ""} ${sidebarCollapsed ? styles.sidebarCollapsed : ""}`}>
+        {/* Collapse toggle button (Desktop only) */}
+        <button 
+          className={styles.sidebarCollapseToggle} 
+          onClick={toggleSidebar} 
+          type="button"
+          aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {sidebarCollapsed ? <ChevronRight size={14} /> : <ChevronRight size={14} style={{ transform: "rotate(180deg)" }} />}
+        </button>
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 28, paddingBottom: 16, borderBottom: "1px solid var(--border-color)", width: "100%" }}>
+          {sidebarCollapsed ? (
+            <span style={{ fontSize: "1.45rem", fontWeight: 900, color: "var(--text-brand)" }}>B</span>
+          ) : (
+            <Image src="/logo.png" alt="BlueVolt Logo" width={110} height={52} style={{ height: 52, width: "auto", objectFit: "contain" }} />
+          )}
         </div>
         <div className={styles.sidebarProfile}>
           <div className={styles.sidebarAvatar}>
             <span>{userInitials}</span>
             {isWorking && <span className={styles.sidebarOnlineDot} />}
           </div>
-          <div className={styles.sidebarProfileInfo}>
-            <div className={styles.sidebarName} style={{ margin: 0, fontWeight: 700, fontSize: "0.95rem" }}>{data.session.name}</div>
-            <div className={styles.pill} style={{ marginTop: 4, fontSize: "0.68rem", textTransform: "uppercase" }}>{roleLabel}</div>
-          </div>
+          {!sidebarCollapsed && (
+            <div className={styles.sidebarProfileInfo}>
+              <div className={styles.sidebarName} style={{ margin: 0, fontWeight: 700, fontSize: "0.95rem" }}>{data.session.name}</div>
+              <div className={styles.pill} style={{ marginTop: 4, fontSize: "0.68rem", textTransform: "uppercase" }}>{roleLabel}</div>
+            </div>
+          )}
         </div>
         <nav className={styles.nav}>
           {visibleTabs.map((item) => {
             const Icon = item.icon;
             return (
-              <button key={item.id} className={`${styles.navButton} ${tab === item.id ? styles.navButtonActive : ""}`} onClick={() => {
-                openPortalTab(item.id);
-              }} type="button">
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}><Icon size={16} /> {loadingTab === item.id ? "Loading..." : item.label}</span>
-                {tab === item.id && <ChevronRight size={14} className={styles.navChevron} />}
+              <button 
+                key={item.id} 
+                className={`${styles.navButton} ${tab === item.id ? styles.navButtonActive : ""}`} 
+                onClick={() => {
+                  openPortalTab(item.id);
+                }} 
+                type="button"
+                title={item.label}
+              >
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+                  <Icon size={18} /> 
+                  {!sidebarCollapsed && (loadingTab === item.id ? "Loading..." : item.label)}
+                </span>
+                {!sidebarCollapsed && tab === item.id && <ChevronRight size={14} className={styles.navChevron} />}
               </button>
             );
           })}
         </nav>
-        <button className={styles.logoutButton} type="button" onClick={() => startTransition(async () => {
-          await logoutEmployee();
-          router.push("/employee/login");
-        })}>
-          <LogOut size={16} /> Sign out
+        <button 
+          className={styles.logoutButton} 
+          type="button" 
+          title="Sign out"
+          onClick={() => startTransition(async () => {
+            await logoutEmployee();
+            router.push("/employee/login");
+          })}
+        >
+          <LogOut size={18} />
+          {!sidebarCollapsed && " Sign out"}
         </button>
       </aside>
 
@@ -2062,25 +2150,39 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 </div>
                 <span className={styles.pill}>{data.announcements.length} visible</span>
               </div>
-              <div className={styles.list}>{data.announcements.length === 0 ? <div className={styles.emptyState}>No announcements yet.</div> : data.announcements.map((announcement) => (
-                <div className={styles.row} key={announcement.id}>
-                  <div className={styles.rowHeader}><strong>{announcement.title}</strong><span className={announcement.priority === "Urgent" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{announcement.priority}</span></div>
-                  <p>{announcement.body}</p>
-                  <p className={styles.muted}>{announcement.audienceRoles} - {formatPortalDateTime(announcement.createdAt)}</p>
-                  {data.capabilities.canPublishAnnouncements && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "announcement", id: announcement.id.toString() }))}>Delete</button>}
-                  {data.capabilities.canPublishAnnouncements && (
-                    <details className={styles.editPanel}>
-                      <summary>Edit announcement</summary>
-                      <form className={styles.formGrid} onSubmit={submit(saveAnnouncement)}>
-                        <input type="hidden" name="id" value={announcement.id} />
-                        <Field label="Title" name="title" defaultValue={announcement.title} required wide />
-                        <Field label="Audience Roles" name="audienceRoles" options={audienceOptionsForValue(announcement.audienceRoles)} defaultValue={announcement.audienceRoles} wide />
-                        <Field label="Priority" name="priority" options={["Normal", "Important", "Urgent"]} defaultValue={announcement.priority} />
-                        <Field label="Body" name="body" textarea defaultValue={announcement.body} wide required />
-                        <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Announcement</button>
-                      </form>
-                    </details>
-                  )}
+              <div>{data.announcements.length === 0 ? <div className={styles.emptyState}>No announcements yet.</div> : data.announcements.map((announcement) => (
+                <div className={`${styles.announcementCard} ${announcement.priority === "Urgent" ? styles.announcementCardUrgent : announcement.priority === "Important" ? styles.announcementCardImportant : styles.announcementCardNormal}`} key={announcement.id}>
+                  <div className={styles.rowHeader}>
+                    <strong style={{ fontSize: "1.1rem" }}>{announcement.title}</strong>
+                    <span className={announcement.priority === "Urgent" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>
+                      {announcement.priority}
+                    </span>
+                  </div>
+                  <p style={{ margin: "8px 0", lineHeight: "1.5", fontSize: "0.95rem" }}>{announcement.body}</p>
+                  <p className={styles.muted} style={{ fontSize: "0.82rem", display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
+                    <span>Visible to: {displayRole(announcement.audienceRoles)}</span>
+                    <span>{formatPortalTimeAgo(announcement.createdAt)}</span>
+                  </p>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 12 }}>
+                    {data.capabilities.canPublishAnnouncements && (
+                      <button className={styles.ghostButton} style={{ fontSize: "0.8rem", padding: "6px 14px", minHeight: 34, color: "#f87171" }} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "announcement", id: announcement.id.toString() }))}>
+                        Delete
+                      </button>
+                    )}
+                    {data.capabilities.canPublishAnnouncements && (
+                      <details className={styles.editPanel} style={{ width: "100%", marginTop: 8 }}>
+                        <summary style={{ fontSize: "0.78rem" }}>Edit announcement</summary>
+                        <form className={styles.formGrid} onSubmit={submit(saveAnnouncement)} style={{ marginTop: 8 }}>
+                          <input type="hidden" name="id" value={announcement.id} />
+                          <Field label="Title" name="title" defaultValue={announcement.title} required wide />
+                          <Field label="Audience Roles" name="audienceRoles" options={audienceOptionsForValue(announcement.audienceRoles)} defaultValue={announcement.audienceRoles} wide />
+                          <Field label="Priority" name="priority" options={["Normal", "Important", "Urgent"]} defaultValue={announcement.priority} />
+                          <Field label="Body" name="body" textarea defaultValue={announcement.body} wide required />
+                          <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Announcement</button>
+                        </form>
+                      </details>
+                    )}
+                  </div>
                 </div>
               ))}</div>
             </div>
@@ -2111,34 +2213,60 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 </div>
                 <span className={styles.pill}>{data.meetings.length} visible</span>
               </div>
-              <div className={styles.list}>{data.meetings.length === 0 ? <div className={styles.emptyState}>No visible meetings yet.</div> : data.meetings.map((meeting) => (
-                <div className={styles.row} key={meeting.id}>
-                  <div className={styles.rowHeader}><strong>{meeting.title}</strong><span className={styles.pill}>{meeting.audienceRoles}</span></div>
-                  <p className={styles.muted}>{formatPortalDateTime(meeting.startsAt)} - {formatPortalDateTime(meeting.endsAt)}</p>
-                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                    {meeting.meetUrl && <a href={meeting.meetUrl} target="_blank" rel="noopener noreferrer">Open Google Meet</a>}
-                    <a href={meeting.calendarUrl} target="_blank" rel="noopener noreferrer">Add to Google Calendar</a>
-                    {data.capabilities.canScheduleMeetings && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "meeting", id: meeting.id.toString() }))}>Delete</button>}
-                  </div>
-                  {data.capabilities.canScheduleMeetings && (
-                    <details className={styles.editPanel}>
-                      <summary>Edit meeting</summary>
-                      <form className={styles.formGrid} onSubmit={submit(saveMeeting)}>
-                        <input type="hidden" name="id" value={meeting.id} />
-                        <Field label="Title" name="title" defaultValue={meeting.title} required wide />
-                        <Field label="Starts At" name="startsAt" type="datetime-local" defaultValue={inputDateTime(meeting.startsAt)} required />
-                        <Field label="Ends At" name="endsAt" type="datetime-local" defaultValue={inputDateTime(meeting.endsAt)} required />
-                        <Field label="Meet URL" name="meetUrl" type="url" defaultValue={meeting.meetUrl || ""} wide />
-                        <Field label="Audience Roles" name="audienceRoles" options={audienceOptionsForValue(meeting.audienceRoles)} defaultValue={meeting.audienceRoles} wide />
-                        <Field label="Applicant Name" name="applicantName" defaultValue={meeting.applicantName || ""} />
-                        <Field label="Applicant Email" name="applicantEmail" type="email" defaultValue={meeting.applicantEmail || ""} />
-                        <Field label="Notes" name="notes" textarea defaultValue={meeting.notes || ""} wide />
-                        <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Meeting</button>
-                      </form>
-                    </details>
-                  )}
-                </div>
-              ))}</div>
+              <div className={styles.meetingTimeline}>
+                {data.meetings.length === 0 ? (
+                  <div className={styles.emptyState}>No visible meetings yet.</div>
+                ) : (
+                  data.meetings.map((meeting) => (
+                    <div className={styles.meetingTimelineCard} key={meeting.id}>
+                      <div className={styles.rowHeader}>
+                        <strong style={{ fontSize: "1.05rem" }}>{meeting.title}</strong>
+                        <span className={styles.pill}>{displayRole(meeting.audienceRoles)}</span>
+                      </div>
+                      <p className={styles.muted} style={{ fontSize: "0.84rem", margin: "6px 0 12px" }}>
+                        {formatPortalDateTime(meeting.startsAt)} – {formatPortalDateTime(meeting.endsAt)}
+                      </p>
+                      {meeting.notes && (
+                        <p className={styles.muted} style={{ fontSize: "0.84rem", background: "var(--bg-shell)", padding: "10px 14px", borderRadius: 8, margin: "8px 0 12px", borderLeft: "3px solid var(--border-color)" }}>
+                          {meeting.notes}
+                        </p>
+                      )}
+                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                        {meeting.meetUrl && (
+                          <a className={styles.button} href={meeting.meetUrl} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", padding: "6px 14px", minHeight: 34, fontSize: "0.8rem", textDecoration: "none", alignItems: "center" }}>
+                            Join Google Meet
+                          </a>
+                        )}
+                        <a className={styles.ghostButton} href={meeting.calendarUrl} target="_blank" rel="noopener noreferrer" style={{ padding: "6px 14px", minHeight: 34, fontSize: "0.8rem" }}>
+                          Add to Calendar
+                        </a>
+                        {data.capabilities.canScheduleMeetings && (
+                          <button className={styles.ghostButton} style={{ padding: "6px 14px", minHeight: 34, fontSize: "0.8rem", color: "#f87171" }} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "meeting", id: meeting.id.toString() }))}>
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                      {data.capabilities.canScheduleMeetings && (
+                        <details className={styles.editPanel} style={{ marginTop: 12 }}>
+                          <summary style={{ fontSize: "0.78rem" }}>Edit meeting</summary>
+                          <form className={styles.formGrid} onSubmit={submit(saveMeeting)} style={{ marginTop: 8 }}>
+                            <input type="hidden" name="id" value={meeting.id} />
+                            <Field label="Title" name="title" defaultValue={meeting.title} required wide />
+                            <Field label="Starts At" name="startsAt" type="datetime-local" defaultValue={inputDateTime(meeting.startsAt)} required />
+                            <Field label="Ends At" name="endsAt" type="datetime-local" defaultValue={inputDateTime(meeting.endsAt)} required />
+                            <Field label="Meet URL" name="meetUrl" type="url" defaultValue={meeting.meetUrl || ""} wide />
+                            <Field label="Audience Roles" name="audienceRoles" options={audienceOptionsForValue(meeting.audienceRoles)} defaultValue={meeting.audienceRoles} wide />
+                            <Field label="Applicant Name" name="applicantName" defaultValue={meeting.applicantName || ""} />
+                            <Field label="Applicant Email" name="applicantEmail" type="email" defaultValue={meeting.applicantEmail || ""} />
+                            <Field label="Notes" name="notes" textarea defaultValue={meeting.notes || ""} wide />
+                            <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Meeting</button>
+                          </form>
+                        </details>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </section>
         )}
@@ -2187,32 +2315,68 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   </select>
                 </div>
               </div>
-              <div className={styles.list}>{filteredResources.length === 0 ? <div className={styles.emptyState}>No matching resources.</div> : filteredResources.map((resource) => (
-                <div className={styles.row} key={resource.id}>
-                  <div className={styles.rowHeader}><strong>{resource.title}</strong><span className={styles.pill}>{resource.resourceType}</span></div>
-                  <p className={styles.muted}>{resource.audienceRoles} {resource.tags ? `- ${resource.tags}` : ""}</p>
-                  <div className={styles.resourceActions}>
-                    <a className={styles.ghostButton} href={resource.url} target="_blank" rel="noopener noreferrer">Open / Download</a>
-                    {resource.description && <span className={styles.muted}>{resource.description}</span>}
+              <div className={styles.resourceCardGrid}>{filteredResources.length === 0 ? <div className={styles.emptyState}>No matching resources.</div> : filteredResources.map((resource) => {
+                const renderIcon = () => {
+                  switch (resource.resourceType) {
+                    case "Link": return "🔗";
+                    case "PDF": return "📄";
+                    case "Excel": return "📊";
+                    case "PowerPoint": return "📉";
+                    case "Document": return "📝";
+                    case "Image": return "🖼️";
+                    case "Video": return "🎥";
+                    default: return "📁";
+                  }
+                };
+                return (
+                  <div className={styles.resourceCard} key={resource.id}>
+                    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+                      <div className={styles.rowHeader} style={{ alignItems: "flex-start", gap: 8, marginBottom: 0 }}>
+                        <strong style={{ fontSize: "1.05rem", display: "flex", alignItems: "center", gap: 6 }}>
+                          <span>{renderIcon()}</span>
+                          {resource.title}
+                        </strong>
+                        <span className={styles.pill}>{resource.resourceType}</span>
+                      </div>
+                      <p className={styles.muted} style={{ fontSize: "0.82rem", margin: 0 }}>
+                        Visible to: {displayRole(resource.audienceRoles)} {resource.tags ? `• ${resource.tags}` : ""}
+                      </p>
+                      {resource.description && (
+                        <p className={styles.muted} style={{ fontSize: "0.85rem", marginTop: 4, background: "var(--bg-shell)", padding: "8px 12px", borderRadius: 8, borderLeft: "3px solid var(--border-color)", lineHeight: "1.4" }}>
+                          {resource.description}
+                        </p>
+                      )}
+                    </div>
+                    <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                        <a className={styles.button} href={resource.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", fontSize: "0.8rem", padding: "6px 14px", minHeight: 34, display: "inline-flex", alignItems: "center" }}>
+                          Open / Download
+                        </a>
+                        {data.capabilities.canManageResources && (
+                          <button className={styles.ghostButton} style={{ fontSize: "0.8rem", padding: "6px 14px", minHeight: 34, color: "#f87171" }} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "resource", id: resource.id.toString() }))}>
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                      {data.capabilities.canManageResources && (
+                        <details className={styles.editPanel} style={{ marginTop: 8 }}>
+                          <summary style={{ fontSize: "0.78rem" }}>Edit resource</summary>
+                          <form className={styles.formGrid} onSubmit={submit(saveResource)} style={{ marginTop: 8 }}>
+                            <input type="hidden" name="id" value={resource.id} />
+                            <Field label="Title" name="title" defaultValue={resource.title} required />
+                            <Field label="Type" name="resourceType" options={["Link", "PDF", "Excel", "PowerPoint", "Document", "Image", "Video", "Other"]} defaultValue={resource.resourceType} />
+                            <Field label="URL" name="url" type="url" defaultValue={resource.url} required wide />
+                            <Field label="Audience Roles" name="audienceRoles" options={audienceOptionsForValue(resource.audienceRoles)} defaultValue={resource.audienceRoles} wide />
+                            <Field label="Tags" name="tags" defaultValue={resource.tags || ""} wide />
+                            <Field label="Description" name="description" textarea defaultValue={resource.description || ""} wide />
+                            <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Resource</button>
+                          </form>
+                        </details>
+                      )}
+                    </div>
                   </div>
-                  {data.capabilities.canManageResources && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "resource", id: resource.id.toString() }))}>Delete</button>}
-                  {data.capabilities.canManageResources && (
-                    <details className={styles.editPanel}>
-                      <summary>Edit resource</summary>
-                      <form className={styles.formGrid} onSubmit={submit(saveResource)}>
-                        <input type="hidden" name="id" value={resource.id} />
-                        <Field label="Title" name="title" defaultValue={resource.title} required />
-                        <Field label="Type" name="resourceType" options={["Link", "PDF", "Excel", "PowerPoint", "Document", "Image", "Video", "Other"]} defaultValue={resource.resourceType} />
-                        <Field label="URL" name="url" type="url" defaultValue={resource.url} required wide />
-                        <Field label="Audience Roles" name="audienceRoles" options={audienceOptionsForValue(resource.audienceRoles)} defaultValue={resource.audienceRoles} wide />
-                        <Field label="Tags" name="tags" defaultValue={resource.tags || ""} wide />
-                        <Field label="Description" name="description" textarea defaultValue={resource.description || ""} wide />
-                        <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Resource</button>
-                      </form>
-                    </details>
-                  )}
-                </div>
-              ))}</div>
+                );
+              })}</div>
             </div>
           </section>
         )}
@@ -2690,6 +2854,116 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 ))}
               </div>
             </div>
+            <div className={`${styles.card} ${styles.span8}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>Employees</h2>
+                  <p className={styles.muted}>Search employees, verify work windows, and monitor active portal presence.</p>
+                </div>
+                <div className={styles.toolbar}>
+                  <label style={{ position: "relative", display: "block" }}>
+                    <Search size={14} style={{ position: "absolute", left: 10, top: 14, color: "#94a3b8" }} />
+                    <input className={styles.input} style={{ paddingLeft: 32, width: 220 }} value={employeeSearch} onChange={(event) => setEmployeeSearch(event.target.value)} placeholder="Search employee" />
+                  </label>
+                  <select className={styles.select} style={{ maxWidth: 150 }} value={employeeTypeFilter} onChange={(event) => setEmployeeTypeFilter(event.target.value)}>
+                    <option value="all">All types</option>
+                    {["Full-time", "Part-time", "Intern", "Contractor", "Consultant"].map((type) => <option key={type} value={type}>{type}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className={styles.quickGrid} style={{ marginBottom: 12 }}>
+                <div className={styles.row}><span className={styles.pill}><Users size={13} /> {employees.length} total</span></div>
+                <div className={styles.row}><span className={`${styles.pill} ${styles.pillSuccess}`}><UserCheck size={13} /> {onlineEmployees} online</span></div>
+                <div className={styles.row}><span className={`${styles.pill} ${styles.pillWarn}`}><Clock3 size={13} /> {workingEmployees} in hours</span></div>
+                <div className={styles.row}><span className={styles.pill}><Briefcase size={13} /> {employees.filter((user) => user.employeeType === "Intern").length} interns</span></div>
+              </div>
+              <div className={styles.list}>{filteredEmployees.length === 0 ? <div className={styles.emptyState}>No employees match this filter.</div> : filteredEmployees.map((user) => (
+                <div className={styles.row} key={user.id}>
+                  <div className={styles.rowHeader}>
+                    <strong>{user.name}</strong>
+                    <div style={{ display: "inline-flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
+                      <span className={styles.pill}>{displayRole(user.role)}</span>
+                      <span className={user.compensationStatus === "Paid" ? `${styles.pill} ${styles.pillSuccess}` : `${styles.pill} ${styles.pillWarn}`}>{user.employeeType} · {user.compensationStatus}</span>
+                      <span className={user.isOnline ? `${styles.pill} ${styles.pillSuccess}` : `${styles.pill} ${styles.pillMuted}`} title={user.isWithinWorkHours ? "Online · Within work hours" : "Offline · Outside work hours"}>
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: user.isOnline ? "#22c55e" : "#94a3b8", display: "inline-block", marginRight: 4 }} />
+                        {user.isOnline ? "Online" : "Offline"}
+                      </span>
+                      <div style={{ position: "relative", display: "inline-block" }} onClick={(e) => e.stopPropagation()}>
+                        <button
+                          className={styles.ghostButton}
+                          style={{ padding: "4px 10px", minHeight: 32, fontSize: "0.8rem", fontWeight: 700 }}
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setActiveEmployeeMenuId(activeEmployeeMenuId === user.id ? null : user.id);
+                          }}
+                        >
+                          &#8942; Actions
+                        </button>
+                        {activeEmployeeMenuId === user.id && (
+                          <div
+                            className={styles.actionDropdownMenu}
+                            style={{
+                              position: "absolute",
+                              right: 0,
+                              top: "100%",
+                              zIndex: 50,
+                              background: "var(--bg-card)",
+                              border: "1px solid var(--border-color)",
+                              borderRadius: 10,
+                              boxShadow: "var(--shadow-md)",
+                              display: "flex",
+                              flexDirection: "column",
+                              minWidth: 160,
+                              marginTop: 4,
+                            }}
+                          >
+                            <a className={styles.dropdownItem} href={letterUrlFor(user)} target="_blank" rel="noopener noreferrer">Open letter</a>
+                            <a className={styles.dropdownItem} href={mailtoFor(user)}>Send letter email</a>
+                            <a className={styles.dropdownItem} href={idCardUrlFor(user)} target="_blank" rel="noopener noreferrer">Open ID card</a>
+                            <a className={styles.dropdownItem} href={idCardUrlFor(user, true)}>Download ID card</a>
+                            {user.id !== currentUserId && (
+                              <button className={styles.dropdownItemDanger} type="button" onClick={() => {
+                                confirmDelete("employee", user.id.toString(), user.name);
+                              }}>Delete</button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <p className={styles.muted}>{user.email} · {user.department} · {user.title} · {user.status}</p>
+                  <p className={styles.muted}>
+                    {user.durationLabel} · {user.workStartTime}–{user.workEndTime}
+                    {user.lastSeenAt ? ` · Last seen ${formatPortalDateTime(user.lastSeenAt)}` : ""}
+                  </p>
+                  <details className={styles.editPanel}>
+                    <summary>Edit employee</summary>
+                    <form className={styles.formGrid} onSubmit={submit(saveEmployeeUser)}>
+                      <input type="hidden" name="id" value={user.id} />
+                      <Field label="Name" name="name" defaultValue={user.name} required />
+                      <Field label="Email" name="email" type="email" defaultValue={user.email} required />
+                      <Field label="New Password" name="password" type="password" />
+                      <Field label="Role" name="role" options={roleOptionsForValue(user.role)} defaultValue={user.role} />
+                      <Field label="Department" name="department" defaultValue={user.department} />
+                      <Field label="Department Record" name="departmentId" options={[{ label: "No department record", value: "" }, ...data.departments.map((dept) => ({ label: dept.name, value: dept.id.toString() }))]} defaultValue={user.departmentId?.toString() || ""} />
+                      <Field label="Manager" name="managerId" options={[{ label: "No manager", value: "" }, ...employeeOptions]} defaultValue={user.managerId?.toString() || ""} />
+                      <Field label="Title" name="title" defaultValue={user.title} />
+                      <Field label="Employee Type" name="employeeType" options={["Full-time", "Part-time", "Intern", "Contractor", "Consultant"]} defaultValue={user.employeeType} />
+                      <Field label="Paid Status" name="compensationStatus" options={["Paid", "Unpaid"]} defaultValue={user.compensationStatus} />
+                      <Field label="Employment Start" name="employmentStart" type="date" defaultValue={inputDate(user.employmentStart)} />
+                      <Field label="Employment End" name="employmentEnd" type="date" defaultValue={inputDate(user.employmentEnd)} />
+                      <Field label="Work Starts" name="workStartTime" type="time" defaultValue={user.workStartTime} />
+                      <Field label="Work Ends" name="workEndTime" type="time" defaultValue={user.workEndTime} />
+                      <Field label="Status" name="status" options={["Active", "Inactive"]} defaultValue={user.status} />
+                      <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Employee</button>
+                    </form>
+                  </details>
+                </div>
+              ))}</div>
+            </div>
+
             <details className={`${styles.card} ${styles.span4} ${styles.collapsibleCard}`} open={employees.length <= 1}>
               <summary className={styles.collapsibleSummary}>
                 <div>
@@ -2718,83 +2992,21 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Employee</button>
               </form>
             </details>
-            <div className={`${styles.card} ${styles.span8}`}>
-              <div className={styles.sectionHeader}>
+
+            <details className={`${styles.card} ${styles.span12} ${styles.collapsibleCard}`}>
+              <summary className={styles.collapsibleSummary}>
                 <div>
-                  <h2 className={styles.cardTitle}>Employees</h2>
-                  <p className={styles.muted}>Search employees, verify work windows, and monitor active portal presence.</p>
+                  <h2 className={styles.cardTitle}>Bulk Employee Import</h2>
+                  <p className={styles.muted}>Onboard team members in bulk using a CSV template.</p>
                 </div>
-                <div className={styles.toolbar}>
-                  <label style={{ position: "relative", display: "block" }}>
-                    <Search size={14} style={{ position: "absolute", left: 10, top: 14, color: "#94a3b8" }} />
-                    <input className={styles.input} style={{ paddingLeft: 32, width: 220 }} value={employeeSearch} onChange={(event) => setEmployeeSearch(event.target.value)} placeholder="Search employee" />
-                  </label>
-                  <select className={styles.select} style={{ maxWidth: 150 }} value={employeeTypeFilter} onChange={(event) => setEmployeeTypeFilter(event.target.value)}>
-                    <option value="all">All types</option>
-                    {["Full-time", "Part-time", "Intern", "Contractor", "Consultant"].map((type) => <option key={type} value={type}>{type}</option>)}
-                  </select>
-                </div>
+                <span className={styles.pill}>CSV Upload</span>
+              </summary>
+              <div style={{ padding: "0 24px 24px" }}>
+                <p className={styles.muted} style={{ marginBottom: 16 }}>CSV headers: name,email,password,role,department,title,employeeType,compensationStatus. Role must match a Role Key from Created Roles. New accounts get default offer/internship letter access through Documents.</p>
+                <input className={styles.input} type="file" accept=".csv,text/csv" onChange={(event) => importEmployees(event.target.files?.[0])} />
               </div>
-              <div className={styles.quickGrid} style={{ marginBottom: 12 }}>
-                <div className={styles.row}><span className={styles.pill}><Users size={13} /> {employees.length} total</span></div>
-                <div className={styles.row}><span className={`${styles.pill} ${styles.pillSuccess}`}><UserCheck size={13} /> {onlineEmployees} online</span></div>
-                <div className={styles.row}><span className={`${styles.pill} ${styles.pillWarn}`}><Clock3 size={13} /> {workingEmployees} in hours</span></div>
-                <div className={styles.row}><span className={styles.pill}><Briefcase size={13} /> {employees.filter((user) => user.employeeType === "Intern").length} interns</span></div>
-              </div>
-              <div className={styles.list}>{filteredEmployees.length === 0 ? <div className={styles.emptyState}>No employees match this filter.</div> : filteredEmployees.map((user) => (
-                <div className={styles.row} key={user.id}>
-                  <div className={styles.rowHeader}>
-                    <strong>{user.name}</strong>
-                    <span style={{ display: "inline-flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                      <span className={styles.pill}>{displayRole(user.role)}</span>
-                      <span className={styles.pill}>{user.employeeType}</span>
-                      <span className={user.compensationStatus === "Paid" ? `${styles.pill} ${styles.pillSuccess}` : `${styles.pill} ${styles.pillWarn}`}>{user.compensationStatus}</span>
-                      <span className={user.isOnline ? `${styles.pill} ${styles.pillSuccess}` : `${styles.pill} ${styles.pillMuted}`}>{user.isOnline ? "Logged in now" : "Offline"}</span>
-                      <span className={user.isWithinWorkHours ? `${styles.pill} ${styles.pillSuccess}` : `${styles.pill} ${styles.pillWarn}`}>{user.isWithinWorkHours ? "Within work hours" : "Outside work hours"}</span>
-                    </span>
-                  </div>
-                  <p className={styles.muted}>{user.email} - {user.department} - {user.title} - {user.status}</p>
-                  <p className={styles.muted}>
-                    Duration: {user.durationLabel} - Work hours: {user.workStartTime} to {user.workEndTime}
-                    {user.lastSeenAt ? ` - Last seen: ${formatPortalDateTime(user.lastSeenAt)}` : " - Last seen: never"}
-                  </p>
-                  <div className={styles.toolbar}>
-                    <a className={styles.ghostButton} href={letterUrlFor(user)} target="_blank" rel="noopener noreferrer">Open letter</a>
-                    <a className={styles.ghostButton} href={mailtoFor(user)}>Send letter email</a>
-                    <a className={styles.ghostButton} href={idCardUrlFor(user)} target="_blank" rel="noopener noreferrer">Open ID card</a>
-                    <a className={styles.ghostButton} href={idCardUrlFor(user, true)}>Download ID card</a>
-                    {user.id !== currentUserId && <button className={styles.ghostButton} type="button" onClick={() => confirmDelete("employee", user.id.toString(), user.name)}>Delete</button>}
-                  </div>
-                  <details className={styles.editPanel}>
-                    <summary>Edit employee</summary>
-                    <form className={styles.formGrid} onSubmit={submit(saveEmployeeUser)}>
-                      <input type="hidden" name="id" value={user.id} />
-                      <Field label="Name" name="name" defaultValue={user.name} required />
-                      <Field label="Email" name="email" type="email" defaultValue={user.email} required />
-                      <Field label="New Password" name="password" type="password" />
-                      <Field label="Role" name="role" options={roleOptionsForValue(user.role)} defaultValue={user.role} />
-                      <Field label="Department" name="department" defaultValue={user.department} />
-                      <Field label="Department Record" name="departmentId" options={[{ label: "No department record", value: "" }, ...data.departments.map((dept) => ({ label: dept.name, value: dept.id.toString() }))]} defaultValue={user.departmentId?.toString() || ""} />
-                      <Field label="Manager" name="managerId" options={[{ label: "No manager", value: "" }, ...employeeOptions]} defaultValue={user.managerId?.toString() || ""} />
-                      <Field label="Title" name="title" defaultValue={user.title} />
-                      <Field label="Employee Type" name="employeeType" options={["Full-time", "Part-time", "Intern", "Contractor", "Consultant"]} defaultValue={user.employeeType} />
-                      <Field label="Paid Status" name="compensationStatus" options={["Paid", "Unpaid"]} defaultValue={user.compensationStatus} />
-                      <Field label="Employment Start" name="employmentStart" type="date" defaultValue={inputDate(user.employmentStart)} />
-                      <Field label="Employment End" name="employmentEnd" type="date" defaultValue={inputDate(user.employmentEnd)} />
-                      <Field label="Work Starts" name="workStartTime" type="time" defaultValue={user.workStartTime} />
-                      <Field label="Work Ends" name="workEndTime" type="time" defaultValue={user.workEndTime} />
-                      <Field label="Status" name="status" options={["Active", "Inactive"]} defaultValue={user.status} />
-                      <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Employee</button>
-                    </form>
-                  </details>
-                </div>
-              ))}</div>
-            </div>
-            <div className={`${styles.card} ${styles.span12}`}>
-              <h2 className={styles.cardTitle}>Bulk Employee Import</h2>
-              <p className={styles.muted}>CSV headers: name,email,password,role,department,title,employeeType,compensationStatus. Role must match a Role Key from Created Roles. New accounts get default offer/internship letter access through Documents.</p>
-              <input className={styles.input} type="file" accept=".csv,text/csv" onChange={(event) => importEmployees(event.target.files?.[0])} />
-            </div>
+            </details>
+
             <details className={`${styles.card} ${styles.span4} ${styles.collapsibleCard}`}>
               <summary className={styles.collapsibleSummary}>
                 <div>

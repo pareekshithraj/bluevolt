@@ -3,43 +3,38 @@
 import { FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Bell, Briefcase, CalendarDays, ChevronRight, ClipboardList, Clock3, Code2, FileText, Handshake, LogOut, Menu, Moon, PenLine, RefreshCw, RotateCw, Search, Shield, Star, Sun, Target, UserCheck, Users, Video, WalletCards, X } from "lucide-react";
+import { Bell, CalendarDays, ChevronRight, ClipboardList, Code2, FileText, Handshake, LogOut, Menu, Moon, PenLine, RefreshCw, RotateCw, Star, Sun, Target, UserCheck, Users, Video, WalletCards, X } from "lucide-react";
 import {
-  appointApplicantAsEmployee,
   approveEmployeeDocument,
   changeEmployeePassword,
   clockInEmployee,
   clockOutEmployee,
-  approveCrmSheet,
-  deleteEmployeeRoleDefinition,
   deleteEmployeeEntity,
   getEmployeePortalData,
   logoutEmployee,
   markNotificationRead,
   saveAnnouncement,
-  saveApplicant,
   saveAttendance,
-  saveCrmSheetRequest,
   saveEmployeeDocument,
-  saveEmployeeRoleDefinition,
   saveEmployeeUser,
   saveExpenseClaim,
-  saveDepartment,
   saveLeaveRequest,
   saveMeeting,
   savePayrollInput,
   savePerformanceReview,
   saveResource,
   saveTask,
-  updateCrmSheetRowStatus,
   updateCrmSheetRowData,
   updateEmployeeRecordStatus,
-  type EmployeeRoleDefinitionInput,
 } from "@/app/actions/employee-portal";
-import { EMPLOYEE_PORTAL_FEATURES } from "@/lib/employee/roles";
 import styles from "../portal.module.css";
+import CrmTab from "@/components/portal/CrmTab";
+import ApplicantsTab from "@/components/portal/ApplicantsTab";
+import EmployeesTab from "@/components/portal/EmployeesTab";
+import PrivilegesTab from "@/components/portal/PrivilegesTab";
 
 type PortalData = Awaited<ReturnType<typeof getEmployeePortalData>>;
+type PortalNotification = PortalData["notifications"][number];
 type EmployeeListItem = PortalData["users"][number] & {
   id: number;
   name: string;
@@ -239,10 +234,6 @@ function inputDateTime(value: DateValue) {
   return date ? date.toISOString().slice(0, 16) : "";
 }
 
-function featureAccessSet(value?: string | null) {
-  return new Set((value || "").split(",").map((feature) => feature.trim()).filter(Boolean));
-}
-
 function simplePortalError(error: unknown, fallback = "The portal could not complete that request. Please try again.") {
   const text = error instanceof Error ? error.message : String(error || "");
   if (!text || text === "[object Event]" || text === "[object Object]") {
@@ -289,16 +280,10 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const [loadingTab, setLoadingTab] = useState<PortalTab | "">("");
   const [error, setError] = useState("");
   const [sortResources, setSortResources] = useState("newest");
-  const [employeeSearch, setEmployeeSearch] = useState("");
   const [activeEmployeeMenuId, setActiveEmployeeMenuId] = useState<number | null>(null);
-  const [checkedFeatures, setCheckedFeatures] = useState<Set<string>>(new Set());
-  const [employeeTypeFilter, setEmployeeTypeFilter] = useState("all");
   const [workHoursEmployeeId, setWorkHoursEmployeeId] = useState("");
   const [resourceTypeFilter, setResourceTypeFilter] = useState("all");
   const [notice, setNotice] = useState("");
-  const [crmSheetPaste, setCrmSheetPaste] = useState("");
-  const [crmSheetFileName, setCrmSheetFileName] = useState("");
-  const [crmPanel, setCrmPanel] = useState<"none" | "source">("none");
   const [activeCrmSheetId, setActiveCrmSheetId] = useState<number | null>(null);
   const [selectedCrmRowId, setSelectedCrmRowId] = useState<number | null>(null);
   const [selectedCrmCell, setSelectedCrmCell] = useState<SelectedCrmCell | null>(null);
@@ -309,12 +294,11 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const [uploadedFile, setUploadedFile] = useState<{ url: string; fileName: string; fileSize: string; mimeType: string } | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [userManagementOpen, setUserManagementOpen] = useState(false);
-  const [applicantSort, setApplicantSort] = useState("newest");
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedRoleKey, setSelectedRoleKey] = useState<string>("super_admin");
   const [isCreatingRole, setIsCreatingRole] = useState<boolean>(false);
-  const [auditSearch, setAuditSearch] = useState("");
   const [passwordAlertDismissed, setPasswordAlertDismissed] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const [theme, setTheme] = useState<"dark" | "light">("light");
   const [now, setNow] = useState(new Date());
@@ -397,16 +381,6 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     return () => window.removeEventListener("click", handleOutsideClick);
   }, []);
 
-  // Sync checkedFeatures state with selected role
-  useEffect(() => {
-    if (tab === "access" && data.roleDefinitions) {
-      const activeRole = data.roleDefinitions.find((r) => r.key === selectedRoleKey) || data.roleDefinitions[0];
-      if (activeRole) {
-        setCheckedFeatures(new Set((activeRole.featureAccess || "").split(",").map((f) => f.trim()).filter(Boolean)));
-      }
-    }
-  }, [selectedRoleKey, tab, data.roleDefinitions]);
-
   const visibleTabs = useMemo(() => tabs.filter((item) => {
     if (item.id === "dashboard") return true;
     if (item.id === "crm") return data.capabilities.canRequestCrmSource || data.capabilities.canUseCrm;
@@ -452,13 +426,6 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   };
 
   const employees = data.users as EmployeeListItem[];
-  const filteredEmployees = employees.filter((user) => {
-    const searchText = `${user.name} ${user.email} ${user.department} ${user.title} ${user.role}`.toLowerCase();
-    const matchesSearch = searchText.includes(employeeSearch.toLowerCase());
-    const matchesType = employeeTypeFilter === "all" || user.employeeType === employeeTypeFilter;
-    return matchesSearch && matchesType;
-  });
-
   const filteredResources = data.resources.filter((resource) => (
     resourceTypeFilter === "all" || resource.resourceType === resourceTypeFilter
   ));
@@ -474,10 +441,6 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const ownerRoleOptions = [{ label: "All roles", value: "all" }, ...roleOptions];
   const roleNameByKey = new Map(roleDefinitions.map((role) => [role.key, role.label]));
   const displayRole = (role: string) => roleNameByKey.get(role) || role.replace(/_/g, " ");
-  const roleOptionsForValue = (value?: string) => {
-    if (!value || roleOptions.some((role) => role.value === value)) return roleOptions;
-    return [{ label: `${displayRole(value)} (${value}) - inactive`, value }, ...roleOptions];
-  };
   const audienceOptionsForValue = (value?: string) => {
     if (!value || ownerRoleOptions.some((role) => role.value === value)) return ownerRoleOptions;
     return [{ label: `${displayRole(value)} (${value}) - inactive`, value }, ...ownerRoleOptions];
@@ -489,7 +452,6 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const actionableCrmRows = data.crmSheets.flatMap((sheet) => sheet.rows).filter((row) => ["Open", "Callback"].includes(row.status));
   const upcomingMeetings = data.meetings.filter((meeting) => new Date(meeting.startsAt).getTime() >= Date.now()).slice(0, 4);
   const recentResources = data.resources.slice(0, 4);
-  const activeCrmSheet = activeCrmSheetId ? data.crmSheets.find((sheet) => sheet.id === activeCrmSheetId) : null;
   const canEditCrmSheet = data.session.role === "super_admin";
   const currentUserId = Number(data.session.userId);
   const currentEmployee = employees.find((user) => user.id === currentUserId);
@@ -504,15 +466,6 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     .reduce((total, entry) => total + Number(entry.totalHours || 0), 0);
   const completedSessions = data.attendance.filter((entry) => entry.logoutAt).length;
   const selectedEmployeeSessions = data.attendance.filter((entry) => entry.employeeId === selectedHoursEmployeeId).length;
-  const pendingApplicants = data.applicants.filter((applicant) => !["Offer", "Appointed", "Rejected"].includes(applicant.stage));
-  const approvedApplicants = data.applicants.filter((applicant) => ["Offer", "Appointed"].includes(applicant.stage));
-  const rejectedApplicants = data.applicants.filter((applicant) => applicant.stage === "Rejected");
-  const sortedApplicants = [...data.applicants].sort((first, second) => {
-    if (applicantSort === "name") return first.name.localeCompare(second.name);
-    if (applicantSort === "role") return first.roleApplied.localeCompare(second.roleApplied);
-    if (applicantSort === "status") return first.stage.localeCompare(second.stage);
-    return new Date(second.updatedAt).getTime() - new Date(first.updatedAt).getTime();
-  });
   const payrollTotal = data.payrollInputs.reduce((total, item) => total + Number(item.amount || 0), 0);
   const payrollReady = data.payrollInputs.filter((item) => item.status === "Ready").length;
   const payrollPaid = data.payrollInputs.filter((item) => item.status === "Paid").length;
@@ -596,8 +549,6 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
         }
         form.reset();
         setUploadedFile(null);
-        setCrmSheetPaste("");
-        setCrmSheetFileName("");
         setNotice("Saved successfully.");
         const newData = await getEmployeePortalData(sortResources, tab);
         setData(prev => mergePortalData(prev, newData, tab));
@@ -729,23 +680,6 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     });
   };
 
-  const handleUpdateCrmRowStatus = (rowId: number, status: string) => {
-    setData(prev => {
-        const crmSheets = [...prev.crmSheets];
-        const sheetIndex = crmSheets.findIndex(s => s.id === activeCrmSheetId);
-        if (sheetIndex !== -1) {
-            const rows = [...crmSheets[sheetIndex].rows];
-            const rowIndex = rows.findIndex(r => r.id === rowId);
-            if (rowIndex !== -1) {
-                rows[rowIndex] = { ...rows[rowIndex], status, statusColor: status === "Done" ? "green" : status === "Callback" ? "blue" : status === "Not Interested" ? "amber" : status === "Invalid" ? "red" : "none" };
-                crmSheets[sheetIndex] = { ...crmSheets[sheetIndex], rows };
-            }
-        }
-        return { ...prev, crmSheets };
-    });
-    runAction(() => updateCrmSheetRowStatus({ rowId: rowId.toString(), status, reason: status }));
-  };
-
   const handleCellChange = (rowId: number, colName: string, newValue: string) => {
     if (!canEditCrmSheet) return;
     setData(prev => {
@@ -787,19 +721,6 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     }
   };
 
-  const letterUrlFor = (user: EmployeeListItem) => {
-    const type = user.employeeType === "Intern" ? "Internship Offer Letter" : "Offer Letter";
-    return `/api/employee/letter?employeeId=${user.id}&type=${encodeURIComponent(type)}`;
-  };
-
-  const mailtoFor = (user: EmployeeListItem) => {
-    const type = user.employeeType === "Intern" ? "internship offer letter" : "offer letter";
-    const url = letterUrlFor(user);
-    const subject = encodeURIComponent(`BlueVolt ${type}`);
-    const body = encodeURIComponent(`Hi ${user.name},\n\nYour BlueVolt ${type} is ready here:\n${url}\n\nPlease review it and confirm acceptance.\n\nRegards,\nBlueVolt HR`);
-    return `mailto:${user.email}?subject=${subject}&body=${body}`;
-  };
-
   const copyApplicationLink = async () => {
     try {
       const message = `BlueVolt application link:\n${applicationLink}\n\nPlease fill this form if you are applying for an employee or internship role.`;
@@ -813,90 +734,6 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const idCardUrlFor = (user: EmployeeListItem, download = false) => (
     `/api/employee/id-card?employeeId=${user.id}${download ? "&download=1" : ""}`
   );
-
-  const loadCrmSheetFile = async (file?: File) => {
-    if (!file) return;
-    setError("");
-    setCrmSheetFileName(file.name);
-    const extension = file.name.split(".").pop()?.toLowerCase();
-    if (extension === "csv" || extension === "tsv" || extension === "txt") {
-      setCrmSheetPaste(await file.text());
-      return;
-    }
-    if (extension === "xlsx" || extension === "xls") {
-      const XLSX = await import("xlsx");
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
-      const firstSheetName = workbook.SheetNames[0];
-      const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[firstSheetName], { FS: "\t" });
-      setCrmSheetPaste(csv);
-      return;
-    }
-    setError("Upload an Excel, CSV, TSV, or text file.");
-  };
-
-  const sheetColumns = (sheet: PortalData["crmSheets"][number]) => (
-    Array.isArray(sheet.columns) && sheet.columns.every((column) => typeof column === "string")
-      ? sheet.columns as string[]
-      : ["Company", "Contact", "Email", "Phone", "Next Action"]
-  );
-
-  const columnName = (index: number) => {
-    let value = "";
-    let cursor = index + 1;
-    while (cursor > 0) {
-      const remainder = (cursor - 1) % 26;
-      value = String.fromCharCode(65 + remainder) + value;
-      cursor = Math.floor((cursor - 1) / 26);
-    }
-    return value;
-  };
-
-  const cellReference = (rowIndex: number, columnIndex: number) => `${columnName(columnIndex)}${rowIndex + 2}`;
-
-  const isPhoneColumn = (column: string) => {
-    const value = column.toLowerCase();
-    return value.includes("phone") || value.includes("mobile") || value.includes("contact number") || value.includes("call number");
-  };
-
-  const formatPhoneValue = (value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed) return "";
-    const digits = trimmed.replace(/\D/g, "");
-    if (!digits) return trimmed;
-    if (digits.length === 10 && digits.startsWith("11")) return `011-${digits.slice(2)}`;
-    if (digits.length === 11 && digits.startsWith("0")) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
-    if (digits.length === 12 && digits.startsWith("91")) {
-      const national = digits.slice(2);
-      if (national.startsWith("11")) return `+91-11-${national.slice(2)}`;
-      return `+91 ${national.slice(0, 5)} ${national.slice(5)}`;
-    }
-    if (digits.length === 10 && /^[6-9]/.test(digits)) return `${digits.slice(0, 5)} ${digits.slice(5)}`;
-    return trimmed;
-  };
-
-  const displayCellValue = (column: string, value: string) => (
-    isPhoneColumn(column) ? formatPhoneValue(value) : value
-  );
-
-  const rowData = (row: PortalData["crmSheets"][number]["rows"][number]) => {
-    if (!row.data) return {};
-    if (typeof row.data === "string") {
-      try {
-        return JSON.parse(row.data) as Record<string, string>;
-      } catch {
-        return {};
-      }
-    }
-    return typeof row.data === "object" && !Array.isArray(row.data) ? row.data as Record<string, string> : {};
-  };
-
-  const rowTint = (status: string) => {
-    if (status === "Done") return styles.crmDone;
-    if (status === "Callback") return styles.crmCallback;
-    if (status === "Not Interested") return styles.crmNotInterested;
-    if (status === "Invalid") return styles.crmInvalid;
-    return "";
-  };
 
   const greetingHour = now.getHours();
   const greeting = greetingHour < 12 ? "Good morning" : greetingHour < 17 ? "Good afternoon" : "Good evening";
@@ -1028,8 +865,8 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
             <p className={styles.muted}>{now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
           </div>
           <div className={styles.workIsland}>
-            <div style={{ display: "flex", alignItems: "center", gap: 16, marginRight: 8, paddingRight: 16, borderRight: "1px solid var(--border-color)" }}>
-              <div style={{ textAlign: "right", display: "none" }} className="headerClock">
+            <div style={{ display: "flex", alignItems: "center", gap: 16, marginRight: 8, paddingRight: 16, borderRight: "1px solid var(--border-color)", position: "relative" }}>
+              <div className="headerClock" style={{ textAlign: "right", display: "none" }}>
                 <div style={{ fontSize: "1.1rem", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{now.toLocaleTimeString("en-US", { hour12: true, hour: "numeric", minute: "2-digit" })}</div>
                 <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{now.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div>
               </div>
@@ -1041,10 +878,80 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               }} aria-label="Toggle Theme">
                 {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
               </button>
-              <button type="button" className={styles.refreshIconButton} onClick={() => setNotice("No new notifications")} aria-label="Notifications" style={{ position: "relative" }}>
+              <button type="button" className={styles.refreshIconButton} onClick={() => setNotificationsOpen(!notificationsOpen)} aria-label="Notifications" style={{ position: "relative" }}>
                 <Bell size={18} />
-                <span style={{ position: "absolute", top: 4, right: 4, width: 8, height: 8, background: "#ef4444", borderRadius: "50%", border: "1px solid var(--bg-card)" }} />
+                {data.notifications.some((n: PortalNotification) => !n.readAt) && (
+                  <span style={{ position: "absolute", top: 4, right: 4, width: 8, height: 8, background: "#ef4444", borderRadius: "50%", border: "1px solid var(--bg-card)" }} />
+                )}
               </button>
+              {notificationsOpen && (
+                <div 
+                  className={styles.notificationPopover} 
+                  style={{
+                    position: "absolute",
+                    right: 0,
+                    top: "100%",
+                    zIndex: 120,
+                    background: "var(--bg-card)",
+                    border: "1px solid var(--border-color)",
+                    borderRadius: 16,
+                    boxShadow: "var(--shadow-lg)",
+                    width: 320,
+                    maxHeight: 400,
+                    overflowY: "auto",
+                    marginTop: 8,
+                    padding: 16,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, borderBottom: "1px solid var(--border-color)", paddingBottom: 8 }}>
+                    <strong style={{ fontSize: "0.95rem" }}>Notifications</strong>
+                    <button 
+                      className={styles.ghostButton} 
+                      style={{ padding: "4px 8px", minHeight: 24, fontSize: "0.75rem" }}
+                      type="button" 
+                      onClick={() => setNotificationsOpen(false)}
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {data.notifications.length === 0 ? (
+                      <div className={styles.muted} style={{ fontSize: "0.85rem", textAlign: "center", padding: "12px 0" }}>No new notifications</div>
+                    ) : (
+                      data.notifications.map((item: PortalNotification) => (
+                        <div 
+                          key={item.id} 
+                          style={{ 
+                            padding: 10, 
+                            borderRadius: 8, 
+                            background: item.readAt ? "transparent" : "var(--pill-bg)", 
+                            border: "1px solid var(--border-color)",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 4
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+                            <span style={{ fontWeight: 700, fontSize: "0.85rem", color: item.readAt ? "var(--text-primary)" : "var(--text-brand)" }}>{item.title}</span>
+                            {!item.readAt && (
+                              <button 
+                                className={styles.ghostButton} 
+                                style={{ padding: "2px 6px", minHeight: 20, fontSize: "0.7rem", flexShrink: 0 }}
+                                type="button" 
+                                onClick={() => runAction(() => markNotificationRead({ id: item.id.toString() }))}
+                              >
+                                Mark read
+                              </button>
+                            )}
+                          </div>
+                          <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: 1.4 }}>{item.body}</p>
+                          <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{formatPortalTimeAgo(item.createdAt)}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <div className={styles.workIslandMeta}>
               <span className={`${styles.workDot} ${isWorking ? styles.workDotOn : ""}`} />
@@ -1325,384 +1232,31 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
         )}
 
         {tab === "crm" && (
-          <section className={styles.grid}>
-            <div className={`${styles.card} ${styles.span12} ${styles.crmCommandBar}`}>
-              <div>
-                <h2 className={styles.cardTitle}>CRM Sheets</h2>
-                <p className={styles.muted}>{canEditCrmSheet ? "Open a source list, work it like a sheet, and mark each row by call outcome." : "Open approved source lists in read-only mode."}</p>
-              </div>
-              <div className={styles.toolbar}>
-                {canEditCrmSheet && (
-                  <>
-                    <button className={styles.button} type="button" onClick={() => { setActiveCrmSheetId(null); setCrmPanel(crmPanel === "source" ? "none" : "source"); }}>Import sheet</button>
-                  </>
-                )}
-                {activeCrmSheet && <button className={styles.ghostButton} type="button" onClick={() => setActiveCrmSheetId(null)}>Back to list</button>}
-              </div>
-            </div>
-
-            {!activeCrmSheet && canEditCrmSheet && crmPanel === "source" && (
-              <form className={`${styles.card} ${styles.span12} ${styles.formGrid}`} onSubmit={submit(saveCrmSheetRequest, () => setCrmPanel("none"))}>
-                <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Create / Import CRM Sheet</h2>
-                <p className={`${styles.muted} ${styles.fieldWide}`}>Upload or paste Excel/CSV data. Only super admin can create or change sheets.</p>
-                <Field label="Sheet Title" name="title" placeholder="e.g. May leads - Bengaluru" required wide />
-                <input type="hidden" name="sourceName" value="Imported Data" />
-                <input type="hidden" name="ownerRole" value={data.session.role} />
-                <input type="hidden" name="audienceRoles" value="all" />
-                <label className={`${styles.field} ${styles.fieldWide}`}>
-                  <span className={styles.label}>Upload Excel / CSV</span>
-                  <input className={styles.input} type="file" accept=".xlsx,.xls,.csv,.tsv,.txt" onChange={(event) => loadCrmSheetFile(event.target.files?.[0])} />
-                  {crmSheetFileName && <span className={styles.muted}>{crmSheetFileName} loaded into the source box.</span>}
-                </label>
-                <label className={`${styles.field} ${styles.fieldWide}`}>
-                  <span className={styles.label}>Paste Excel / CSV Rows</span>
-                  <textarea className={styles.textarea} name="pasteData" value={crmSheetPaste} onChange={(event) => setCrmSheetPaste(event.target.value)} placeholder={"Company\tContact\tEmail\tPhone\tNext Action\nAcme Pvt Ltd\tRavi\travi@example.com\t9999999999\tCall today"} required />
-                </label>
-                <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Create Sheet</button>
-              </form>
-            )}
-
-            {!activeCrmSheet && (
-              <>
-                <div className={`${styles.card} ${styles.span12}`}>
-                  <div className={styles.sectionHeader}>
-                    <div>
-                      <h2 className={styles.cardTitle}>Sheet List</h2>
-                      <p className={styles.muted}>Click any approved or pending source to open the spreadsheet workspace.</p>
-                    </div>
-                    <span className={styles.pill}>{data.crmSheets.length} sheets</span>
-                  </div>
-                  <div className={styles.sheetList}>{data.crmSheets.length === 0 ? <div className={styles.emptyState}>No sheets yet{canEditCrmSheet ? ". Use Import sheet above." : "."}</div> : data.crmSheets.map((sheet) => {
-                    const totalRows = sheet.rows.length;
-                    const doneRows = sheet.rows.filter((row) => row.status === "Done").length;
-                    const percent = totalRows ? Math.round((doneRows / totalRows) * 100) : 0;
-                    return (
-                      <button className={styles.sheetListItem} key={sheet.id} type="button" onClick={() => { setCrmPanel("none"); setActiveCrmSheetId(sheet.id); }}>
-                        <div>
-                          <strong>{sheet.title}</strong>
-                          <p className={styles.muted}>{sheet.sourceName || "Source not named"} - requested by {sheet.requestedByName || "Unknown"}</p>
-                        </div>
-                        <div className={styles.sheetMetaGrid}>
-                          <span className={sheet.status === "Approved" ? `${styles.pill} ${styles.pillSuccess}` : sheet.status === "Rejected" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{sheet.status}{sheet.locked ? " / Locked" : ""}</span>
-                          <span className={styles.pill}>{doneRows}/{totalRows} done</span>
-                          <span className={styles.pill}>{percent}%</span>
-                        </div>
-                      </button>
-                    );
-                  })}</div>
-                </div>
-              </>
-            )}
-
-            {activeCrmSheet && (() => {
-              const columns = sheetColumns(activeCrmSheet);
-              const totalRows = activeCrmSheet.rows.length;
-              const doneRows = activeCrmSheet.rows.filter((row) => row.status === "Done").length;
-              const callbackRows = activeCrmSheet.rows.filter((row) => row.status === "Callback").length;
-              const openRows = activeCrmSheet.rows.filter((row) => row.status === "Open").length;
-              const sheetRows = activeCrmSheet.rows;
-              const selectedCrmRow = sheetRows.find((row) => row.id === selectedCrmRowId) || sheetRows[0] || null;
-              const canMarkRows = canEditCrmSheet && data.capabilities.canUpdateCrmSheetRows && !activeCrmSheet.locked && Boolean(selectedCrmRow);
-              const selectedReference = selectedCrmCell ? cellReference(selectedCrmCell.rowIndex, selectedCrmCell.columnIndex) : "A1";
-              const selectedValue = selectedCrmCell ? selectedCrmCell.value : "";
-              const blankRowCount = Math.max(80 - sheetRows.length, 30);
-              const markSelectedRow = (status: string) => {
-                if (!selectedCrmRow || !canMarkRows) return;
-                handleUpdateCrmRowStatus(selectedCrmRow.id, status);
-              };
-              return (
-                <div className={styles.fullSheetApp}>
-                  <div className={styles.sheetAppHeader}>
-                    <button className={styles.sheetLogoButton} type="button" onClick={() => setActiveCrmSheetId(null)} aria-label="Back to CRM sheets">
-                      <Image src="/Assets/Logos/BLUEVOLT.png" alt="BlueVolt" width={112} height={44} className={styles.bluevoltSheetLogo} />
-                    </button>
-                    <div className={styles.sheetTitleBlock}>
-                      <div className={styles.sheetDocumentName}>{activeCrmSheet.title || "Untitled spreadsheet"} <span>*</span></div>
-                      <div className={styles.sheetSubTitle}>{activeCrmSheet.sourceName || "BlueVolt CRM source"} - {doneRows}/{totalRows} done</div>
-                    </div>
-                    <div className={styles.sheetHeaderActions}>
-                      <span className={activeCrmSheet.status === "Approved" ? `${styles.sheetStatusPill} ${styles.sheetStatusApproved}` : styles.sheetStatusPill}>{activeCrmSheet.status}{activeCrmSheet.locked ? " / Locked" : ""}</span>
-                      {!canEditCrmSheet && <span className={styles.sheetStatusPill}>Read only</span>}
-                      {canEditCrmSheet && activeCrmSheet.status === "Pending" && (
-                        <>
-                          <button className={styles.sheetToolbarButton} type="button" onClick={() => runAction(() => approveCrmSheet({ id: activeCrmSheet.id.toString(), status: "Approved" }))}>Approve</button>
-                          <button className={styles.sheetToolbarButton} type="button" onClick={() => runAction(() => approveCrmSheet({ id: activeCrmSheet.id.toString(), status: "Rejected" }))}>Reject</button>
-                        </>
-                      )}
-                      {canEditCrmSheet && (
-                        <button className={styles.sheetToolbarButton} type="button" onClick={() => {
-                          if (confirm("Are you sure you want to delete this sheet and all its rows?")) {
-                            setActiveCrmSheetId(null);
-                            runAction(() => deleteEmployeeEntity({ entityType: "crmSheet", id: activeCrmSheet.id.toString() }));
-                          }
-                        }}>Delete sheet</button>
-                      )}
-                    </div>
-                  </div>
-                  <div className={styles.sheetMarkingToolbar}>
-                    <div className={styles.sheetMarkSummary}>
-                      <strong>{canEditCrmSheet ? "Mark selected row" : "Selected row"}</strong>
-                      <span>{selectedCrmRow ? `Row ${sheetRows.findIndex((row) => row.id === selectedCrmRow.id) + 2}: ${selectedCrmRow.status}` : "Select a row in the sheet"}</span>
-                    </div>
-                    {canEditCrmSheet && (
-                      <div className={styles.sheetMarkButtons}>
-                        {[
-                          { status: "Open", label: "Open" },
-                          { status: "Done", label: "Done" },
-                          { status: "Callback", label: "Callback" },
-                          { status: "Not Interested", label: "Not Interested" },
-                          { status: "Invalid", label: "Invalid" },
-                        ].map((item) => (
-                          <button
-                            className={`${styles.sheetMarkButton} ${item.status === "Done" ? styles.sheetMarkDone : item.status === "Callback" ? styles.sheetMarkCallback : item.status === "Not Interested" ? styles.sheetMarkNotInterested : item.status === "Invalid" ? styles.sheetMarkInvalid : ""}`}
-                            key={item.status}
-                            type="button"
-                            onClick={() => markSelectedRow(item.status)}
-                            disabled={!canMarkRows}
-                          >
-                            {item.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <div className={styles.sheetStatusStats}>
-                      <span>{openRows} open</span>
-                      <span>{callbackRows} callback</span>
-                      <span>{doneRows} done</span>
-                    </div>
-                  </div>
-
-                  <div className={styles.sheetFormulaRow}>
-                    <span>{selectedReference}</span>
-                    <span>fx</span>
-                    <input className={styles.sheetFormulaInput} readOnly value={selectedValue} placeholder="Select a cell to preview its value" />
-                  </div>
-
-                  <div className={styles.sheetGridShell}>
-                    <table className={styles.googleSheetGrid}>
-                      <thead>
-                        <tr>
-                          <th className={styles.sheetCornerCell}></th>
-                          {["Status", ...columns].map((column, index) => <th key={column}>{columnName(index)}</th>)}
-                        </tr>
-                        <tr>
-                          <th className={styles.sheetRowNumber}>1</th>
-                          <th>Status</th>
-                          {columns.map((column) => <th key={column}>{column}</th>)}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sheetRows.length === 0 ? (
-                          Array.from({ length: 36 }).map((_, rowIndex) => (
-                            <tr key={`blank-${rowIndex}`}>
-                              <td className={styles.sheetRowNumber}>{rowIndex + 2}</td>
-                              {["Status", ...columns].map((column, colIndex) => (
-                                <td
-                                  className={(selectedCrmCell?.rowId === 0 && selectedCrmCell.rowIndex === rowIndex && selectedCrmCell.column === column) || (!selectedCrmCell && rowIndex === 0 && colIndex === 0) ? styles.sheetSelectedCell : ""}
-                                  key={`${rowIndex}-${column}`}
-                                  onClick={() => setSelectedCrmCell({ rowId: 0, rowIndex, column, columnIndex: colIndex, value: "" })}
-                                ></td>
-                              ))}
-                            </tr>
-                          ))
-                        ) : (
-                          sheetRows.map((row, rowIndex) => {
-                            const cells = rowData(row);
-                            return (
-                              <tr className={`${rowTint(row.status)} ${selectedCrmRow?.id === row.id ? styles.sheetSelectedRow : ""}`} key={row.id} onClick={() => setSelectedCrmRowId(row.id)}>
-                                <td className={styles.sheetRowNumber}>{rowIndex + 2}</td>
-                                <td className={selectedCrmCell?.rowId === row.id && selectedCrmCell.column === "Status" ? styles.sheetSelectedCell : ""} onClick={() => {
-                                  setSelectedCrmRowId(row.id);
-                                  setSelectedCrmCell({ rowId: row.id, rowIndex, column: "Status", columnIndex: 0, value: row.status });
-                                }}>
-                                  <div className={styles.statusCell}>
-                                    <span className={styles.pill}>{row.status}</span>
-                                  </div>
-                                </td>
-                                {columns.map((column, colIndex) => {
-                                  const rawValue = cells[column] || "";
-                                  const shownValue = displayCellValue(column, rawValue);
-                                  const columnIndex = colIndex + 1;
-                                  return (
-                                  <td className={selectedCrmCell?.rowId === row.id && selectedCrmCell.column === column ? styles.sheetSelectedCell : ""} key={`${row.id}-${column}`}>
-                                    {activeCrmSheet.locked || !canEditCrmSheet ? (
-                                      <div
-                                        className={styles.sheetCellReadOnly}
-                                        onClick={() => {
-                                          setSelectedCrmRowId(row.id);
-                                          setSelectedCrmCell({ rowId: row.id, rowIndex, column, columnIndex, value: shownValue });
-                                        }}
-                                      >
-                                        {shownValue}
-                                      </div>
-                                    ) : (
-                                      <input
-                                        className={styles.sheetCellInput}
-                                        type="text"
-                                        defaultValue={shownValue}
-                                        onFocus={() => {
-                                          setSelectedCrmRowId(row.id);
-                                          setSelectedCrmCell({ rowId: row.id, rowIndex, column, columnIndex, value: shownValue });
-                                        }}
-                                        onChange={(e) => {
-                                          setSelectedCrmCell({ rowId: row.id, rowIndex, column, columnIndex, value: displayCellValue(column, e.target.value) });
-                                        }}
-                                        onBlur={(e) => {
-                                          const nextValue = displayCellValue(column, e.target.value);
-                                          if (nextValue !== shownValue) {
-                                            handleCellChange(row.id, column, nextValue);
-                                          }
-                                        }}
-                                      />
-                                    )}
-                                  </td>
-                                );})}
-                              </tr>
-                            );
-                          })
-                        )}
-                        {Array.from({ length: blankRowCount }).map((_, blankIndex) => (
-                          <tr key={`blank-after-${blankIndex}`}>
-                            <td className={styles.sheetRowNumber}>{sheetRows.length + blankIndex + 2}</td>
-                            {["Status", ...columns].map((column, colIndex) => (
-                              <td
-                                className={selectedCrmCell?.rowId === 0 && selectedCrmCell.rowIndex === sheetRows.length + blankIndex && selectedCrmCell.column === column ? styles.sheetSelectedCell : ""}
-                                key={`blank-after-${blankIndex}-${column}`}
-                                onClick={() => setSelectedCrmCell({
-                                  rowId: 0,
-                                  rowIndex: sheetRows.length + blankIndex,
-                                  column,
-                                  columnIndex: colIndex,
-                                  value: "",
-                                })}
-                              ></td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className={styles.sheetBottomBar}>
-                    <span className={styles.sheetTab}>Sheet1</span>
-                  </div>
-                </div>
-              );
-            })()}
-          </section>
+          <CrmTab
+            data={data}
+            runAction={runAction}
+            activeCrmSheetId={activeCrmSheetId}
+            setActiveCrmSheetId={setActiveCrmSheetId}
+            selectedCrmRowId={selectedCrmRowId}
+            setSelectedCrmRowId={setSelectedCrmRowId}
+            selectedCrmCell={selectedCrmCell}
+            setSelectedCrmCell={setSelectedCrmCell}
+            setError={setError}
+            submit={submit}
+            handleCellChange={handleCellChange}
+          />
         )}
 
         {tab === "applicants" && (
-          <section className={styles.grid}>
-            <div className={`${styles.dashboardHero} ${styles.span12}`}>
-              <div>
-                <div className={styles.eyebrow}>Hiring Console</div>
-                <h1 className={styles.heroTitle}>Recruitment decisions without follow-up data entry.</h1>
-                <p className={styles.muted}>Applicants submit role, type, availability, links, and expectations up front. Admin can accept, reject, or edit only when needed.</p>
-              </div>
-              <div className={styles.heroActions}>
-                <button className={styles.button} type="button" onClick={copyApplicationLink}>Copy WhatsApp Link</button>
-                <a className={styles.ghostButton} href={applicationLink} target="_blank" rel="noopener noreferrer">View Public Form</a>
-              </div>
-            </div>
-
-            <div className={`${styles.card} ${styles.metricCard} ${styles.span3}`}>
-              <span className={styles.muted}>Total Applications</span>
-              <span className={styles.metricValue}>{data.applicants.length}</span>
-            </div>
-            <div className={`${styles.card} ${styles.metricCard} ${styles.span3}`}>
-              <span className={styles.muted}>Awaiting Review</span>
-              <span className={styles.metricValue}>{pendingApplicants.length}</span>
-            </div>
-            <div className={`${styles.card} ${styles.metricCard} ${styles.span3}`}>
-              <span className={styles.muted}>Approved</span>
-              <span className={styles.metricValue}>{approvedApplicants.length}</span>
-            </div>
-            <div className={`${styles.card} ${styles.metricCard} ${styles.span3}`}>
-              <span className={styles.muted}>Rejected</span>
-              <span className={styles.metricValue}>{rejectedApplicants.length}</span>
-            </div>
-
-            <div className={`${styles.card} ${styles.span12}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Applications</h2>
-                  <p className={styles.muted}>{pendingApplicants.length} pending decisions. Accept creates the HR signal; reject closes the applicant cleanly.</p>
-                </div>
-                <button className={styles.ghostButton} type="button" onClick={() => downloadCsv("bluevolt-applicants.csv", applicantRows)}>Download CSV</button>
-              </div>
-              <div className={styles.smartTable}>
-                <div className={styles.smartTableHeader}>
-                  <span>Applicant</span>
-                  <span>Role</span>
-                  <span>Details</span>
-                  <span>Submitted</span>
-                  <span>Status</span>
-                  <span>Action</span>
-                </div>
-                {data.applicants.length === 0 ? <div className={styles.emptyState}>No applications yet. Copy the public form link and share it in WhatsApp.</div> : data.applicants.map((applicant) => (
-                  <div className={styles.smartTableRow} key={applicant.id}>
-                    <div className={styles.identityCell}>
-                      <span className={styles.avatar}>{applicant.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
-                      <span><strong>{applicant.name}</strong><small>{applicant.email}</small></span>
-                    </div>
-                    <span>{applicant.roleApplied}</span>
-                    <span className={styles.muted}>{applicant.phone || "No phone"}{applicant.notes ? ` - ${applicant.notes.slice(0, 90)}` : ""}</span>
-                    <span className={styles.muted}>{formatPortalDateTime(applicant.createdAt)}</span>
-                    <span className={applicant.stage === "Offer" ? `${styles.pill} ${styles.pillSuccess}` : applicant.stage === "Rejected" ? `${styles.pill} ${styles.pillMuted}` : `${styles.pill} ${styles.pillWarn}`}>{applicant.stage}</span>
-                    <span className={styles.actionStack}>
-                      {applicant.stage !== "Offer" && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "applicant", id: applicant.id.toString(), status: "Offer" }))}>Accept</button>}
-                      {applicant.stage !== "Rejected" && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "applicant", id: applicant.id.toString(), status: "Rejected" }))}>Reject</button>}
-                      <details className={styles.editPanel}>
-                        <summary>Edit</summary>
-                        <form className={styles.formGrid} onSubmit={submit(saveApplicant)}>
-                          <input type="hidden" name="id" value={applicant.id} />
-                          <Field label="Name" name="name" defaultValue={applicant.name} required />
-                          <Field label="Email" name="email" type="email" defaultValue={applicant.email} required />
-                          <Field label="Phone" name="phone" defaultValue={applicant.phone || ""} />
-                          <Field label="Role Applied" name="roleApplied" defaultValue={applicant.roleApplied} required />
-                          <Field label="Stage" name="stage" options={["New", "Screening", "Interview", "Offer", "Rejected"]} defaultValue={applicant.stage} />
-                          <Field label="Source" name="source" defaultValue={applicant.source} />
-                          <Field label="Meet URL" name="meetUrl" type="url" defaultValue={applicant.meetUrl || ""} wide />
-                          <Field label="Notes" name="notes" textarea defaultValue={applicant.notes || ""} wide />
-                          <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Applicant</button>
-                        </form>
-                      </details>
-                      <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "applicant", id: applicant.id.toString() }))}>Delete</button>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className={`${styles.card} ${styles.span6}`}>
-              <h2 className={styles.cardTitle}>Decision Trail</h2>
-              <p className={styles.muted}>Latest accept/reject decisions for audit and handover.</p>
-              <div className={styles.list}>
-                {[...approvedApplicants, ...rejectedApplicants].slice(0, 6).map((applicant) => (
-                  <div className={styles.row} key={`decision-${applicant.id}`}>
-                    <div className={styles.rowHeader}><strong>{applicant.name}</strong><span className={applicant.stage === "Offer" ? `${styles.pill} ${styles.pillSuccess}` : styles.pill}>{applicant.stage}</span></div>
-                    <p className={styles.muted}>{applicant.roleApplied} - {formatPortalDateTime(applicant.updatedAt)}</p>
-                  </div>
-                ))}
-                {approvedApplicants.length + rejectedApplicants.length === 0 && <div className={styles.emptyState}>No decisions recorded yet.</div>}
-              </div>
-            </div>
-            <div className={`${styles.card} ${styles.span6}`}>
-              <h2 className={styles.cardTitle}>Application Form Sharing</h2>
-              <p className={styles.muted}>Public link for WhatsApp groups, career pages, and manual sharing.</p>
-              <label className={styles.field}>
-                <span className={styles.label}>Direct Form URL</span>
-                <div className={styles.inlineForm}>
-                  <input className={styles.input} value={applicationLink} readOnly />
-                  <button className={styles.button} type="button" onClick={copyApplicationLink}>Copy Link</button>
-                </div>
-              </label>
-              <label className={styles.field}>
-                <span className={styles.label}>Embed Code</span>
-                <textarea className={styles.textarea} value={`<iframe src="${applicationLink}?embed=1" width="100%" height="980" style="border:0;" loading="lazy"></iframe>`} readOnly />
-              </label>
-            </div>
-          </section>
+          <ApplicantsTab
+            data={data}
+            runAction={runAction}
+            copyApplicationLink={copyApplicationLink}
+            applicationLink={applicationLink}
+            submit={submit}
+            formatPortalDateTime={formatPortalDateTime}
+            downloadCsv={downloadCsv}
+          />
         )}
 
         {tab === "ops" && (
@@ -2381,670 +1935,41 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
           </section>
         )}
 
-        {tab === "access" && (() => {
-          const activeRole = roleDefinitions.find((r) => r.key === selectedRoleKey) || roleDefinitions.find((r) => r.key === "super_admin") || roleDefinitions[0];
-          const selectedFeatures = activeRole ? featureAccessSet(activeRole.featureAccess) : new Set<string>();
-
-          const getRoleIcon = (roleKey: string) => {
-            switch (roleKey) {
-              case "super_admin":
-                return <Shield size={16} />;
-              case "admin":
-                return <Shield size={16} style={{ color: "#ef4444" }} />;
-              case "hr":
-                return <Users size={16} />;
-              case "sales":
-                return <Handshake size={16} />;
-              case "content":
-                return <PenLine size={16} />;
-              case "operations":
-                return <ClipboardList size={16} />;
-              case "employee":
-                return <UserCheck size={16} />;
-              default:
-                return <Star size={16} />;
-            }
-          };
-
-          const submitRole = (event: FormEvent<HTMLFormElement>) => {
-            event.preventDefault();
-            setError("");
-            setNotice("Processing your request...");
-            const form = event.currentTarget;
-            const formValues = values(form) as EmployeeRoleDefinitionInput;
-            startTransition(async () => {
-              try {
-                const result = await saveEmployeeRoleDefinition(formValues);
-                if (!result.success) {
-                  setError(result.error || "Save failed.");
-                  return;
-                }
-                form.reset();
-                setNotice("Role definition saved successfully.");
-                const newData = await getEmployeePortalData(sortResources, tab);
-                setData(prev => mergePortalData(prev, newData, tab));
-                if (isCreatingRole) {
-                  setSelectedRoleKey(result.roleKey || formValues.key || "role");
-                  setIsCreatingRole(false);
-                }
-              } catch (roleError) {
-                setError(simplePortalError(roleError, "Role update failed. Please try again."));
-              }
-            });
-          };
-
-          const featureGroups = [
-            {
-              title: "Staff & Organization Control",
-              features: EMPLOYEE_PORTAL_FEATURES.filter((f) => ["employees", "access", "applicants", "announcements", "meetings"].includes(f.id)),
-            },
-            {
-              title: "Business Workspace",
-              features: EMPLOYEE_PORTAL_FEATURES.filter((f) => ["crm", "crm_manage", "resources", "dashboard"].includes(f.id)),
-            },
-            {
-              title: "Financial & Core Operations",
-              features: EMPLOYEE_PORTAL_FEATURES.filter((f) => ["ops", "expenses", "payroll", "reviews", "documents", "sign_documents"].includes(f.id)),
-            },
-          ];
-
-          const filteredAuditEvents = data.auditEvents.filter((event) => {
-            if (!auditSearch) return true;
-            const search = auditSearch.toLowerCase();
-            return (
-              (event.action || "").toLowerCase().includes(search) ||
-              (event.entityType || "").toLowerCase().includes(search) ||
-              (event.actorName || "").toLowerCase().includes(search) ||
-              (event.entityId || "").toLowerCase().includes(search)
-            );
-          });
-
-          return (
-            <section className={styles.grid}>
-              <div className={`${styles.dashboardHero} ${styles.span12}`}>
-                <div>
-                  <div className={styles.eyebrow}>Privilege Matrix</div>
-                  <h1 className={styles.heroTitle}>Role & Feature Authorization Control</h1>
-                  <p className={styles.muted}>Manage roles, map granular workspace features, and review security audits.</p>
-                </div>
-              </div>
-
-              {/* Left Column: Role Directory (span 4) */}
-              <div className={`${styles.card} ${styles.span4}`} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <h2 className={styles.cardTitle} style={{ margin: 0 }}>Role Directory</h2>
-                  <button
-                    className={styles.button}
-                    type="button"
-                    onClick={() => setIsCreatingRole(true)}
-                    style={{ minHeight: 34, padding: "0 14px", fontSize: "0.85rem", background: "linear-gradient(135deg, #635bff, #4f46e5)" }}
-                  >
-                    + Create Role
-                  </button>
-                </div>
-                <div className={styles.roleDirectoryList}>
-                  {roleDefinitions.map((role) => {
-                    const isSelected = selectedRoleKey === role.key && !isCreatingRole;
-                    const totalFeatures = EMPLOYEE_PORTAL_FEATURES.length;
-                    const featuresCount = role.key === "super_admin" ? totalFeatures : featureAccessSet(role.featureAccess).size;
-                    const progressPct = Math.round((featuresCount / totalFeatures) * 100);
-                    const assignedCount = employees.filter((user) => user.role === role.key).length;
-                    return (
-                      <button
-                        key={role.key}
-                        onClick={() => {
-                          setSelectedRoleKey(role.key);
-                          setIsCreatingRole(false);
-                        }}
-                        className={`${styles.roleItemCard} ${isSelected ? styles.roleItemCardActive : ""}`}
-                        type="button"
-                      >
-                        <div className={styles.roleCardHeader}>
-                          <div className={styles.roleCardTitleGroup}>
-                            <span className={styles.roleIconWrapper}>{getRoleIcon(role.key)}</span>
-                            <strong style={{ fontSize: "0.95rem", color: isSelected ? "var(--text-brand)" : "var(--text-primary)" }}>{role.label}</strong>
-                          </div>
-                          <span className={role.status === "Active" ? `${styles.pill} ${styles.pillSuccess}` : `${styles.pill} ${styles.pillMuted}`} style={{ fontSize: "0.65rem", padding: "2px 6px" }}>
-                            {role.status}
-                          </span>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.76rem", width: "100%", paddingLeft: 42 }}>
-                          <code style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>{role.key}</code>
-                          <span style={{ color: isSelected ? "var(--text-brand)" : "var(--text-muted)", fontWeight: 600 }}>{assignedCount} mapped</span>
-                        </div>
-                        <div style={{ width: "100%", paddingLeft: 42 }}>
-                          <div className={styles.progressBarContainer}>
-                            <div className={styles.progressBarFill} style={{ width: `${progressPct}%` }} />
-                          </div>
-                          <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", gap: 12, fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                            <span>{featuresCount}/{totalFeatures} features</span>
-                            <span>{role.status}</span>
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Right Column: Detail Editor / Create Form (span 8) */}
-              <div className={`${styles.card} ${styles.span8}`}>
-                {isCreatingRole ? (
-                  <form onSubmit={submitRole} className={styles.formGrid}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gridColumn: "1 / -1", marginBottom: 12, borderBottom: "1px solid var(--border-color)", paddingBottom: 12 }}>
-                      <div>
-                        <h2 className={styles.cardTitle} style={{ margin: 0 }}>Create Custom Role</h2>
-                        <p className={styles.muted} style={{ margin: "4px 0 0", fontSize: "0.85rem" }}>Define a new role and select its portal privileges.</p>
-                      </div>
-                      <button className={styles.ghostButton} type="button" onClick={() => setIsCreatingRole(false)} style={{ minHeight: 34, padding: "0 14px", fontSize: "0.85rem" }}>Cancel</button>
-                    </div>
-
-                    <Field label="Role Name" name="label" placeholder="Content Lead" required />
-                    <Field label="Role Key" name="key" placeholder="content_lead" />
-                    <Field label="Status" name="status" options={["Active", "Inactive"]} />
-                    <Field label="Description" name="description" placeholder="Short description of the role's purpose." textarea wide />
-                    <Field label="Access Notes / Restrictions" name="permissions" placeholder="Example: View only access to CRM." textarea wide />
-
-                    <div className={`${styles.field} ${styles.fieldWide}`} style={{ marginTop: 12 }}>
-                      <span className={styles.label} style={{ marginBottom: 10, display: "block" }}>Select Feature Access</span>
-                      <div className={styles.accessGrid}>
-                        {EMPLOYEE_PORTAL_FEATURES.map((feature) => (
-                          <div className={styles.accessOption} key={feature.id} style={{ padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
-                              <strong style={{ fontSize: "0.9rem", color: "var(--text-primary)" }}>{feature.label}</strong>
-                              <small style={{ fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: 1.35 }}>{feature.description}</small>
-                            </div>
-                            <label className={styles.toggleSwitch}>
-                              <input
-                                type="checkbox"
-                                name="featureAccess"
-                                value={feature.id}
-                                defaultChecked={feature.id === "dashboard"}
-                              />
-                              <span className={styles.switchSlider} />
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <button className={`${styles.button} ${styles.fieldWide}`} type="submit" style={{ marginTop: 16 }}>Save Role</button>
-                  </form>
-                ) : activeRole ? (
-                  <form onSubmit={submitRole} className={styles.formGrid}>
-                    <input type="hidden" name="key" value={activeRole.key} />
-                    <input type="hidden" name="label" value={activeRole.label} />
-
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gridColumn: "1 / -1", marginBottom: 12, borderBottom: "1px solid var(--border-color)", paddingBottom: 12 }}>
-                      <div>
-                        <h2 className={styles.cardTitle} style={{ margin: 0 }}>Privilege Editor: {activeRole.label}</h2>
-                        <p className={styles.muted} style={{ margin: "4px 0 0", fontSize: "0.85rem" }}>
-                          {activeRole.key === "super_admin"
-                            ? "Super Admin has full system capabilities."
-                            : `Modify features mapped to the ${activeRole.label} role.`
-                          }
-                        </p>
-                      </div>
-                      <span className={styles.pill} style={{ fontFamily: "var(--font-mono)" }}>{activeRole.key}</span>
-                    </div>
-
-                    {["super_admin", "admin", "hr", "sales", "content", "operations", "employee"].includes(activeRole.key) && (
-                      <div className={styles.systemAlertBanner}>
-                        <Shield size={20} />
-                        <div className={styles.systemAlertContent}>
-                          <strong>Core System Role ({activeRole.label})</strong>
-                          <p>
-                            This is a system-protected access role. Basic definitions (such as role name, unique key, status, and description) are locked to maintain database schema stability. Mapped feature capabilities below can still be modified.
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className={styles.field}>
-                      <span className={styles.label}>Role Name</span>
-                      <input className={styles.input} name="label_display" value={activeRole.label} disabled style={{ opacity: 0.8 }} />
-                    </div>
-                    <div className={styles.field}>
-                      <span className={styles.label}>Status</span>
-                      <select
-                        className={styles.select}
-                        name="status"
-                        defaultValue={activeRole.status}
-                        disabled={["super_admin", "admin", "hr", "sales", "content", "operations", "employee"].includes(activeRole.key)}
-                      >
-                        <option>Active</option>
-                        <option>Inactive</option>
-                      </select>
-                    </div>
-
-                    <div className={`${styles.field} ${styles.fieldWide}`}>
-                      <span className={styles.label}>Description</span>
-                      <textarea
-                        className={styles.textarea}
-                        name="description"
-                        defaultValue={activeRole.description}
-                        disabled={["super_admin", "admin", "hr", "sales", "content", "operations", "employee"].includes(activeRole.key)}
-                        placeholder="Role description..."
-                      />
-                    </div>
-
-                    <div className={`${styles.field} ${styles.fieldWide}`}>
-                      <span className={styles.label}>Access Notes / Restrictions</span>
-                      <textarea
-                        className={styles.textarea}
-                        name="permissions"
-                        defaultValue={activeRole.permissions}
-                        disabled={["super_admin", "admin", "hr", "sales", "content", "operations", "employee"].includes(activeRole.key)}
-                        placeholder="Restrictions..."
-                      />
-                    </div>
-
-                    {/* Privilege Mapping Categories */}
-                    <div className={`${styles.field} ${styles.fieldWide}`} style={{ marginTop: 12 }}>
-                      <span className={styles.label} style={{ marginBottom: 12, display: "block" }}>Feature Privilege Mapping</span>
-
-                      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                        {featureGroups.map((group) => (
-                          <div key={group.title} style={{ background: "var(--bg-shell)", borderRadius: 16, padding: 18, border: "1px solid var(--border-color)" }}>
-                            <strong style={{ fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-brand)", display: "block", marginBottom: 12 }}>
-                              {group.title}
-                            </strong>
-                            <div className={styles.accessGrid}>
-                              {group.features.map((feature) => (
-                                <div className={styles.accessOption} key={feature.id} style={{ background: "var(--bg-card)", padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
-                                  <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
-                                    <strong style={{ fontSize: "0.9rem", color: "var(--text-primary)" }}>{feature.label}</strong>
-                                    <small style={{ fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: 1.35 }}>{feature.description}</small>
-                                  </div>
-                                  <label className={styles.toggleSwitch}>
-                                    <input
-                                      type="checkbox"
-                                      name="featureAccess"
-                                      value={feature.id}
-                                      defaultChecked={activeRole.key === "super_admin" || selectedFeatures.has(feature.id)}
-                                      disabled={activeRole.key === "super_admin"}
-                                    />
-                                    <span className={styles.switchSlider} />
-                                  </label>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {activeRole.key !== "super_admin" && (
-                      <div className={`${styles.fieldWide} ${styles.toolbar}`} style={{ marginTop: 16 }}>
-                        <button className={styles.button} type="submit">
-                          Update Privileges
-                        </button>
-                        {!["admin", "hr", "sales", "content", "operations", "employee"].includes(activeRole.key) && (
-                          <button
-                            className={styles.ghostButton}
-                            type="button"
-                            onClick={() => {
-                              if (!confirm(`Delete the ${activeRole.label} role? This cannot be undone.`)) return;
-                              setSelectedRoleKey("super_admin");
-                              runAction(() => deleteEmployeeRoleDefinition({ key: activeRole.key }));
-                            }}
-                          >
-                            Delete Custom Role
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </form>
-                ) : (
-                  <div className={styles.emptyState}>Select a role from the directory to edit.</div>
-                )}
-              </div>
-
-              {/* Bottom Row: Access Audit (span 12) */}
-              <div className={`${styles.card} ${styles.span12}`}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 20, marginBottom: 16, flexWrap: "wrap" }}>
-                  <div>
-                    <h2 className={styles.cardTitle} style={{ margin: 0 }}>Access Security Audit</h2>
-                    <p className={styles.muted} style={{ margin: "4px 0 0" }}>Chronological system events relating to authorization changes.</p>
-                  </div>
-                  <div className={styles.auditSearchWrapper}>
-                    <Search size={14} />
-                    <input
-                      className={`${styles.input} ${styles.auditSearchInput}`}
-                      value={auditSearch}
-                      onChange={(e) => setAuditSearch(e.target.value)}
-                      placeholder="Filter audit logs..."
-                    />
-                  </div>
-                </div>
-                <div style={{ maxHeight: "360px", overflowY: "auto", paddingRight: 4 }}>
-                  {filteredAuditEvents.length === 0 ? (
-                    <div className={styles.emptyState}>No audit events match search or exist yet.</div>
-                  ) : (
-                    <div className={styles.timelineContainer}>
-                      {filteredAuditEvents.map((event) => {
-                        let badgeColorClass = styles.timelineBadgeBlue;
-                        if (event.action.includes("create")) {
-                          badgeColorClass = styles.timelineBadgeGreen;
-                        } else if (event.action.includes("delete")) {
-                          badgeColorClass = styles.timelineBadgeRed;
-                        }
-                        return (
-                          <div className={styles.timelineItem} key={event.id}>
-                            <div className={`${styles.timelineBadge} ${badgeColorClass}`} />
-                            <div className={styles.timelineMeta}>
-                              <div className={styles.timelineActionGroup}>
-                                <span className={styles.pill} style={{ fontSize: "0.65rem", padding: "2px 8px" }}>{event.entityType}</span>
-                                <strong style={{ fontSize: "0.95rem", color: "var(--text-primary)" }}>{event.action}</strong>
-                              </div>
-                              <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
-                                {formatPortalDateTime(event.createdAt)}
-                              </span>
-                            </div>
-                            <p className={styles.timelineDetails}>
-                              Entity Key/ID: <code style={{ fontFamily: "var(--font-mono)", color: "var(--text-brand)" }}>{event.entityId}</code> &bull; Performed by <strong>{event.actorName || "System"}</strong> (ID: {event.actorId})
-                            </p>
-                            {event.metadata && (() => {
-                              try {
-                                const meta = typeof event.metadata === "string" ? JSON.parse(event.metadata) : event.metadata;
-                                if (meta && Object.keys(meta).length) {
-                                  return (
-                                    <div style={{ marginTop: 8, fontSize: "0.75rem", background: "var(--bg-shell)", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border-color)", fontFamily: "var(--font-mono)", overflowX: "auto" }}>
-                                      {JSON.stringify(meta)}
-                                    </div>
-                                  );
-                                }
-                              } catch {}
-                              return null;
-                            })()}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </section>
-          );
-        })()}
+        {tab === "access" && (
+          <PrivilegesTab
+            data={data}
+            runAction={runAction}
+            formatPortalDateTime={formatPortalDateTime}
+            selectedRoleKey={selectedRoleKey}
+            setSelectedRoleKey={setSelectedRoleKey}
+            isCreatingRole={isCreatingRole}
+            setIsCreatingRole={setIsCreatingRole}
+            setError={setError}
+            setNotice={setNotice}
+            startTransition={startTransition}
+            setData={setData}
+            mergePortalData={mergePortalData}
+            simplePortalError={simplePortalError}
+          />
+        )}
 
         {tab === "admin" && (
-          <section className={styles.grid}>
-            <div className={`${styles.dashboardHero} ${styles.span12}`}>
-              <div>
-                <div className={styles.eyebrow}>Employee Access Workflow</div>
-                <h1 className={styles.heroTitle}>Create roles once, share the hiring link, then onboard only approved people.</h1>
-                <p className={styles.muted}>Use Privileges for role design, use the public form for applicant intake, and keep manual employee entry for direct hires or immediate access needs.</p>
-              </div>
-              <div className={styles.heroActions}>
-                <button className={styles.button} type="button" onClick={() => setUserManagementOpen(true)}>Appoint / Add User</button>
-                <button className={styles.button} type="button" onClick={copyApplicationLink}>Copy Hiring Link</button>
-                {data.capabilities.canManageAccess && <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("access")}>Open Privileges</button>}
-                <a className={styles.ghostButton} href={applicationLink} target="_blank" rel="noopener noreferrer">Preview Form</a>
-              </div>
-            </div>
-            <div className={`${styles.card} ${styles.span12}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Simple Hiring Link</h2>
-                  <p className={styles.muted}>Paste this in WhatsApp groups or hiring posts. Applicants submit role, type, pay preference, availability, and profile links up front.</p>
-                </div>
-                <button className={styles.button} type="button" onClick={copyApplicationLink}>Copy WhatsApp Link</button>
-              </div>
-              <div className={styles.inlineForm}>
-                <input className={styles.input} value={applicationLink} readOnly />
-                <a className={styles.ghostButton} href={applicationLink} target="_blank" rel="noopener noreferrer">Open Form</a>
-              </div>
-            </div>
-            <div className={`${styles.card} ${styles.span12}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Application Submissions</h2>
-                  <p className={styles.muted}>Review public form entries here, then appoint as portal users or reject.</p>
-                </div>
-                <div className={styles.toolbar}>
-                  <select className={styles.select} style={{ maxWidth: 160 }} value={applicantSort} onChange={(event) => setApplicantSort(event.target.value)}>
-                    <option value="newest">Newest</option>
-                    <option value="name">Name</option>
-                    <option value="role">Role</option>
-                    <option value="status">Status</option>
-                  </select>
-                  <button className={styles.ghostButton} type="button" onClick={() => downloadCsv("bluevolt-applicants.csv", applicantRows)}>Download CSV</button>
-                </div>
-              </div>
-              <div className={`${styles.smartTable} ${styles.applicantSmartTable}`}>
-                <div className={styles.smartTableHeader}>
-                  <span>Applicant</span>
-                  <span>Role</span>
-                  <span>Details</span>
-                  <span>Status</span>
-                  <span>Action</span>
-                </div>
-                {sortedApplicants.length === 0 ? <div className={styles.emptyState}>No submissions yet. Use Appoint / Add User to copy the public link.</div> : sortedApplicants.map((applicant) => (
-                  <div className={styles.smartTableRow} key={`admin-applicant-${applicant.id}`}>
-                    <div className={styles.identityCell}>
-                      <span className={styles.avatar}>{applicant.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
-                      <span><strong>{applicant.name}</strong><small>{applicant.email}</small></span>
-                    </div>
-                    <span>{applicant.roleApplied}</span>
-                    <span className={styles.muted}>{applicant.phone || "No phone"}{applicant.notes ? ` - ${applicant.notes.slice(0, 100)}` : ""}</span>
-                    <span className={applicant.stage === "Appointed" ? `${styles.pill} ${styles.pillSuccess}` : applicant.stage === "Rejected" ? `${styles.pill} ${styles.pillMuted}` : `${styles.pill} ${styles.pillWarn}`}>{applicant.stage}</span>
-                    <span className={styles.actionStack}>
-                      {applicant.stage !== "Appointed" && applicant.stage !== "Rejected" && (
-                        <button className={styles.button} type="button" onClick={() => runAction(() => appointApplicantAsEmployee({ applicantId: applicant.id.toString() }))}>Add as Employee</button>
-                      )}
-                      {applicant.stage !== "Rejected" && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "applicant", id: applicant.id.toString(), status: "Rejected" }))}>Reject</button>}
-                      <details className={styles.editPanel}>
-                        <summary>Edit</summary>
-                        <form className={styles.formGrid} onSubmit={submit(saveApplicant)}>
-                          <input type="hidden" name="id" value={applicant.id} />
-                          <Field label="Name" name="name" defaultValue={applicant.name} required />
-                          <Field label="Email" name="email" type="email" defaultValue={applicant.email} required />
-                          <Field label="Phone" name="phone" defaultValue={applicant.phone || ""} />
-                          <Field label="Role Applied" name="roleApplied" defaultValue={applicant.roleApplied} required />
-                          <Field label="Stage" name="stage" options={["New", "Screening", "Interview", "Offer", "Appointed", "Rejected"]} defaultValue={applicant.stage} />
-                          <Field label="Source" name="source" defaultValue={applicant.source} />
-                          <Field label="Meet URL" name="meetUrl" type="url" defaultValue={applicant.meetUrl || ""} wide />
-                          <Field label="Notes" name="notes" textarea defaultValue={applicant.notes || ""} wide />
-                          <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Submission</button>
-                        </form>
-                      </details>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className={`${styles.card} ${styles.span8}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Employees</h2>
-                  <p className={styles.muted}>Search employees, verify work windows, and monitor active portal presence.</p>
-                </div>
-                <div className={styles.toolbar}>
-                  <label style={{ position: "relative", display: "block" }}>
-                    <Search size={14} style={{ position: "absolute", left: 10, top: 14, color: "#94a3b8" }} />
-                    <input className={styles.input} style={{ paddingLeft: 32, width: 220 }} value={employeeSearch} onChange={(event) => setEmployeeSearch(event.target.value)} placeholder="Search employee" />
-                  </label>
-                  <select className={styles.select} style={{ maxWidth: 150 }} value={employeeTypeFilter} onChange={(event) => setEmployeeTypeFilter(event.target.value)}>
-                    <option value="all">All types</option>
-                    {["Full-time", "Part-time", "Intern", "Contractor", "Consultant"].map((type) => <option key={type} value={type}>{type}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className={styles.quickGrid} style={{ marginBottom: 12 }}>
-                <div className={styles.row}><span className={styles.pill}><Users size={13} /> {employees.length} total</span></div>
-                <div className={styles.row}><span className={`${styles.pill} ${styles.pillSuccess}`}><UserCheck size={13} /> {onlineEmployees} online</span></div>
-                <div className={styles.row}><span className={`${styles.pill} ${styles.pillWarn}`}><Clock3 size={13} /> {workingEmployees} in hours</span></div>
-                <div className={styles.row}><span className={styles.pill}><Briefcase size={13} /> {employees.filter((user) => user.employeeType === "Intern").length} interns</span></div>
-              </div>
-              <div className={styles.list}>{filteredEmployees.length === 0 ? <div className={styles.emptyState}>No employees match this filter.</div> : filteredEmployees.map((user) => (
-                <div className={styles.row} key={user.id}>
-                  <div className={styles.rowHeader}>
-                    <strong>{user.name}</strong>
-                    <div style={{ display: "inline-flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
-                      <span className={styles.pill}>{displayRole(user.role)}</span>
-                      <span className={user.compensationStatus === "Paid" ? `${styles.pill} ${styles.pillSuccess}` : `${styles.pill} ${styles.pillWarn}`}>{user.employeeType} · {user.compensationStatus}</span>
-                      <span className={user.isOnline ? `${styles.pill} ${styles.pillSuccess}` : `${styles.pill} ${styles.pillMuted}`} title={user.isWithinWorkHours ? "Online · Within work hours" : "Offline · Outside work hours"}>
-                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: user.isOnline ? "#22c55e" : "#94a3b8", display: "inline-block", marginRight: 4 }} />
-                        {user.isOnline ? "Online" : "Offline"}
-                      </span>
-                      <div style={{ position: "relative", display: "inline-block" }} onClick={(e) => e.stopPropagation()}>
-                        <button
-                          className={styles.ghostButton}
-                          style={{ padding: "4px 10px", minHeight: 32, fontSize: "0.8rem", fontWeight: 700 }}
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setActiveEmployeeMenuId(activeEmployeeMenuId === user.id ? null : user.id);
-                          }}
-                        >
-                          &#8942; Actions
-                        </button>
-                        {activeEmployeeMenuId === user.id && (
-                          <div
-                            className={styles.actionDropdownMenu}
-                            style={{
-                              position: "absolute",
-                              right: 0,
-                              top: "100%",
-                              zIndex: 50,
-                              background: "var(--bg-card)",
-                              border: "1px solid var(--border-color)",
-                              borderRadius: 10,
-                              boxShadow: "var(--shadow-md)",
-                              display: "flex",
-                              flexDirection: "column",
-                              minWidth: 160,
-                              marginTop: 4,
-                            }}
-                          >
-                            <a className={styles.dropdownItem} href={letterUrlFor(user)} target="_blank" rel="noopener noreferrer">Open letter</a>
-                            <a className={styles.dropdownItem} href={mailtoFor(user)}>Send letter email</a>
-                            <a className={styles.dropdownItem} href={idCardUrlFor(user)} target="_blank" rel="noopener noreferrer">Open ID card</a>
-                            <a className={styles.dropdownItem} href={idCardUrlFor(user, true)}>Download ID card</a>
-                            {user.id !== currentUserId && (
-                              <button className={styles.dropdownItemDanger} type="button" onClick={() => {
-                                confirmDelete("employee", user.id.toString(), user.name);
-                              }}>Delete</button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <p className={styles.muted}>{user.email} · {user.department} · {user.title} · {user.status}</p>
-                  <p className={styles.muted}>
-                    {user.durationLabel} · {user.workStartTime}–{user.workEndTime}
-                    {user.lastSeenAt ? ` · Last seen ${formatPortalDateTime(user.lastSeenAt)}` : ""}
-                  </p>
-                  <details className={styles.editPanel}>
-                    <summary>Edit employee</summary>
-                    <form className={styles.formGrid} onSubmit={submit(saveEmployeeUser)}>
-                      <input type="hidden" name="id" value={user.id} />
-                      <Field label="Name" name="name" defaultValue={user.name} required />
-                      <Field label="Email" name="email" type="email" defaultValue={user.email} required />
-                      <Field label="New Password" name="password" type="password" />
-                      <Field label="Role" name="role" options={roleOptionsForValue(user.role)} defaultValue={user.role} />
-                      <Field label="Department" name="department" defaultValue={user.department} />
-                      <Field label="Department Record" name="departmentId" options={[{ label: "No department record", value: "" }, ...data.departments.map((dept) => ({ label: dept.name, value: dept.id.toString() }))]} defaultValue={user.departmentId?.toString() || ""} />
-                      <Field label="Manager" name="managerId" options={[{ label: "No manager", value: "" }, ...employeeOptions]} defaultValue={user.managerId?.toString() || ""} />
-                      <Field label="Title" name="title" defaultValue={user.title} />
-                      <Field label="Employee Type" name="employeeType" options={["Full-time", "Part-time", "Intern", "Contractor", "Consultant"]} defaultValue={user.employeeType} />
-                      <Field label="Paid Status" name="compensationStatus" options={["Paid", "Unpaid"]} defaultValue={user.compensationStatus} />
-                      <Field label="Employment Start" name="employmentStart" type="date" defaultValue={inputDate(user.employmentStart)} />
-                      <Field label="Employment End" name="employmentEnd" type="date" defaultValue={inputDate(user.employmentEnd)} />
-                      <Field label="Work Starts" name="workStartTime" type="time" defaultValue={user.workStartTime} />
-                      <Field label="Work Ends" name="workEndTime" type="time" defaultValue={user.workEndTime} />
-                      <Field label="Status" name="status" options={["Active", "Inactive"]} defaultValue={user.status} />
-                      <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Employee</button>
-                    </form>
-                  </details>
-                </div>
-              ))}</div>
-            </div>
-
-            <details className={`${styles.card} ${styles.span4} ${styles.collapsibleCard}`} open={employees.length <= 1}>
-              <summary className={styles.collapsibleSummary}>
-                <div>
-                  <h2 className={styles.cardTitle}>Manual Employee Access</h2>
-                  <p className={styles.muted}>Use this only for direct hires or immediate internal access.</p>
-                </div>
-                <span className={styles.pill}>Direct entry</span>
-              </summary>
-              <form className={styles.formGrid} onSubmit={submit(saveEmployeeUser)}>
-                <p className={`${styles.muted} ${styles.fieldWide}`}>Assign a prepared role, then set employee type, paid status, and work hours.</p>
-                <Field label="Name" name="name" required />
-                <Field label="Email" name="email" type="email" required />
-                <Field label="Password" name="password" type="password" />
-                <Field label="Role" name="role" options={roleOptions} defaultValue={roleOptions.some((role) => role.value === "employee") ? "employee" : roleOptions[0]?.value} />
-                <Field label="Department" name="department" defaultValue="General" />
-                <Field label="Department Record" name="departmentId" options={[{ label: "No department record", value: "" }, ...data.departments.map((dept) => ({ label: dept.name, value: dept.id.toString() }))]} />
-                <Field label="Manager" name="managerId" options={[{ label: "No manager", value: "" }, ...employeeOptions]} />
-                <Field label="Title" name="title" defaultValue="Team Member" />
-                <Field label="Employee Type" name="employeeType" options={["Full-time", "Part-time", "Intern", "Contractor", "Consultant"]} />
-                <Field label="Paid Status" name="compensationStatus" options={["Paid", "Unpaid"]} />
-                <Field label="Employment Start" name="employmentStart" type="date" />
-                <Field label="Employment End" name="employmentEnd" type="date" />
-                <Field label="Work Starts" name="workStartTime" type="time" defaultValue="09:00" />
-                <Field label="Work Ends" name="workEndTime" type="time" defaultValue="18:00" />
-                <Field label="Status" name="status" options={["Active", "Inactive"]} />
-                <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Employee</button>
-              </form>
-            </details>
-
-            <details className={`${styles.card} ${styles.span12} ${styles.collapsibleCard}`}>
-              <summary className={styles.collapsibleSummary}>
-                <div>
-                  <h2 className={styles.cardTitle}>Bulk Employee Import</h2>
-                  <p className={styles.muted}>Onboard team members in bulk using a CSV template.</p>
-                </div>
-                <span className={styles.pill}>CSV Upload</span>
-              </summary>
-              <div style={{ padding: "0 24px 24px" }}>
-                <p className={styles.muted} style={{ marginBottom: 16 }}>CSV headers: name,email,password,role,department,title,employeeType,compensationStatus. Role must match a Role Key from Created Roles. New accounts get default offer/internship letter access through Documents.</p>
-                <input className={styles.input} type="file" accept=".csv,text/csv" onChange={(event) => importEmployees(event.target.files?.[0])} />
-              </div>
-            </details>
-
-            <details className={`${styles.card} ${styles.span4} ${styles.collapsibleCard}`}>
-              <summary className={styles.collapsibleSummary}>
-                <div>
-                  <h2 className={styles.cardTitle}>Department Setup</h2>
-                  <p className={styles.muted}>Create or update the reporting structure without leaving this page.</p>
-                </div>
-                <span className={styles.pill}>Team structure</span>
-              </summary>
-              <form className={styles.formGrid} onSubmit={submit(saveDepartment)}>
-                <Field label="Name" name="name" required />
-                <Field label="Manager" name="managerId" options={[{ label: "No manager", value: "" }, ...employeeOptions]} />
-                <Field label="Status" name="active" options={["Active", "Inactive"]} />
-                <Field label="Description" name="description" textarea wide />
-                <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Department</button>
-              </form>
-            </details>
-            <div className={`${styles.card} ${styles.span8}`}>
-              <h2 className={styles.cardTitle}>Departments</h2>
-              <div className={styles.list}>{data.departments.length === 0 ? <div className={styles.emptyState}>No departments yet.</div> : data.departments.map((department) => (
-                <div className={styles.row} key={department.id}>
-                  <div className={styles.rowHeader}><strong>{department.name}</strong><span className={department.active ? `${styles.pill} ${styles.pillSuccess}` : `${styles.pill} ${styles.pillMuted}`}>{department.active ? "Active" : "Inactive"}</span></div>
-                  {department.description && <p className={styles.muted}>{department.description}</p>}
-                  <details className={styles.editPanel}>
-                    <summary>Edit department</summary>
-                    <form className={styles.formGrid} onSubmit={submit(saveDepartment)}>
-                      <input type="hidden" name="id" value={department.id} />
-                      <Field label="Name" name="name" defaultValue={department.name} required />
-                      <Field label="Manager" name="managerId" options={[{ label: "No manager", value: "" }, ...employeeOptions]} defaultValue={department.managerId?.toString() || ""} />
-                      <Field label="Status" name="active" options={["Active", "Inactive"]} defaultValue={department.active ? "Active" : "Inactive"} />
-                      <Field label="Description" name="description" textarea defaultValue={department.description || ""} wide />
-                      <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Department</button>
-                    </form>
-                  </details>
-                  <button className={styles.ghostButton} type="button" onClick={() => confirmDelete("department", department.id.toString(), department.name)}>Delete</button>
-                </div>
-              ))}</div>
-            </div>
-          </section>
+          <EmployeesTab
+            data={data}
+            runAction={runAction}
+            copyApplicationLink={copyApplicationLink}
+            applicationLink={applicationLink}
+            submit={submit}
+            formatPortalDateTime={formatPortalDateTime}
+            downloadCsv={downloadCsv}
+            importEmployees={importEmployees}
+            openPortalTab={openPortalTab}
+            setUserManagementOpen={setUserManagementOpen}
+            activeEmployeeMenuId={activeEmployeeMenuId}
+            setActiveEmployeeMenuId={setActiveEmployeeMenuId}
+            confirmDelete={confirmDelete}
+            currentUserId={currentUserId}
+          />
         )}
       </main>
     </div>

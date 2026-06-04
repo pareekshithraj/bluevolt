@@ -41,7 +41,17 @@ function createUnavailablePrismaClient(reason: string): PrismaClient {
 }
 
 function normalizeDatabaseUrlForPg(value: string): string {
-  return value.trim();
+  const trimmed = value.trim();
+  try {
+    const url = new URL(trimmed);
+    const sslMode = url.searchParams.get("sslmode");
+    if (sslMode && ["prefer", "require", "verify-ca"].includes(sslMode) && !url.searchParams.has("uselibpqcompat")) {
+      url.searchParams.set("uselibpqcompat", "true");
+    }
+    return url.toString();
+  } catch {
+    return trimmed;
+  }
 }
 
 function sslFromDatabaseUrl(value: string) {

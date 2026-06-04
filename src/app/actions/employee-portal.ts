@@ -155,6 +155,7 @@ const defaultRolePermissions: Record<string, string> = {
 
 const coreRoleKeys = new Set<string>(EMPLOYEE_ROLES);
 const defaultEmployeePassword = "abc123";
+const documentSignatoryRoles = new Set(["director", "authorized_signatory"]);
 
 function defaultRoleDefinitions(now = new Date().toISOString()): EmployeeRoleDefinition[] {
   return EMPLOYEE_ROLES.map((key, index) => ({
@@ -199,6 +200,7 @@ function parseFeatureAccess(value?: string | string[]): EmployeePortalFeature[] 
 
 function roleCanAccessFeature(role: string, roles: EmployeeRoleDefinition[], feature: EmployeePortalFeature): boolean {
   if (role === "super_admin") return true;
+  if (documentSignatoryRoles.has(role)) return true;
   const roleDefinition = mergeRoleDefinitions(roles).find((entry) => entry.key === role);
   return parseFeatureAccess(roleDefinition?.featureAccess).includes(feature);
 }
@@ -455,6 +457,7 @@ export async function getEmployeeApplicationRoleOptions() {
 
 async function employeeSessionCanAccessFeature(session: { role: string }, feature: EmployeePortalFeature): Promise<boolean> {
   if (session.role === "super_admin") return true;
+  if (documentSignatoryRoles.has(session.role)) return true;
   try {
     return roleCanAccessFeature(session.role, await getEmployeeRoleDefinitionsFromDatabase(), feature);
   } catch (error) {

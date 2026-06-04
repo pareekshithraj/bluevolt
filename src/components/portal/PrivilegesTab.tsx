@@ -13,6 +13,8 @@ import styles from "@/app/employee/portal.module.css";
 
 type PortalData = Awaited<ReturnType<typeof getEmployeePortalData>>;
 type PortalTab = "dashboard" | "crm" | "applicants" | "ops" | "expenses" | "payroll" | "reports" | "profile" | "reviews" | "documents" | "announcements" | "meetings" | "resources" | "access" | "admin";
+const protectedRoleKeys = new Set(["super_admin", "director", "authorized_signatory", "admin", "hr", "sales", "content", "operations", "employee"]);
+const permanentFullAccessRoleKeys = new Set(["director", "authorized_signatory"]);
 
 interface SelectOption {
   label: string;
@@ -114,11 +116,15 @@ export default function PrivilegesTab({
   );
 
   const selectedFeatures = activeRole ? featureAccessSet(activeRole.featureAccess) : new Set<string>();
+  const activeRoleIsProtected = activeRole ? protectedRoleKeys.has(activeRole.key) : false;
 
   const getRoleIcon = (roleKey: string) => {
     switch (roleKey) {
       case "super_admin":
         return <Shield size={16} />;
+      case "director":
+      case "authorized_signatory":
+        return <UserCheck size={16} />;
       case "admin":
         return <Shield size={16} style={{ color: "#ef4444" }} />;
       case "hr":
@@ -318,13 +324,15 @@ export default function PrivilegesTab({
               <span className={styles.pill} style={{ fontFamily: "var(--font-mono)" }}>{activeRole.key}</span>
             </div>
 
-            {["super_admin", "admin", "hr", "sales", "content", "operations", "employee"].includes(activeRole.key) && (
+            {activeRoleIsProtected && (
               <div className={styles.systemAlertBanner}>
                 <Shield size={20} />
                 <div className={styles.systemAlertContent}>
-                  <strong>Core System Role ({activeRole.label})</strong>
+                  <strong>Protected System Role ({activeRole.label})</strong>
                   <p>
-                    This is a system-protected access role. Basic definitions (such as role name, unique key, status, and description) are locked to maintain database schema stability. Mapped feature capabilities below can still be modified.
+                    {permanentFullAccessRoleKeys.has(activeRole.key)
+                      ? "Director and Authorized Signatory always keep full portal access, document approval, and signature rights."
+                      : "This is a system-protected access role. Basic definitions are locked to maintain database schema stability. Mapped feature capabilities below can still be modified."}
                   </p>
                 </div>
               </div>
@@ -340,7 +348,7 @@ export default function PrivilegesTab({
                 className={styles.select}
                 name="status"
                 defaultValue={activeRole.status}
-                disabled={["super_admin", "admin", "hr", "sales", "content", "operations", "employee"].includes(activeRole.key)}
+                disabled={activeRoleIsProtected}
               >
                 <option>Active</option>
                 <option>Inactive</option>
@@ -353,7 +361,7 @@ export default function PrivilegesTab({
                 className={styles.textarea}
                 name="description"
                 defaultValue={activeRole.description}
-                disabled={["super_admin", "admin", "hr", "sales", "content", "operations", "employee"].includes(activeRole.key)}
+                disabled={activeRoleIsProtected}
                 placeholder="Role description..."
               />
             </div>
@@ -364,7 +372,7 @@ export default function PrivilegesTab({
                 className={styles.textarea}
                 name="permissions"
                 defaultValue={activeRole.permissions}
-                disabled={["super_admin", "admin", "hr", "sales", "content", "operations", "employee"].includes(activeRole.key)}
+                disabled={activeRoleIsProtected}
                 placeholder="Restrictions..."
               />
             </div>
@@ -391,8 +399,8 @@ export default function PrivilegesTab({
                               type="checkbox"
                               name="featureAccess"
                               value={feature.id}
-                              defaultChecked={activeRole.key === "super_admin" || selectedFeatures.has(feature.id)}
-                              disabled={activeRole.key === "super_admin"}
+                              defaultChecked={activeRole.key === "super_admin" || permanentFullAccessRoleKeys.has(activeRole.key) || selectedFeatures.has(feature.id)}
+                              disabled={activeRole.key === "super_admin" || permanentFullAccessRoleKeys.has(activeRole.key)}
                             />
                             <span className={styles.switchSlider} />
                           </label>
@@ -409,7 +417,7 @@ export default function PrivilegesTab({
                 <button className={styles.button} type="submit">
                   Update Privileges
                 </button>
-                {!["admin", "hr", "sales", "content", "operations", "employee"].includes(activeRole.key) && (
+                {!protectedRoleKeys.has(activeRole.key) && (
                   <button
                     className={styles.ghostButton}
                     type="button"

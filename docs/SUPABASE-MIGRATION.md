@@ -53,6 +53,16 @@ npm run seed:stores24
 
 In Vercel project settings, replace the production `DATABASE_URL` with the Supabase connection string.
 
+If the Supabase Vercel integration is connected, the app will also use these variables when they are populated:
+
+```text
+POSTGRES_PRISMA_URL
+POSTGRES_URL
+POSTGRES_URL_NON_POOLING
+```
+
+If those variables are blank, manually set `DATABASE_URL` to the Supabase Session Pooler connection string.
+
 Keep these configured:
 
 ```text

@@ -6,7 +6,16 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-const databaseUrl = process.env.DATABASE_URL;
+function configuredDatabaseUrl(): string | undefined {
+  return (
+    process.env.POSTGRES_PRISMA_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.POSTGRES_URL_NON_POOLING ||
+    process.env.DATABASE_URL
+  )?.trim();
+}
+
+const databaseUrl = configuredDatabaseUrl();
 
 function createUnavailablePrismaClient(reason: string): PrismaClient {
   const throwUnavailable = () => {

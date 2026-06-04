@@ -331,7 +331,7 @@ export default function PrivilegesTab({
                   <strong>Protected System Role ({activeRole.label})</strong>
                   <p>
                     {permanentFullAccessRoleKeys.has(activeRole.key)
-                      ? "Director and Authorized Signatory always keep full portal access, document approval, and signature rights."
+                      ? "Director and Director / Authorized Signatory always keep full portal access, document approval, and signature rights."
                       : "This is a system-protected access role. Basic definitions are locked to maintain database schema stability. Mapped feature capabilities below can still be modified."}
                   </p>
                 </div>

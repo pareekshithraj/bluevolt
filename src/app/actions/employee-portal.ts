@@ -132,7 +132,7 @@ let localStoreWriteWarningShown = false;
 const defaultRoleLabels: Record<string, string> = {
   super_admin: "Super Admin",
   director: "Director",
-  authorized_signatory: "Authorized Signatory",
+  authorized_signatory: "Director / Authorized Signatory",
   admin: "Admin",
   sales: "Sales",
   content: "Content Developer",
@@ -144,7 +144,7 @@ const defaultRoleLabels: Record<string, string> = {
 const defaultRolePermissions: Record<string, string> = {
   super_admin: "Full portal control, employee mapping, role setup, CRM sheets, documents, resources, meetings, payroll, and audits.",
   director: "Full portal control with final employee document approval and signature rights.",
-  authorized_signatory: "Full portal control with employee document approval and signature rights.",
+  authorized_signatory: "Full portal control as Director / Authorized Signatory with employee document approval and signature rights.",
   admin: "Employee operations, attendance, documents, resources, payroll, reviews, and approvals.",
   sales: "CRM access, meetings, tasks, resources, and assigned work updates.",
   content: "Content resources, CRM visibility, tasks, documents, and assigned work updates.",
@@ -2084,7 +2084,7 @@ export async function saveEmployeeDocument(input: {
 export async function approveEmployeeDocument(input: { id: string }) {
   const { session } = await requireEmployee();
   if (!(await employeeSessionCanAccessFeature(session, "sign_documents"))) {
-    return { success: false, error: "Only Director or Authorized Signatory roles can approve documents." };
+    return { success: false, error: "Only Director or Director / Authorized Signatory roles can approve documents." };
   }
   const document = await prisma.employeeDocument.findUnique({ where: { id: Number(input.id) } });
   if (!document) return { success: false, error: "Document not found." };

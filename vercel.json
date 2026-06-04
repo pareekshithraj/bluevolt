@@ -1,6 +1,6 @@
 {
   "framework": "nextjs",
-  "buildCommand": "npm run db:sync && npm run build",
+  "buildCommand": "npm run build",
   "rewrites": [
     {
       "source": "/assets/:path*",

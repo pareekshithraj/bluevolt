@@ -32,15 +32,17 @@ function createUnavailablePrismaClient(reason: string): PrismaClient {
 }
 
 function normalizeDatabaseUrlForPg(value: string): string {
+  return value.trim();
+}
+
+function sslFromDatabaseUrl(value: string) {
   try {
     const url = new URL(value);
     const sslMode = url.searchParams.get("sslmode");
-    if (sslMode && ["prefer", "require", "verify-ca"].includes(sslMode)) {
-      url.searchParams.set("sslmode", "verify-full");
-    }
-    return url.toString();
+    if (!sslMode || sslMode === "disable") return undefined;
+    return { rejectUnauthorized: sslMode === "verify-full" };
   } catch {
-    return value;
+    return undefined;
   }
 }
 
@@ -50,6 +52,7 @@ const createPrismaClient = () => {
 
   const pool = new Pool({
     connectionString: normalizeDatabaseUrlForPg(databaseUrl),
+    ssl: sslFromDatabaseUrl(databaseUrl),
     connectionTimeoutMillis: 5000,
     idleTimeoutMillis: 10000,
     max: 5,

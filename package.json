@@ -7,6 +7,7 @@
     "build": "prisma generate && rimraf .next && next build",
     "start": "next start",
     "lint": "eslint",
+    "db:migrate": "prisma migrate deploy",
     "db:sync": "prisma db execute --file prisma/migrations/0002_control_plane_and_studio_project/migration.sql && prisma db execute --file prisma/migrations/0003_employee_portal/migration.sql && prisma db execute --file prisma/migrations/0004_employee_work_profile/migration.sql && prisma db execute --file prisma/migrations/0005_employee_ops_modules/migration.sql && prisma db execute --file prisma/migrations/0006_employee_advanced_ops/migration.sql && prisma db execute --file prisma/migrations/0007_employee_crm_sheets/migration.sql",
     "seed:stores24": "node scripts/seed-stores24.mjs",
     "test:tenancy": "node --import dotenv/config --test tests/*.test.mjs"

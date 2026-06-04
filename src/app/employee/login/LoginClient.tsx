@@ -12,6 +12,7 @@ function simpleLoginError(message?: string) {
     text.includes("prisma") ||
     text.includes("database") ||
     text.includes("can't reach") ||
+    text.includes("supabase.co") ||
     text.includes("neon.tech") ||
     text.includes("connection") ||
     text.includes("timeout")

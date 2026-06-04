@@ -62,7 +62,7 @@ export async function authenticateStudioAdmin(input: {
   return { success: true };
 }
 
-// Fetch all studio projects from Neon database
+// Fetch all studio projects from the configured cloud database
 export async function getStudioProjects(): Promise<StudioProjectData[]> {
   try {
     const projects = await prisma.studioProject.findMany({
@@ -79,7 +79,7 @@ export async function getStudioProjects(): Promise<StudioProjectData[]> {
       latency: p.latency
     }));
   } catch (error) {
-    console.error("Error fetching studio projects from Neon database:", error);
+    console.error("Error fetching studio projects from cloud database:", error);
     return [];
   }
 }
@@ -103,7 +103,7 @@ export async function seedStudioProjects(): Promise<{ success: boolean; message:
   }
 }
 
-// Add or update a studio project in the Neon database
+// Add or update a studio project in the configured cloud database
 export async function saveStudioProject(data: StudioProjectData): Promise<{ success: boolean; message: string }> {
   try {
     await prisma.studioProject.upsert({
@@ -131,12 +131,12 @@ export async function saveStudioProject(data: StudioProjectData): Promise<{ succ
     revalidatePath("/studio/admin");
     return { success: true, message: "Workspace node configuration successfully synchronized." };
   } catch (error) {
-    console.error("Error saving studio project to Neon database:", error);
+    console.error("Error saving studio project to cloud database:", error);
     return { success: false, message: "Failed to sync workspace configuration with cloud database." };
   }
 }
 
-// Delete a studio project from the Neon database
+// Delete a studio project from the configured cloud database
 export async function deleteStudioProject(id: string): Promise<{ success: boolean; message: string }> {
   try {
     await prisma.studioProject.delete({
@@ -147,7 +147,7 @@ export async function deleteStudioProject(id: string): Promise<{ success: boolea
     revalidatePath("/studio/admin");
     return { success: true, message: "Workspace node successfully decommissioned." };
   } catch (error) {
-    console.error("Error deleting studio project from Neon database:", error);
+    console.error("Error deleting studio project from cloud database:", error);
     return { success: false, message: "Failed to decommission workspace node from cloud database." };
   }
 }

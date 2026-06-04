@@ -44,13 +44,21 @@ function visibleToRole(audienceRoles: string, role: string): boolean {
 }
 
 function optionalDate(value?: string): Date | null {
-  if (!value?.trim()) return null;
-  return new Date(`${value}T00:00:00`);
+  const raw = value?.trim();
+  if (!raw) return null;
+
+  const normalized = raw
+    .replace(/^(\d{2})-(\d{2})-(\d{4})$/, "$3-$2-$1")
+    .replace(/^(\d{2})\/(\d{2})\/(\d{4})$/, "$3-$2-$1");
+  const date = new Date(`${normalized}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function optionalDateTime(value?: string): Date | null {
-  if (!value?.trim()) return null;
-  return new Date(value);
+  const raw = value?.trim();
+  if (!raw) return null;
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function numberValue(value?: string): number {
@@ -243,6 +251,7 @@ function isDatabaseUnavailable(error: unknown): boolean {
     "timeout expired",
     "can't reach database",
     "connection terminated",
+    "supabase.co",
     "neon.tech",
     "database",
   ].some((entry) => text.toLowerCase().includes(entry));
@@ -687,6 +696,7 @@ function friendlyEmployeeError(error: unknown, fallback = "Something went wrong.
     lower.includes("database") ||
     lower.includes("can't reach database") ||
     lower.includes("connection") ||
+    lower.includes("supabase.co") ||
     lower.includes("neon.tech") ||
     lower.includes("timeout") ||
     lower.includes("p1001")
@@ -854,7 +864,7 @@ async function getLocalEmployeePortalData(_sortResources = "newest", activeTab =
       id: 1,
       employeeId: activeUser.id,
       title: "Local fallback mode",
-      body: "Neon database is currently unreachable, so the employee portal is running from a local employee store on this machine.",
+      body: "Cloud database is currently unreachable, so the employee portal is running from a local employee store on this machine.",
       targetRoles: "all",
       readAt: null,
       createdBy: null,

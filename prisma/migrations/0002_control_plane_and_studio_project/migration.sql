@@ -1,5 +1,5 @@
 -- Bring deployed databases up to the current Prisma schema.
--- These statements are intentionally idempotent because this Neon database
+-- These statements are intentionally idempotent because the original cloud database
 -- has previously been synchronized with `prisma db push`.
 
 ALTER TABLE "Store" ADD COLUMN IF NOT EXISTS "gstin" TEXT;

@@ -22,7 +22,7 @@ Operational governance tables:
 
 ## Database state and migration path
 
-This Neon database was not previously managed by Prisma Migrate, so `prisma migrate dev` failed with:
+The original cloud database was not previously managed by Prisma Migrate, so `prisma migrate dev` failed with:
 
 - `The current database is not managed by Prisma Migrate.`
 

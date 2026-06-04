@@ -21,7 +21,7 @@ const DEFAULT_PROJECTS = [
     status: "ACTIVE",
     latency: "4.8ms",
     url: "https://schools24.in",
-    passwordHash: "schools24",
+    passwordHash: "configured-in-admin",
   },
   {
     id: "stores24-erp",
@@ -30,7 +30,7 @@ const DEFAULT_PROJECTS = [
     status: "ACTIVE",
     latency: "6.2ms",
     url: "https://stores24.bluevolt.group",
-    passwordHash: "stores24",
+    passwordHash: "configured-in-admin",
   },
   {
     id: "project-nexus",
@@ -39,9 +39,28 @@ const DEFAULT_PROJECTS = [
     status: "PENDING",
     latency: "--",
     url: "https://bluevolt.group",
-    passwordHash: "nexus24",
+    passwordHash: "configured-in-admin",
   }
 ];
+
+export async function authenticateStudioAdmin(input: {
+  email: string;
+  password: string;
+}): Promise<{ success: boolean; message?: string }> {
+  const configuredEmail = process.env.STUDIO_ADMIN_EMAIL?.trim().toLowerCase();
+  const configuredPassword = process.env.STUDIO_ADMIN_PASSWORD;
+
+  if (!configuredEmail || !configuredPassword) {
+    return { success: false, message: "Studio admin access is not configured." };
+  }
+
+  const email = input.email.trim().toLowerCase();
+  if (email !== configuredEmail || input.password !== configuredPassword) {
+    return { success: false, message: "ACCESS DENIED. INVALID SECURITY SIGNATURE NODE." };
+  }
+
+  return { success: true };
+}
 
 // Fetch all studio projects from Neon database
 export async function getStudioProjects(): Promise<StudioProjectData[]> {

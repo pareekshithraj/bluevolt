@@ -18,6 +18,7 @@ import {
   saveStudioProject, 
   deleteStudioProject, 
   seedStudioProjects,
+  authenticateStudioAdmin,
   StudioProjectData 
 } from "@/app/actions/studio";
 import styles from "./page.module.css";
@@ -30,7 +31,7 @@ const DEFAULT_PROJECTS = [
     status: "ACTIVE",
     latency: "4.8ms",
     url: "https://schools24.in",
-    passwordHash: "schools24",
+    passwordHash: "configured-in-admin",
   },
   {
     id: "stores24-erp",
@@ -39,7 +40,7 @@ const DEFAULT_PROJECTS = [
     status: "ACTIVE",
     latency: "6.2ms",
     url: "https://stores24.bluevolt.group",
-    passwordHash: "stores24",
+    passwordHash: "configured-in-admin",
   },
   {
     id: "project-nexus",
@@ -48,7 +49,7 @@ const DEFAULT_PROJECTS = [
     status: "PENDING",
     latency: "--",
     url: "https://bluevolt.group",
-    passwordHash: "nexus24",
+    passwordHash: "configured-in-admin",
   }
 ];
 
@@ -104,21 +105,18 @@ export default function AdminPage() {
       });
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError("");
 
-    // Admin Credentials validation
-    if (
-      loginEmail.trim() === "pareekshithraj@schools24.in" && 
-      loginPassword === "Pareek@Schools24"
-    ) {
+    const result = await authenticateStudioAdmin({ email: loginEmail, password: loginPassword });
+    if (result.success) {
       sessionStorage.setItem("bluevolt_admin_logged_in", "true");
       setIsLoggedIn(true);
       setLoginEmail("");
       setLoginPassword("");
     } else {
-      setLoginError("ACCESS DENIED. INVALID SECURITY SIGNATURE NODE.");
+      setLoginError(result.message || "ACCESS DENIED. INVALID SECURITY SIGNATURE NODE.");
     }
   };
 
@@ -329,7 +327,7 @@ export default function AdminPage() {
                   <span>SYS CORE LEVEL: SECURE CLOUD CONNECTION OPERATIONAL</span>
                 </div>
                 <h1>Studio Control Panel</h1>
-                <p>Welcome, pareekshithraj@schools24.in. Manage and deploy client sandboxes in live cloud database.</p>
+                <p>Manage and deploy client sandboxes in live cloud database.</p>
               </div>
               
               <div style={{ display: "flex", gap: "1rem" }}>

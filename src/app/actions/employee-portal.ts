@@ -458,8 +458,8 @@ async function employeeSessionCanAccessFeature(session: { role: string }, featur
 async function loginLocalEmployee(email: string, password: string) {
   const store = await readLocalEmployeeStore();
   const bootstrapEmail = (process.env.EMPLOYEE_BOOTSTRAP_EMAIL || "pareekshithraj@schools24.in").toLowerCase();
-  const bootstrapPassword = process.env.EMPLOYEE_BOOTSTRAP_PASSWORD || "abc123";
-  const fallbackPasswords = email === bootstrapEmail ? [bootstrapPassword, "abc123", "Pareek@Schools24"] : [];
+  const bootstrapPassword = process.env.EMPLOYEE_BOOTSTRAP_PASSWORD || defaultEmployeePassword;
+  const fallbackPasswords = email === bootstrapEmail ? [bootstrapPassword] : [];
   const index = store.users.findIndex((user) => user.email === email);
   const user = index >= 0 ? store.users[index] : null;
   const valid = user && (verifyPassword(password, user.password) || fallbackPasswords.includes(password));
@@ -722,7 +722,7 @@ async function ensureFirstSuperAdmin(email: string, password: string) {
   const bootstrapEmail = (process.env.EMPLOYEE_BOOTSTRAP_EMAIL || "pareekshithraj@schools24.in").toLowerCase();
   const bootstrapPasswords = process.env.EMPLOYEE_BOOTSTRAP_PASSWORD
     ? [process.env.EMPLOYEE_BOOTSTRAP_PASSWORD]
-    : [defaultEmployeePassword, "Pareek@Schools24"];
+    : [defaultEmployeePassword];
 
   if (email !== bootstrapEmail || !bootstrapPasswords.includes(password)) return;
 

@@ -12,7 +12,7 @@ import { EMPLOYEE_PORTAL_FEATURES } from "@/lib/employee/roles";
 import styles from "@/app/employee/portal.module.css";
 
 type PortalData = Awaited<ReturnType<typeof getEmployeePortalData>>;
-type PortalTab = "dashboard" | "crm" | "applicants" | "ops" | "expenses" | "payroll" | "reports" | "profile" | "reviews" | "documents" | "announcements" | "meetings" | "resources" | "access" | "admin";
+type PortalTab = "dashboard" | "crm" | "applicants" | "ops" | "expenses" | "payroll" | "reports" | "profile" | "reviews" | "documents" | "announcements" | "meetings" | "resources" | "chat" | "access" | "admin";
 const protectedRoleKeys = new Set(["super_admin", "director", "authorized_signatory", "admin", "hr", "sales", "content", "operations", "employee"]);
 const permanentFullAccessRoleKeys = new Set(["director", "authorized_signatory"]);
 
@@ -176,7 +176,7 @@ export default function PrivilegesTab({
     },
     {
       title: "Business Workspace",
-      features: EMPLOYEE_PORTAL_FEATURES.filter((f) => ["crm", "crm_manage", "resources", "dashboard"].includes(f.id)),
+      features: EMPLOYEE_PORTAL_FEATURES.filter((f) => ["crm", "crm_manage", "resources", "chat", "dashboard"].includes(f.id)),
     },
     {
       title: "Financial & Core Operations",

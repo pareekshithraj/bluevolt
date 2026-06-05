@@ -38,6 +38,15 @@ function parseRoles(value: string): string[] {
     .filter(Boolean);
 }
 
+function normalizeAudienceUsers(value?: string): string {
+  const ids = (value || "")
+    .split(",")
+    .map((entry) => Number(entry.trim()))
+    .filter((entry) => Number.isInteger(entry) && entry > 0);
+  const uniqueIds = [...new Set(ids)];
+  return uniqueIds.length ? `,${uniqueIds.join(",")},` : "";
+}
+
 function visibleToRole(audienceRoles: string, role: string): boolean {
   const roles = parseRoles(audienceRoles);
   return roles.includes("all") || roles.includes(role) || role === "super_admin";
@@ -214,9 +223,11 @@ function roleCanAccessFeature(role: string, roles: EmployeeRoleDefinition[], fea
 }
 
 function capabilitiesForRole(role: string, roles: EmployeeRoleDefinition[]) {
-  const canManage = roleCanAccessFeature(role, roles, "employees");
+  const roleDefinition = mergeRoleDefinitions(roles).find((entry) => entry.key === role);
+  const isSuperiorRole = roleDefinition?.dashboardType === "superior" || superiorDashboardRoles.has(role);
+  const canManage = isSuperiorRole && roleCanAccessFeature(role, roles, "employees");
   const canUseCrm = roleCanAccessFeature(role, roles, "crm") || roleCanAccessFeature(role, roles, "crm_manage");
-  const canManageCrm = roleCanAccessFeature(role, roles, "crm_manage");
+  const canManageCrm = isSuperiorRole && roleCanAccessFeature(role, roles, "crm_manage");
   const canManageResources = roleCanAccessFeature(role, roles, "resources") && canManage;
   const canScheduleMeetings = roleCanAccessFeature(role, roles, "meetings") && canManage;
   const canPublishAnnouncements = roleCanAccessFeature(role, roles, "announcements") && canManage;
@@ -225,12 +236,13 @@ function capabilitiesForRole(role: string, roles: EmployeeRoleDefinition[]) {
   const canSignDocuments = roleCanAccessFeature(role, roles, "sign_documents");
   return {
     canManage,
+    canUseSuperiorDashboard: isSuperiorRole,
     canManageAccess: roleCanAccessFeature(role, roles, "access"),
     canUseCrm,
     canRequestCrmSource: canManageCrm,
     canUpdateCrmSheetRows: canManageCrm,
     canManageCrmSheets: canManageCrm,
-    canManageApplicants: roleCanAccessFeature(role, roles, "applicants"),
+    canManageApplicants: isSuperiorRole && roleCanAccessFeature(role, roles, "applicants"),
     canManageResources,
     canScheduleMeetings,
     canManageOps: roleCanAccessFeature(role, roles, "ops"),
@@ -244,6 +256,7 @@ function capabilitiesForRole(role: string, roles: EmployeeRoleDefinition[]) {
     canPublishAnnouncements,
     canViewMeetings: roleCanAccessFeature(role, roles, "meetings"),
     canViewResources: roleCanAccessFeature(role, roles, "resources"),
+    canUseChat: true,
     canManageExpenses: roleCanAccessFeature(role, roles, "expenses"),
     canAdminScheduleMeetings: canScheduleMeetings,
     canAdminManageResources: canManageResources,
@@ -380,6 +393,8 @@ async function writeLocalEmployeeStore(store: LocalEmployeeStore) {
 }
 
 let roleTableEnsured = false;
+let crmSheetAccessEnsured = false;
+let chatTableEnsured = false;
 
 async function ensureEmployeeRoleDefinitionTable() {
   if (roleTableEnsured) return;
@@ -406,6 +421,36 @@ async function ensureEmployeeRoleDefinitionTable() {
     ADD COLUMN IF NOT EXISTS "dashboardType" TEXT NOT NULL DEFAULT 'workspace'
   `;
   roleTableEnsured = true;
+}
+
+async function ensureEmployeeCrmSheetAccessColumns() {
+  if (crmSheetAccessEnsured) return;
+  await prisma.$executeRaw`
+    ALTER TABLE "EmployeeCrmSheet"
+    ADD COLUMN IF NOT EXISTS "audienceUsers" TEXT NOT NULL DEFAULT ''
+  `;
+  await prisma.$executeRaw`
+    CREATE INDEX IF NOT EXISTS "EmployeeCrmSheet_audienceUsers_idx" ON "EmployeeCrmSheet"("audienceUsers")
+  `;
+  crmSheetAccessEnsured = true;
+}
+
+async function ensureEmployeeChatTable() {
+  if (chatTableEnsured) return;
+  await prisma.$executeRaw`
+    CREATE TABLE IF NOT EXISTS "EmployeeChatMessage" (
+      "id" SERIAL PRIMARY KEY,
+      "employeeId" INTEGER NOT NULL,
+      "employeeName" TEXT NOT NULL,
+      "employeeRole" TEXT NOT NULL DEFAULT 'employee',
+      "body" TEXT NOT NULL,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await prisma.$executeRaw`
+    CREATE INDEX IF NOT EXISTS "EmployeeChatMessage_createdAt_idx" ON "EmployeeChatMessage"("createdAt")
+  `;
+  chatTableEnsured = true;
 }
 
 let defaultRolesSeeded = false;
@@ -889,6 +934,7 @@ async function getLocalEmployeePortalData(_sortResources = "newest", activeTab =
     }],
     expenses: [],
     auditEvents: [],
+    chatMessages: [],
   };
 }
 
@@ -896,6 +942,8 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
   try {
   const { session, user } = await requireEmployee();
   const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
+  await ensureEmployeeCrmSheetAccessColumns();
+  await ensureEmployeeChatTable();
   const capabilities = capabilitiesForRole(session.role, roleDefinitions);
   const canManage = capabilities.canManage;
   const canManageAccess = capabilities.canManageAccess;
@@ -912,7 +960,7 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
   });
 
   const [users, crmRecords, crmSheets, applicants, meetings, resources, attendance, leaveRequests, tasks, payrollInputs, reviews, documents, announcements, comments, departments, notifications, expenses, auditEvents] = await Promise.all([
-    canManage && ["dashboard", "admin", "ops", "reports"].includes(activeTab)
+    canManage && ["dashboard", "admin", "ops", "reports", "crm"].includes(activeTab)
       ? prisma.employeeUser.findMany({ orderBy: { createdAt: "desc" } })
       : prisma.employeeUser.findMany({ where: { id: user.id } }),
     canUseCrm && ["dashboard", "crm", "reports"].includes(activeTab)
@@ -927,6 +975,7 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
                 { requestedBy: user.id },
                 { status: "Approved", audienceRoles: "all" },
                 { status: "Approved", audienceRoles: session.role },
+                { status: "Approved", audienceUsers: { contains: `,${user.id},` } },
                 { status: "Approved", ownerRole: session.role },
               ],
             },
@@ -1033,6 +1082,22 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
       }),
     }));
 
+  const chatMessages = capabilities.canUseChat && ["dashboard", "chat"].includes(activeTab)
+    ? await prisma.$queryRaw<Array<{
+      id: number;
+      employeeId: number;
+      employeeName: string;
+      employeeRole: string;
+      body: string;
+      createdAt: Date;
+    }>>`
+      SELECT "id", "employeeId", "employeeName", "employeeRole", "body", "createdAt"
+      FROM "EmployeeChatMessage"
+      ORDER BY "createdAt" DESC
+      LIMIT 80
+    `
+    : [];
+
   return {
     session,
     mustChangePassword: verifyPassword(defaultEmployeePassword, user.password),
@@ -1065,6 +1130,7 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
     notifications,
     expenses,
     auditEvents,
+    chatMessages: chatMessages.reverse(),
   };
   } catch (error) {
     if (isDatabaseUnavailable(error)) return getLocalEmployeePortalData(sortResources, activeTab);
@@ -1393,6 +1459,7 @@ export async function saveCrmSheetRequest(input: {
   sourceName?: string;
   ownerRole: string;
   audienceRoles?: string;
+  audienceUsers?: string;
   description?: string;
   pasteData?: string;
 }) {
@@ -1400,6 +1467,7 @@ export async function saveCrmSheetRequest(input: {
   if (session.role !== "super_admin") {
     return { success: false, error: "Only super admin can create CRM sheets." };
   }
+  await ensureEmployeeCrmSheetAccessColumns();
   const parsed = parseSheetText(input.pasteData);
   const sheet = await prisma.employeeCrmSheet.create({
     data: {
@@ -1408,6 +1476,7 @@ export async function saveCrmSheetRequest(input: {
       sourceType: "Pasted sheet",
       ownerRole: normalizeRole(input.ownerRole),
       audienceRoles: input.audienceRoles?.trim() || input.ownerRole || "sales",
+      audienceUsers: normalizeAudienceUsers(input.audienceUsers),
       description: input.description,
       status: hasEmployeeRole(session, ["admin", "hr"]) ? "Approved" : "Pending",
       locked: !hasEmployeeRole(session, ["admin", "hr"]),
@@ -2164,6 +2233,21 @@ export async function saveAnnouncement(input: {
       },
     });
   }
+  revalidatePath("/employee/portal");
+  return { success: true };
+}
+
+export async function saveGroupChatMessage(input: { body: string }) {
+  const { session, user } = await requireEmployee();
+  const body = input.body?.trim();
+  if (!body) return { success: false, error: "Type a message before sending." };
+  if (body.length > 1000) return { success: false, error: "Keep chat messages under 1000 characters." };
+
+  await ensureEmployeeChatTable();
+  await prisma.$executeRaw`
+    INSERT INTO "EmployeeChatMessage" ("employeeId", "employeeName", "employeeRole", "body")
+    VALUES (${user.id}, ${session.name}, ${session.role}, ${body})
+  `;
   revalidatePath("/employee/portal");
   return { success: true };
 }

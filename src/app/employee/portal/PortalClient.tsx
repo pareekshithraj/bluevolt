@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Bell, CalendarDays, ChevronRight, ClipboardList, Code2, FileText, Handshake, LogOut, Menu, Moon, PenLine, RefreshCw, RotateCw, Star, Sun, Target, UserCheck, Users, Video, WalletCards, X } from "lucide-react";
+import { Bell, CalendarDays, ChevronRight, ClipboardList, Code2, FileText, Handshake, LogOut, Menu, MessageCircle, Moon, PenLine, RefreshCw, RotateCw, Star, Sun, Target, UserCheck, Users, Video, WalletCards, X } from "lucide-react";
 import {
   approveEmployeeDocument,
   changeEmployeePassword,
@@ -18,6 +18,7 @@ import {
   saveEmployeeDocument,
   saveEmployeeUser,
   saveExpenseClaim,
+  saveGroupChatMessage,
   saveLeaveRequest,
   saveMeeting,
   savePayrollInput,
@@ -67,6 +68,7 @@ const tabs = [
   { id: "announcements", label: "Announcements", icon: Bell },
   { id: "meetings", label: "Meetings", icon: Video },
   { id: "resources", label: "Resources", icon: FileText },
+  { id: "chat", label: "Group Chat", icon: MessageCircle },
   { id: "access", label: "Privileges", icon: UserCheck },
   { id: "admin", label: "Employees", icon: CalendarDays },
 ] as const;
@@ -251,7 +253,7 @@ function mergePortalData(previous: PortalData, incoming: PortalData, activeTab: 
   return {
     ...previous,
     ...incoming,
-    users: ["dashboard", "admin", "ops", "reports"].includes(activeTab) ? incoming.users : previous.users,
+    users: ["dashboard", "admin", "ops", "reports", "crm"].includes(activeTab) ? incoming.users : previous.users,
     crmRecords: ["dashboard", "crm", "reports"].includes(activeTab) ? incoming.crmRecords : previous.crmRecords,
     crmSheets: activeTab === "crm" ? incoming.crmSheets : previous.crmSheets,
     applicants: ["applicants", "admin", "reports"].includes(activeTab) ? incoming.applicants : previous.applicants,
@@ -270,6 +272,7 @@ function mergePortalData(previous: PortalData, incoming: PortalData, activeTab: 
     notifications: ["dashboard", "admin", "access"].includes(activeTab) ? incoming.notifications : previous.notifications,
     expenses: ["expenses", "reports"].includes(activeTab) ? incoming.expenses : previous.expenses,
     auditEvents: ["admin", "access", "reports"].includes(activeTab) ? incoming.auditEvents : previous.auditEvents,
+    chatMessages: ["dashboard", "chat"].includes(activeTab) ? incoming.chatMessages : previous.chatMessages,
   };
 }
 
@@ -388,13 +391,14 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     if (item.id === "ops") return data.capabilities.canManageOps;
     if (item.id === "expenses") return data.capabilities.canManageExpenses;
     if (item.id === "payroll") return data.capabilities.canManagePayroll;
-    if (item.id === "reports") return data.capabilities.canManage || data.capabilities.canManagePayroll || data.capabilities.canManageApplicants;
+    if (item.id === "reports") return data.capabilities.canUseSuperiorDashboard && (data.capabilities.canManage || data.capabilities.canManagePayroll || data.capabilities.canManageApplicants);
     if (item.id === "profile") return true;
     if (item.id === "reviews") return data.capabilities.canReviewPerformance;
     if (item.id === "documents") return data.capabilities.canViewDocuments || data.capabilities.canManageDocuments;
     if (item.id === "announcements") return data.capabilities.canViewAnnouncements || data.capabilities.canPublishAnnouncements;
     if (item.id === "meetings") return data.capabilities.canViewMeetings || data.capabilities.canScheduleMeetings;
     if (item.id === "resources") return data.capabilities.canViewResources || data.capabilities.canManageResources;
+    if (item.id === "chat") return data.capabilities.canUseChat;
     if (item.id === "access") return data.capabilities.canManageAccess;
     if (item.id === "admin") return data.capabilities.canManage;
     return true;
@@ -1085,6 +1089,32 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 <button className={styles.rowButton} type="button" onClick={() => openPortalTab("documents")}><span>Documents and letters</span><ChevronRight size={16} /></button>
                 <button className={styles.rowButton} type="button" onClick={() => openPortalTab("meetings")}><span>Meetings</span><ChevronRight size={16} /></button>
                 <button className={styles.rowButton} type="button" onClick={() => openPortalTab("resources")}><span>Resources</span><ChevronRight size={16} /></button>
+              </div>
+            </div>
+
+            <div className={`${styles.card} ${styles.span12}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>Alerts & Announcements</h2>
+                  <p className={styles.muted}>Important updates visible to your role.</p>
+                </div>
+                <span className={styles.pill}>{data.notifications.filter((item) => !item.readAt).length + data.announcements.length} updates</span>
+              </div>
+              <div className={styles.list}>
+                {data.notifications.filter((item) => !item.readAt).slice(0, 3).map((item) => (
+                  <div className={styles.row} key={`notification-${item.id}`}>
+                    <div className={styles.rowHeader}><strong>{item.title}</strong><span className={`${styles.pill} ${styles.pillWarn}`}>Alert</span></div>
+                    <p className={styles.muted}>{item.body}</p>
+                    <button className={styles.ghostButton} type="button" onClick={() => runAction(() => markNotificationRead({ id: item.id.toString() }))}>Mark read</button>
+                  </div>
+                ))}
+                {data.announcements.slice(0, 3).map((announcement) => (
+                  <div className={styles.row} key={`announcement-${announcement.id}`}>
+                    <div className={styles.rowHeader}><strong>{announcement.title}</strong><span className={announcement.priority === "Urgent" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{announcement.priority}</span></div>
+                    <p className={styles.muted}>{announcement.body}</p>
+                  </div>
+                ))}
+                {data.notifications.filter((item) => !item.readAt).length === 0 && data.announcements.length === 0 && <div className={styles.emptyState}>No alerts right now.</div>}
               </div>
             </div>
 
@@ -2090,6 +2120,47 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 );
               })}</div>
             </div>
+          </section>
+        )}
+
+        {tab === "chat" && (
+          <section className={styles.grid}>
+            <div className={`${styles.card} ${styles.span12} ${styles.dashboardHero}`}>
+              <div>
+                <span className={styles.eyebrow}>Internal Group Chat</span>
+                <h2 className={styles.heroTitle} style={{ margin: "4px 0" }}>BlueVolt team room</h2>
+                <p className={styles.muted} style={{ margin: 0 }}>Company-wide chat for quick coordination across sales, content, operations, admins, and directors.</p>
+              </div>
+              <div className={styles.heroActions}>
+                <button className={styles.ghostButton} type="button" onClick={() => refresh(sortResources, "chat")}>Refresh chat</button>
+              </div>
+            </div>
+            <div className={`${styles.card} ${styles.span8}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>Messages</h2>
+                  <p className={styles.muted}>Latest internal messages. Keep sensitive data out of group chat.</p>
+                </div>
+                <span className={styles.pill}>{data.chatMessages.length} messages</span>
+              </div>
+              <div className={styles.chatList}>
+                {data.chatMessages.length === 0 ? <div className={styles.emptyState}>No messages yet.</div> : data.chatMessages.map((message) => (
+                  <div className={`${styles.chatBubble} ${message.employeeId === currentUserId ? styles.chatBubbleMine : ""}`} key={message.id}>
+                    <div className={styles.rowHeader}>
+                      <strong>{message.employeeName}</strong>
+                      <span className={styles.muted}>{displayRole(message.employeeRole)} - {formatPortalTimeAgo(message.createdAt)}</span>
+                    </div>
+                    <p>{message.body}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveGroupChatMessage)}>
+              <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Send Message</h2>
+              <p className={`${styles.muted} ${styles.fieldWide}`}>Visible to everyone in the employee portal.</p>
+              <Field label="Message" name="body" textarea wide required />
+              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Send to Group</button>
+            </form>
           </section>
         )}
 

@@ -54,6 +54,11 @@ export default function CrmTab({
   const [crmPanel, setCrmPanel] = useState<"none" | "source">("none");
 
   const canEditCrmSheet = data.session.role === "super_admin";
+  const activeRoleOptions = (data.roleDefinitions || [])
+    .filter((role) => role.status !== "Inactive")
+    .map((role) => ({ label: role.label, value: role.key }));
+  const audienceRoleOptions = [{ label: "All roles", value: "all" }, ...activeRoleOptions];
+  const assignableEmployees = data.users.filter((user) => user.status === "Active");
   const activeCrmSheet = activeCrmSheetId ? data.crmSheets.find((sheet) => sheet.id === activeCrmSheetId) : null;
 
   const loadCrmSheetFile = async (file?: File) => {
@@ -173,7 +178,19 @@ export default function CrmTab({
           </div>
           <input type="hidden" name="sourceName" value="Imported Data" />
           <input type="hidden" name="ownerRole" value={data.session.role} />
-          <input type="hidden" name="audienceRoles" value="all" />
+          <label className={`${styles.field} ${styles.fieldWide}`}>
+            <span className={styles.label}>Visible Roles</span>
+            <select className={styles.select} name="audienceRoles" defaultValue="all">
+              {audienceRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+            </select>
+          </label>
+          <label className={`${styles.field} ${styles.fieldWide}`}>
+            <span className={styles.label}>Visible Employees</span>
+            <select className={styles.select} name="audienceUsers" multiple size={Math.min(Math.max(assignableEmployees.length, 3), 8)}>
+              {assignableEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} ({employee.email})</option>)}
+            </select>
+            <span className={styles.muted}>Optional. Use Ctrl/Shift to select multiple people. They can see the sheet even if their role is not selected.</span>
+          </label>
           <label className={`${styles.field} ${styles.fieldWide}`}>
             <span className={styles.label}>Upload Excel / CSV</span>
             <input className={styles.input} type="file" accept=".xlsx,.xls,.csv,.tsv,.txt" onChange={(event) => loadCrmSheetFile(event.target.files?.[0])} />

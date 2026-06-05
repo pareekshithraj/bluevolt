@@ -434,6 +434,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const workingEmployees = employees.filter((user) => user.isWithinWorkHours).length;
   const employeeOptions = employees.map((user) => ({ label: `${user.name} (${user.email})`, value: user.id.toString() }));
   const roleDefinitions = data.roleDefinitions || [];
+  const currentUserId = Number(data.session.userId);
   const activeRoleOptions = roleDefinitions
     .filter((role) => role.status !== "Inactive")
     .map((role) => ({ label: `${role.label} (${role.key})`, value: role.key }));
@@ -446,14 +447,24 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     return [{ label: `${displayRole(value)} (${value}) - inactive`, value }, ...ownerRoleOptions];
   };
   const roleLabel = displayRole(data.session.role);
+  const currentRoleDefinition = roleDefinitions.find((role) => role.key === data.session.role);
+  const superiorRoleKeys = new Set(["super_admin", "director", "authorized_signatory", "admin"]);
+  const isSuperiorDashboard = currentRoleDefinition?.dashboardType
+    ? currentRoleDefinition.dashboardType === "superior"
+    : superiorRoleKeys.has(data.session.role);
+  const normalizedRole = data.session.role.toLowerCase();
   const openTasks = data.tasks.filter((task) => task.status !== "Done");
+  const myOpenTasks = openTasks.filter((task) => task.assignedTo === currentUserId || task.assignedName === data.session.name || task.ownerRole === data.session.role);
   const blockedTasks = data.tasks.filter((task) => task.status === "Blocked");
   const dueSoonTasks = data.tasks.filter((task) => task.dueAt && task.status !== "Done" && new Date(task.dueAt).getTime() <= Date.now() + 7 * 24 * 60 * 60 * 1000);
   const actionableCrmRows = data.crmSheets.flatMap((sheet) => sheet.rows).filter((row) => ["Open", "Callback"].includes(row.status));
+  const roleActionableCrmRows = actionableCrmRows.filter((row) => {
+    const sheet = data.crmSheets.find((candidate) => candidate.rows.some((sheetRow) => sheetRow.id === row.id));
+    return !sheet || sheet.ownerRole === data.session.role || sheet.audienceRoles === "all" || sheet.audienceRoles === data.session.role;
+  });
   const upcomingMeetings = data.meetings.filter((meeting) => new Date(meeting.startsAt).getTime() >= Date.now()).slice(0, 4);
   const recentResources = data.resources.slice(0, 4);
   const canEditCrmSheet = data.session.role === "super_admin";
-  const currentUserId = Number(data.session.userId);
   const currentEmployee = employees.find((user) => user.id === currentUserId);
   const activeAttendance = data.attendance.find((entry) => entry.employeeId === currentUserId && entry.loginAt && !entry.logoutAt);
   const isWorking = clockOverride ? clockOverride === "working" : Boolean(activeAttendance);
@@ -991,7 +1002,154 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
           </div>
         )}
 
-        {tab === "dashboard" && (
+        {tab === "dashboard" && !isSuperiorDashboard && (
+          <section className={styles.grid}>
+            <div className={`${styles.card} ${styles.span12} ${styles.dashboardHero}`}>
+              <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+                <div style={{ flexShrink: 0, width: 86, height: 78, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-shell)", padding: 12, borderRadius: "18px", border: "1px solid var(--border-color)", boxShadow: "var(--shadow-sm)" }}>
+                  <Image src="/logo.png" alt="BlueVolt Logo" width={86} height={78} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                </div>
+                <div>
+                  <span className={styles.eyebrow}>{normalizedRole.includes("sales") ? "Sales Workspace" : normalizedRole.includes("content") ? "Content Workspace" : "My Workspace"}</span>
+                  <h2 className={styles.heroTitle} style={{ margin: "4px 0" }}>Today&apos;s work for {data.session.name}</h2>
+                  <p className={styles.muted} style={{ margin: 0 }}>
+                    Focused view for your tasks, check-in status, CRM/content work, resources, meetings, and documents.
+                  </p>
+                </div>
+              </div>
+              <div className={styles.heroActions}>
+                <button className={styles.button} type="button" onClick={() => openPortalTab("ops")}>My tasks</button>
+                {data.capabilities.canUseCrm && <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("crm")}>My CRM sheets</button>}
+                <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("resources")}>Resources</button>
+                {currentEmployee && <a className={styles.ghostButton} href={idCardUrlFor(currentEmployee)} target="_blank" rel="noopener noreferrer">My ID card</a>}
+              </div>
+            </div>
+
+            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}>
+              <h2 className={styles.cardTitle}>Work Status</h2>
+              <span className={styles.metricValue}>{isWorking ? "On" : "Off"}</span>
+              <p className={styles.muted}>{currentEmployee?.workStartTime || "09:00"} to {currentEmployee?.workEndTime || "18:00"}</p>
+            </div>
+            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}>
+              <h2 className={styles.cardTitle}>My Tasks</h2>
+              <span className={styles.metricValue}>{myOpenTasks.length}</span>
+              <p className={styles.muted}>{myOpenTasks.filter((task) => task.status === "Blocked").length} blocked, {myOpenTasks.filter((task) => task.dueAt).length} with due dates.</p>
+            </div>
+            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}>
+              <h2 className={styles.cardTitle}>{normalizedRole.includes("sales") ? "CRM Follow-ups" : normalizedRole.includes("content") ? "Content Queue" : "Assigned Work"}</h2>
+              <span className={styles.metricValue}>{normalizedRole.includes("sales") ? roleActionableCrmRows.length : myOpenTasks.length}</span>
+              <p className={styles.muted}>{normalizedRole.includes("sales") ? "Open and callback rows visible to you." : "Visible tasks for your role."}</p>
+            </div>
+            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}>
+              <h2 className={styles.cardTitle}>My Hours</h2>
+              <span className={styles.metricValue}>{formatWorkHours(selectedEmployeeWorkHours)}</span>
+              <p className={styles.muted}>{selectedEmployeeSessions} work sessions recorded.</p>
+            </div>
+
+            <div className={`${styles.card} ${styles.span8}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>{normalizedRole.includes("sales") ? "Sales Action List" : normalizedRole.includes("content") ? "Content Development Queue" : "Priority Work"}</h2>
+                  <p className={styles.muted}>{normalizedRole.includes("sales") ? "Rows you can follow up from approved CRM sheets." : "Tasks assigned to you or your role."}</p>
+                </div>
+              </div>
+              <div className={styles.list}>
+                {normalizedRole.includes("sales") ? (
+                  roleActionableCrmRows.length === 0 ? <div className={styles.emptyState}>No CRM follow-ups assigned right now.</div> : roleActionableCrmRows.slice(0, 6).map((row) => {
+                    const rowData = row.data && typeof row.data === "object" ? row.data as Record<string, string> : {};
+                    return (
+                      <div className={styles.row} key={row.id}>
+                        <div className={styles.rowHeader}>
+                          <strong>{rowData["School Name"] || rowData.Company || `CRM row ${row.rowNumber}`}</strong>
+                          <span className={row.status === "Callback" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{row.status}</span>
+                        </div>
+                        <p className={styles.muted}>{rowData["Phone Number"] || rowData.Phone || row.reason || "Open follow-up."}</p>
+                      </div>
+                    );
+                  })
+                ) : (
+                  myOpenTasks.length === 0 ? <div className={styles.emptyState}>No assigned work right now.</div> : myOpenTasks.slice(0, 6).map((task) => (
+                    <div className={styles.row} key={task.id}>
+                      <div className={styles.rowHeader}><strong>{task.title}</strong><span className={task.status === "Blocked" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{task.status}</span></div>
+                      <p className={styles.muted}>{task.description || "Update progress from Work Ops."} {task.dueAt ? `Due ${formatPortalDateTime(task.dueAt)}` : ""}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className={`${styles.card} ${styles.span4}`}>
+              <h2 className={styles.cardTitle}>Quick Access</h2>
+              <div className={styles.list}>
+                <button className={styles.rowButton} type="button" onClick={() => openPortalTab("profile")}><span>Profile and password</span><ChevronRight size={16} /></button>
+                <button className={styles.rowButton} type="button" onClick={() => openPortalTab("documents")}><span>Documents and letters</span><ChevronRight size={16} /></button>
+                <button className={styles.rowButton} type="button" onClick={() => openPortalTab("meetings")}><span>Meetings</span><ChevronRight size={16} /></button>
+                <button className={styles.rowButton} type="button" onClick={() => openPortalTab("resources")}><span>Resources</span><ChevronRight size={16} /></button>
+              </div>
+            </div>
+
+            <div className={`${styles.card} ${styles.span6}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>Upcoming Meetings</h2>
+                  <p className={styles.muted}>Read-only meeting list for your role.</p>
+                </div>
+                <span className={styles.pill}>{upcomingMeetings.length} upcoming</span>
+              </div>
+              <div className={styles.list}>
+                {upcomingMeetings.length === 0 ? <div className={styles.emptyState}>No upcoming meetings.</div> : upcomingMeetings.map((meeting) => (
+                  <div className={styles.row} key={meeting.id}>
+                    <strong>{meeting.title}</strong>
+                    <p className={styles.muted}>{formatPortalDateTime(meeting.startsAt)}</p>
+                    {meeting.meetUrl && <a className={styles.ghostButton} href={meeting.meetUrl} target="_blank" rel="noopener noreferrer">Join</a>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className={`${styles.card} ${styles.span6}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>Resources For You</h2>
+                  <p className={styles.muted}>Files and links visible to your role.</p>
+                </div>
+                <span className={styles.pill}>{data.resources.length} visible</span>
+              </div>
+              <div className={styles.list}>
+                {recentResources.length === 0 ? <div className={styles.emptyState}>No resources yet.</div> : recentResources.map((resource) => (
+                  <div className={styles.row} key={resource.id}>
+                    <strong>{resource.title}</strong>
+                    <p className={styles.muted}>{resource.resourceType} {resource.tags ? `- ${resource.tags}` : ""}</p>
+                    {resource.url && <a className={styles.ghostButton} href={resource.url} target="_blank" rel="noopener noreferrer">Open</a>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className={`${styles.card} ${styles.span12}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>My Check-In History</h2>
+                  <p className={styles.muted}>Your recent work sessions and total hours.</p>
+                </div>
+                <span className={styles.pill}>{recentAttendance.length} recent</span>
+              </div>
+              <div className={styles.attendanceGrid}>{recentAttendance.length === 0 ? <div className={styles.emptyState}>No check-in history yet.</div> : recentAttendance.map((entry) => (
+                <div className={styles.attendanceItem} key={entry.id}>
+                  <div>
+                    <strong>{entry.employeeName}</strong>
+                    <p className={styles.muted}>{formatPortalDate(entry.workDate)} - {entry.status}</p>
+                  </div>
+                  <div><span className={styles.label}>In</span><strong>{formatPortalTime(entry.loginAt)}</strong></div>
+                  <div><span className={styles.label}>Out</span><strong>{entry.logoutAt ? formatPortalTime(entry.logoutAt) : "Working"}</strong></div>
+                  <span className={entry.logoutAt ? styles.pill : `${styles.pill} ${styles.pillSuccess}`}>{entry.logoutAt ? `${entry.totalHours.toFixed(2)} hrs` : "Live"}</span>
+                </div>
+              ))}</div>
+            </div>
+          </section>
+        )}
+
+        {tab === "dashboard" && isSuperiorDashboard && (
           <section className={styles.grid}>
             <div className={`${styles.card} ${styles.span12} ${styles.dashboardHero}`}>
               <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>

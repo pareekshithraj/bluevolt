@@ -278,6 +278,15 @@ export default function PrivilegesTab({
             <Field label="Role Name" name="label" placeholder="Content Lead" required />
             <Field label="Role Key" name="key" placeholder="content_lead" />
             <Field label="Status" name="status" options={["Active", "Inactive"]} />
+            <Field
+              label="Dashboard Experience"
+              name="dashboardType"
+              options={[
+                { label: "Workspace dashboard for employees/interns", value: "workspace" },
+                { label: "Superior dashboard for directors/admins", value: "superior" },
+              ]}
+              defaultValue="workspace"
+            />
             <Field label="Description" name="description" placeholder="Short description of the role's purpose." textarea wide />
             <Field label="Access Notes / Restrictions" name="permissions" placeholder="Example: View only access to CRM." textarea wide />
 
@@ -352,6 +361,18 @@ export default function PrivilegesTab({
               >
                 <option>Active</option>
                 <option>Inactive</option>
+              </select>
+            </div>
+            <div className={styles.field}>
+              <span className={styles.label}>Dashboard Experience</span>
+              <select
+                className={styles.select}
+                name="dashboardType"
+                defaultValue={activeRole.dashboardType || (["super_admin", "director", "authorized_signatory", "admin"].includes(activeRole.key) ? "superior" : "workspace")}
+                disabled={activeRoleIsProtected}
+              >
+                <option value="workspace">Workspace dashboard for employees/interns</option>
+                <option value="superior">Superior dashboard for directors/admins</option>
               </select>
             </div>
 

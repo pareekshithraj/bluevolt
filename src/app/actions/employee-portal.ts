@@ -98,6 +98,7 @@ type EmployeeRoleDefinition = {
   description: string;
   permissions: string;
   featureAccess: string;
+  dashboardType: string;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -156,6 +157,11 @@ const defaultRolePermissions: Record<string, string> = {
 const coreRoleKeys = new Set<string>(EMPLOYEE_ROLES);
 const defaultEmployeePassword = "abc123";
 const documentSignatoryRoles = new Set(["director", "authorized_signatory"]);
+const superiorDashboardRoles = new Set(["super_admin", "director", "authorized_signatory", "admin"]);
+
+function dashboardTypeForRole(key: string): string {
+  return superiorDashboardRoles.has(key) ? "superior" : "workspace";
+}
 
 function defaultRoleDefinitions(now = new Date().toISOString()): EmployeeRoleDefinition[] {
   return EMPLOYEE_ROLES.map((key, index) => ({
@@ -165,6 +171,7 @@ function defaultRoleDefinitions(now = new Date().toISOString()): EmployeeRoleDef
     description: defaultRolePermissions[key] || "Portal access role.",
     permissions: defaultRolePermissions[key] || "Basic portal access.",
     featureAccess: (DEFAULT_ROLE_FEATURE_ACCESS[key] || ["dashboard"]).join(","),
+    dashboardType: dashboardTypeForRole(key),
     status: "Active",
     createdAt: now,
     updatedAt: now,
@@ -179,6 +186,7 @@ function mergeRoleDefinitions(roles?: EmployeeRoleDefinition[]): EmployeeRoleDef
     merged.set(role.key, {
       ...role,
       featureAccess: role.featureAccess || fallback?.featureAccess || "dashboard",
+      dashboardType: isCoreRole(role.key) ? dashboardTypeForRole(role.key) : role.dashboardType || fallback?.dashboardType || dashboardTypeForRole(role.key),
     });
   }
   return [...merged.values()].sort((first, second) => first.label.localeCompare(second.label));
@@ -383,6 +391,7 @@ async function ensureEmployeeRoleDefinitionTable() {
       "description" TEXT NOT NULL DEFAULT '',
       "permissions" TEXT NOT NULL DEFAULT '',
       "featureAccess" TEXT NOT NULL DEFAULT 'dashboard',
+      "dashboardType" TEXT NOT NULL DEFAULT 'workspace',
       "status" TEXT NOT NULL DEFAULT 'Active',
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -391,6 +400,10 @@ async function ensureEmployeeRoleDefinitionTable() {
   await prisma.$executeRaw`
     ALTER TABLE "EmployeeRoleDefinition"
     ADD COLUMN IF NOT EXISTS "featureAccess" TEXT NOT NULL DEFAULT 'dashboard'
+  `;
+  await prisma.$executeRaw`
+    ALTER TABLE "EmployeeRoleDefinition"
+    ADD COLUMN IF NOT EXISTS "dashboardType" TEXT NOT NULL DEFAULT 'workspace'
   `;
   roleTableEnsured = true;
 }
@@ -402,8 +415,8 @@ async function getEmployeeRoleDefinitionsFromDatabase(): Promise<EmployeeRoleDef
   if (!defaultRolesSeeded) {
     for (const role of defaultRoleDefinitions()) {
       await prisma.$executeRaw`
-        INSERT INTO "EmployeeRoleDefinition" ("key", "label", "description", "permissions", "featureAccess", "status")
-        VALUES (${role.key}, ${role.label}, ${role.description}, ${role.permissions}, ${role.featureAccess}, ${role.status})
+        INSERT INTO "EmployeeRoleDefinition" ("key", "label", "description", "permissions", "featureAccess", "dashboardType", "status")
+        VALUES (${role.key}, ${role.label}, ${role.description}, ${role.permissions}, ${role.featureAccess}, ${role.dashboardType}, ${role.status})
         ON CONFLICT ("key") DO NOTHING
       `;
     }
@@ -418,6 +431,7 @@ async function getEmployeeRoleDefinitionsFromDatabase(): Promise<EmployeeRoleDef
       "description",
       "permissions",
       "featureAccess",
+      "dashboardType",
       "status",
       "createdAt"::text AS "createdAt",
       "updatedAt"::text AS "updatedAt"
@@ -1064,6 +1078,7 @@ export type EmployeeRoleDefinitionInput = {
   description?: string;
   permissions?: string;
   featureAccess?: string | string[];
+  dashboardType?: string;
   status?: string;
 };
 
@@ -1074,6 +1089,7 @@ export async function saveEmployeeRoleDefinition(input: EmployeeRoleDefinitionIn
     key: input.key?.trim() || "",
     description: input.description?.trim(),
     permissions: input.permissions?.trim(),
+    dashboardType: input.dashboardType === "superior" ? "superior" : "workspace",
   };
 
   try {
@@ -1101,15 +1117,19 @@ export async function saveEmployeeRoleDefinition(input: EmployeeRoleDefinitionIn
       ? existingRole?.permissions || defaultRolePermissions[key] || "Access is controlled by Super Admin assignments."
       : typedInput.permissions || existingRole?.permissions || "Access is controlled by Super Admin assignments.";
     const featureAccess = parseFeatureAccess(input.featureAccess || existingRole?.featureAccess).join(",");
+    const dashboardType = coreRole
+      ? dashboardTypeForRole(key)
+      : typedInput.dashboardType || existingRole?.dashboardType || dashboardTypeForRole(key);
 
     await prisma.$executeRaw`
-      INSERT INTO "EmployeeRoleDefinition" ("key", "label", "description", "permissions", "featureAccess", "status")
-      VALUES (${key}, ${label}, ${description}, ${permissions}, ${featureAccess}, ${status})
+      INSERT INTO "EmployeeRoleDefinition" ("key", "label", "description", "permissions", "featureAccess", "dashboardType", "status")
+      VALUES (${key}, ${label}, ${description}, ${permissions}, ${featureAccess}, ${dashboardType}, ${status})
       ON CONFLICT ("key") DO UPDATE SET
         "label" = EXCLUDED."label",
         "description" = EXCLUDED."description",
         "permissions" = EXCLUDED."permissions",
         "featureAccess" = EXCLUDED."featureAccess",
+        "dashboardType" = EXCLUDED."dashboardType",
         "status" = EXCLUDED."status",
         "updatedAt" = NOW()
     `;
@@ -1120,7 +1140,7 @@ export async function saveEmployeeRoleDefinition(input: EmployeeRoleDefinitionIn
       action: "role.upsert",
       entityType: "employee_role",
       entityId: key,
-      metadata: { label, status, featureAccess },
+      metadata: { label, status, featureAccess, dashboardType },
     });
 
     revalidatePath("/employee/portal");
@@ -1154,6 +1174,9 @@ export async function saveEmployeeRoleDefinition(input: EmployeeRoleDefinitionIn
       ? existingRole?.permissions || defaultRolePermissions[key] || "Access is controlled by Super Admin assignments."
       : typedInput.permissions || existingRole?.permissions || "Access is controlled by Super Admin assignments.";
     const featureAccess = parseFeatureAccess(input.featureAccess || existingRole?.featureAccess).join(",");
+    const dashboardType = coreRole
+      ? dashboardTypeForRole(key)
+      : typedInput.dashboardType || existingRole?.dashboardType || dashboardTypeForRole(key);
     const nextId = Math.max(0, ...roles.map((role) => role.id || 0)) + 1;
     const role: EmployeeRoleDefinition = {
       id: existingIndex >= 0 ? roles[existingIndex].id : nextId,
@@ -1162,6 +1185,7 @@ export async function saveEmployeeRoleDefinition(input: EmployeeRoleDefinitionIn
       description,
       permissions,
       featureAccess,
+      dashboardType,
       status,
       createdAt: existingIndex >= 0 ? roles[existingIndex].createdAt : now,
       updatedAt: now,

@@ -117,6 +117,10 @@ export default function PrivilegesTab({
 
   const selectedFeatures = activeRole ? featureAccessSet(activeRole.featureAccess) : new Set<string>();
   const activeRoleIsProtected = activeRole ? protectedRoleKeys.has(activeRole.key) : false;
+  const superiorRoleKeys = new Set(["super_admin", "director", "authorized_signatory", "admin"]);
+  const roleDashboardType = (roleKey: string, dashboardType?: string | null) => (
+    dashboardType || (superiorRoleKeys.has(roleKey) ? "superior" : "workspace")
+  );
 
   const getRoleIcon = (roleKey: string) => {
     switch (roleKey) {
@@ -266,7 +270,7 @@ export default function PrivilegesTab({
       {/* Right Column: Detail Editor / Create Form (span 8) */}
       <div className={`${styles.card} ${styles.span8}`}>
         {isCreatingRole ? (
-          <form onSubmit={submitRole} className={styles.formGrid}>
+          <form key="create-role" onSubmit={submitRole} className={styles.formGrid}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gridColumn: "1 / -1", marginBottom: 12, borderBottom: "1px solid var(--border-color)", paddingBottom: 12 }}>
               <div>
                 <h2 className={styles.cardTitle} style={{ margin: 0 }}>Create Custom Role</h2>
@@ -316,9 +320,10 @@ export default function PrivilegesTab({
             <button className={`${styles.button} ${styles.fieldWide}`} type="submit" style={{ marginTop: 16 }}>Save Role</button>
           </form>
         ) : activeRole ? (
-          <form onSubmit={submitRole} className={styles.formGrid}>
+          <form key={`edit-role-${activeRole.key}`} onSubmit={submitRole} className={styles.formGrid}>
             <input type="hidden" name="key" value={activeRole.key} />
             <input type="hidden" name="label" value={activeRole.label} />
+            {activeRoleIsProtected && <input type="hidden" name="dashboardType" value={roleDashboardType(activeRole.key, activeRole.dashboardType)} />}
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gridColumn: "1 / -1", marginBottom: 12, borderBottom: "1px solid var(--border-color)", paddingBottom: 12 }}>
               <div>
@@ -368,7 +373,7 @@ export default function PrivilegesTab({
               <select
                 className={styles.select}
                 name="dashboardType"
-                defaultValue={activeRole.dashboardType || (["super_admin", "director", "authorized_signatory", "admin"].includes(activeRole.key) ? "superior" : "workspace")}
+                defaultValue={roleDashboardType(activeRole.key, activeRole.dashboardType)}
                 disabled={activeRoleIsProtected}
               >
                 <option value="workspace">Workspace dashboard for employees/interns</option>

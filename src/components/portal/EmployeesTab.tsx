@@ -3,17 +3,14 @@
 import React, { useState } from "react";
 import { Briefcase, Clock3, Search, UserCheck, Users } from "lucide-react";
 import {
-  appointApplicantAsEmployee,
-  updateEmployeeRecordStatus,
   saveEmployeeUser,
-  saveApplicant,
   saveDepartment,
   getEmployeePortalData,
 } from "@/app/actions/employee-portal";
 import styles from "@/app/employee/portal.module.css";
 
 type PortalData = Awaited<ReturnType<typeof getEmployeePortalData>>;
-type PortalTab = "dashboard" | "crm" | "applicants" | "ops" | "expenses" | "payroll" | "reports" | "profile" | "reviews" | "documents" | "announcements" | "meetings" | "resources" | "access" | "admin";
+type PortalTab = "dashboard" | "approvals" | "crm" | "applicants" | "ops" | "expenses" | "payroll" | "reports" | "profile" | "reviews" | "documents" | "announcements" | "meetings" | "resources" | "chat" | "access" | "admin";
 type EmployeeListItem = PortalData["users"][number] & {
   id: number;
   name: string;
@@ -86,7 +83,6 @@ interface EmployeesTabProps {
   applicationLink: string;
   submit: <T extends Record<string, string>>(handler: (payload: T) => Promise<{ success: boolean; error?: string }>, cb?: () => void) => (e: React.FormEvent<HTMLFormElement>) => void;
   formatPortalDateTime: (date: string | Date | null | undefined) => string;
-  downloadCsv: (fileName: string, rows: Record<string, string | number | null | undefined>[]) => void;
   importEmployees: (file?: File) => void;
   openPortalTab: (tabId: PortalTab) => void;
   setUserManagementOpen: (open: boolean) => void;
@@ -98,12 +94,10 @@ interface EmployeesTabProps {
 
 export default function EmployeesTab({
   data,
-  runAction,
   copyApplicationLink,
   applicationLink,
   submit,
   formatPortalDateTime,
-  downloadCsv,
   importEmployees,
   openPortalTab,
   setUserManagementOpen,
@@ -114,7 +108,6 @@ export default function EmployeesTab({
 }: EmployeesTabProps) {
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [employeeTypeFilter, setEmployeeTypeFilter] = useState("all");
-  const [applicantSort, setApplicantSort] = useState("newest");
 
   const employees = data.users as EmployeeListItem[];
 
@@ -133,13 +126,6 @@ export default function EmployeesTab({
     return [{ label: `${displayRole(value)} (${value}) - inactive`, value }, ...roleOptions];
   };
 
-  const sortedApplicants = [...data.applicants].sort((first, second) => {
-    if (applicantSort === "name") return first.name.localeCompare(second.name);
-    if (applicantSort === "role") return first.roleApplied.localeCompare(second.roleApplied);
-    if (applicantSort === "status") return first.stage.localeCompare(second.stage);
-    return new Date(second.updatedAt).getTime() - new Date(first.updatedAt).getTime();
-  });
-
   const filteredEmployees = employees.filter((user) => {
     const searchText = `${user.name} ${user.email} ${user.department} ${user.title} ${user.role}`.toLowerCase();
     const matchesSearch = searchText.includes(employeeSearch.toLowerCase());
@@ -149,18 +135,6 @@ export default function EmployeesTab({
 
   const onlineEmployees = employees.filter((user) => user.isOnline).length;
   const workingEmployees = employees.filter((user) => user.isWithinWorkHours).length;
-
-  const applicantRows = data.applicants.map((applicant) => ({
-    Name: applicant.name,
-    Email: applicant.email,
-    Phone: applicant.phone || "",
-    RoleApplied: applicant.roleApplied,
-    Stage: applicant.stage,
-    Source: applicant.source,
-    MeetUrl: applicant.meetUrl || "",
-    Notes: applicant.notes || "",
-    CreatedAt: applicant.createdAt,
-  }));
 
   const inputDate = (val?: string | Date | null) => {
     if (!val) return "";
@@ -189,86 +163,31 @@ export default function EmployeesTab({
     <section className={styles.grid}>
       <div className={`${styles.dashboardHero} ${styles.span12}`}>
         <div>
-          <div className={styles.eyebrow}>Employee Access Workflow</div>
-          <h1 className={styles.heroTitle}><Briefcase size={24} style={{ marginRight: 8, verticalAlign: "middle" }} /> Create roles once, share the hiring link, then onboard only approved people.</h1>
-          <p className={styles.muted}>Use Privileges for role design, use the public form for applicant intake, and keep manual employee entry for direct hires or immediate access needs.</p>
+          <div className={styles.eyebrow}>Employee Management</div>
+          <h1 className={styles.heroTitle}><Briefcase size={24} style={{ marginRight: 8, verticalAlign: "middle" }} /> Manage active employees, roles, work hours, and documents.</h1>
+          <p className={styles.muted}>Hiring submissions live in Applicants. This page is for current team access, direct user creation, departments, and imports.</p>
         </div>
         <div className={styles.heroActions}>
           <button className={styles.button} type="button" onClick={() => setUserManagementOpen(true)}>Appoint / Add User</button>
-          <button className={styles.button} type="button" onClick={copyApplicationLink}>Copy Hiring Link</button>
+          <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("applicants")}>Open Applicants</button>
           {data.capabilities.canManageAccess && <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("access")}>Open Privileges</button>}
-          <a className={styles.ghostButton} href={applicationLink} target="_blank" rel="noopener noreferrer">Preview Form</a>
         </div>
       </div>
       <div className={`${styles.card} ${styles.span12}`}>
         <div className={styles.sectionHeader}>
           <div>
-            <h2 className={styles.cardTitle}>Simple Hiring Link</h2>
-            <p className={styles.muted}>Paste this in WhatsApp groups or hiring posts. Applicants submit role, type, pay preference, availability, and profile links up front.</p>
+            <h2 className={styles.cardTitle}>Quick Actions</h2>
+            <p className={styles.muted}>Create direct access, copy the hiring link, or open the applicant inbox.</p>
           </div>
-          <button className={styles.button} type="button" onClick={copyApplicationLink}>Copy WhatsApp Link</button>
+          <div className={styles.toolbar}>
+            <button className={styles.button} type="button" onClick={() => setUserManagementOpen(true)}>Add Employee</button>
+            <button className={styles.ghostButton} type="button" onClick={copyApplicationLink}>Copy Hiring Link</button>
+            <a className={styles.ghostButton} href={applicationLink} target="_blank" rel="noopener noreferrer">Preview Form</a>
+          </div>
         </div>
         <div className={styles.inlineForm}>
           <input className={styles.input} value={applicationLink} readOnly />
           <a className={styles.ghostButton} href={applicationLink} target="_blank" rel="noopener noreferrer">Open Form</a>
-        </div>
-      </div>
-      <div className={`${styles.card} ${styles.span12}`}>
-        <div className={styles.sectionHeader}>
-          <div>
-            <h2 className={styles.cardTitle}>Application Submissions</h2>
-            <p className={styles.muted}>Review public form entries here, then appoint as portal users or reject.</p>
-          </div>
-          <div className={styles.toolbar}>
-            <select className={styles.select} style={{ maxWidth: 160 }} value={applicantSort} onChange={(event) => setApplicantSort(event.target.value)}>
-              <option value="newest">Newest</option>
-              <option value="name">Name</option>
-              <option value="role">Role</option>
-              <option value="status">Status</option>
-            </select>
-            <button className={styles.ghostButton} type="button" onClick={() => downloadCsv("bluevolt-applicants.csv", applicantRows)}>Download CSV</button>
-          </div>
-        </div>
-        <div className={`${styles.smartTable} ${styles.applicantSmartTable}`}>
-          <div className={styles.smartTableHeader}>
-            <span>Applicant</span>
-            <span>Role</span>
-            <span>Details</span>
-            <span>Status</span>
-            <span>Action</span>
-          </div>
-          {sortedApplicants.length === 0 ? <div className={styles.emptyState}>No submissions yet. Use Appoint / Add User to copy the public link.</div> : sortedApplicants.map((applicant) => (
-            <div className={styles.smartTableRow} key={`admin-applicant-${applicant.id}`}>
-              <div className={styles.identityCell}>
-                <span className={styles.avatar}>{applicant.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
-                <span><strong>{applicant.name}</strong><small>{applicant.email}</small></span>
-              </div>
-              <span>{applicant.roleApplied}</span>
-              <span className={styles.muted}>{applicant.phone || "No phone"}{applicant.notes ? ` - ${applicant.notes.slice(0, 100)}` : ""}</span>
-              <span className={applicant.stage === "Appointed" ? `${styles.pill} ${styles.pillSuccess}` : applicant.stage === "Rejected" ? `${styles.pill} ${styles.pillMuted}` : `${styles.pill} ${styles.pillWarn}`}>{applicant.stage}</span>
-              <span className={styles.actionStack}>
-                {applicant.stage !== "Appointed" && applicant.stage !== "Rejected" && (
-                  <button className={styles.button} type="button" onClick={() => runAction(() => appointApplicantAsEmployee({ applicantId: applicant.id.toString() }))}>Add as Employee</button>
-                )}
-                {applicant.stage !== "Rejected" && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "applicant", id: applicant.id.toString(), status: "Rejected" }))}>Reject</button>}
-                <details className={styles.editPanel}>
-                  <summary>Edit</summary>
-                  <form className={styles.formGrid} onSubmit={submit(saveApplicant)}>
-                    <input type="hidden" name="id" value={applicant.id} />
-                    <Field label="Name" name="name" defaultValue={applicant.name} required />
-                    <Field label="Email" name="email" type="email" defaultValue={applicant.email} required />
-                    <Field label="Phone" name="phone" defaultValue={applicant.phone || ""} />
-                    <Field label="Role Applied" name="roleApplied" defaultValue={applicant.roleApplied} required />
-                    <Field label="Stage" name="stage" options={["New", "Screening", "Interview", "Offer", "Appointed", "Rejected"]} defaultValue={applicant.stage} />
-                    <Field label="Source" name="source" defaultValue={applicant.source} />
-                    <Field label="Meet URL" name="meetUrl" type="url" defaultValue={applicant.meetUrl || ""} wide />
-                    <Field label="Notes" name="notes" textarea defaultValue={applicant.notes || ""} wide />
-                    <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Submission</button>
-                  </form>
-                </details>
-              </span>
-            </div>
-          ))}
         </div>
       </div>
       <div className={`${styles.card} ${styles.span8}`}>

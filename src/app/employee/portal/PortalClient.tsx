@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Bell, CalendarDays, ChevronRight, ClipboardList, Code2, FileText, Handshake, LogOut, Menu, MessageCircle, Moon, PenLine, RefreshCw, RotateCw, Star, Sun, Target, UserCheck, Users, Video, WalletCards, X } from "lucide-react";
 import {
+  approveCrmSheet,
   approveEmployeeDocument,
   changeEmployeePassword,
   clockInEmployee,
@@ -26,6 +27,7 @@ import {
   saveResource,
   saveTask,
   updateCrmSheetRowData,
+  updateCrmSheetRowStatus,
   updateEmployeeRecordStatus,
 } from "@/app/actions/employee-portal";
 import styles from "../portal.module.css";
@@ -35,7 +37,6 @@ import EmployeesTab from "@/components/portal/EmployeesTab";
 import PrivilegesTab from "@/components/portal/PrivilegesTab";
 
 type PortalData = Awaited<ReturnType<typeof getEmployeePortalData>>;
-type PortalNotification = PortalData["notifications"][number];
 type EmployeeListItem = PortalData["users"][number] & {
   id: number;
   name: string;
@@ -56,6 +57,7 @@ type EmployeeListItem = PortalData["users"][number] & {
 
 const tabs = [
   { id: "dashboard", label: "Dashboard", icon: Users },
+  { id: "approvals", label: "Approvals", icon: ClipboardList },
   { id: "crm", label: "CRM", icon: Handshake },
   { id: "applicants", label: "Applicants", icon: Users },
   { id: "ops", label: "Work Ops", icon: ClipboardList },
@@ -253,24 +255,24 @@ function mergePortalData(previous: PortalData, incoming: PortalData, activeTab: 
   return {
     ...previous,
     ...incoming,
-    users: ["dashboard", "admin", "ops", "reports", "crm"].includes(activeTab) ? incoming.users : previous.users,
+    users: ["dashboard", "admin", "ops", "reports", "crm", "approvals"].includes(activeTab) ? incoming.users : previous.users,
     crmRecords: ["dashboard", "crm", "reports"].includes(activeTab) ? incoming.crmRecords : previous.crmRecords,
-    crmSheets: activeTab === "crm" ? incoming.crmSheets : previous.crmSheets,
-    applicants: ["applicants", "admin", "reports"].includes(activeTab) ? incoming.applicants : previous.applicants,
+    crmSheets: ["dashboard", "crm", "approvals"].includes(activeTab) ? incoming.crmSheets : previous.crmSheets,
+    applicants: ["applicants", "admin", "reports", "approvals"].includes(activeTab) ? incoming.applicants : previous.applicants,
     meetings: ["dashboard", "meetings", "reports"].includes(activeTab) ? incoming.meetings : previous.meetings,
-    resources: ["dashboard", "resources", "reports"].includes(activeTab) ? incoming.resources : previous.resources,
-    attendance: ["dashboard", "ops", "reports"].includes(activeTab) ? incoming.attendance : previous.attendance,
-    leaveRequests: activeTab === "ops" ? incoming.leaveRequests : previous.leaveRequests,
+    resources: ["dashboard", "resources", "reports", "approvals"].includes(activeTab) ? incoming.resources : previous.resources,
+    attendance: ["dashboard", "ops", "reports", "approvals"].includes(activeTab) ? incoming.attendance : previous.attendance,
+    leaveRequests: ["ops", "approvals"].includes(activeTab) ? incoming.leaveRequests : previous.leaveRequests,
     tasks: ["dashboard", "ops"].includes(activeTab) ? incoming.tasks : previous.tasks,
     payrollInputs: ["payroll", "reports"].includes(activeTab) ? incoming.payrollInputs : previous.payrollInputs,
     reviews: ["reviews", "reports"].includes(activeTab) ? incoming.reviews : previous.reviews,
-    documents: ["dashboard", "documents", "reports"].includes(activeTab) ? incoming.documents : previous.documents,
-    announcements: ["dashboard", "announcements", "reports"].includes(activeTab) ? incoming.announcements : previous.announcements,
+    documents: ["dashboard", "documents", "reports", "approvals"].includes(activeTab) ? incoming.documents : previous.documents,
+    announcements: ["dashboard", "announcements", "reports", "approvals"].includes(activeTab) ? incoming.announcements : previous.announcements,
     comments: activeTab === "ops" ? incoming.comments : previous.comments,
     departments: activeTab === "admin" ? incoming.departments : previous.departments,
     roleDefinitions: ["admin", "access"].includes(activeTab) ? incoming.roleDefinitions : previous.roleDefinitions,
-    notifications: ["dashboard", "admin", "access"].includes(activeTab) ? incoming.notifications : previous.notifications,
-    expenses: ["expenses", "reports"].includes(activeTab) ? incoming.expenses : previous.expenses,
+    notifications: ["dashboard", "admin", "access", "approvals"].includes(activeTab) ? incoming.notifications : previous.notifications,
+    expenses: ["expenses", "reports", "approvals"].includes(activeTab) ? incoming.expenses : previous.expenses,
     auditEvents: ["admin", "access", "reports"].includes(activeTab) ? incoming.auditEvents : previous.auditEvents,
     chatMessages: ["dashboard", "chat"].includes(activeTab) ? incoming.chatMessages : previous.chatMessages,
   };
@@ -386,9 +388,10 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
 
   const visibleTabs = useMemo(() => tabs.filter((item) => {
     if (item.id === "dashboard") return true;
+    if (item.id === "approvals") return data.capabilities.canUseSuperiorDashboard || data.capabilities.canManage;
     if (item.id === "crm") return data.capabilities.canRequestCrmSource || data.capabilities.canUseCrm;
     if (item.id === "applicants") return data.capabilities.canManageApplicants;
-    if (item.id === "ops") return data.capabilities.canManageOps;
+    if (item.id === "ops") return data.capabilities.canManageOps || !data.capabilities.canUseSuperiorDashboard;
     if (item.id === "expenses") return data.capabilities.canManageExpenses;
     if (item.id === "payroll") return data.capabilities.canManagePayroll;
     if (item.id === "reports") return data.capabilities.canUseSuperiorDashboard && (data.capabilities.canManage || data.capabilities.canManagePayroll || data.capabilities.canManageApplicants);
@@ -415,12 +418,12 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   });
 
   const openPortalTab = (nextTab: PortalTab) => {
+    setTab(nextTab);
     setLoadingTab(nextTab);
     startTransition(async () => {
       try {
         const newData = await getEmployeePortalData(sortResources, nextTab);
         setData(prev => mergePortalData(prev, newData, nextTab));
-        setTab(nextTab);
       } catch (tabError) {
         setError(simplePortalError(tabError));
       } finally {
@@ -466,6 +469,10 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     const sheet = data.crmSheets.find((candidate) => candidate.rows.some((sheetRow) => sheetRow.id === row.id));
     return !sheet || sheet.ownerRole === data.session.role || sheet.audienceRoles === "all" || sheet.audienceRoles === data.session.role;
   });
+  const salesAssignedSheets = data.crmSheets.filter((sheet) => sheet.status === "Approved");
+  const salesCallbackRows = data.crmSheets.flatMap((sheet) => sheet.rows).filter((row) => row.status === "Callback");
+  const salesDoneRows = data.crmSheets.flatMap((sheet) => sheet.rows).filter((row) => row.status === "Done");
+  const salesFollowUpsDueToday = data.crmSheets.flatMap((sheet) => sheet.rows).filter((row) => row.status === "Callback" || (row.reason || "").toLowerCase().includes("today"));
   const upcomingMeetings = data.meetings.filter((meeting) => new Date(meeting.startsAt).getTime() >= Date.now()).slice(0, 4);
   const recentResources = data.resources.slice(0, 4);
   const canEditCrmSheet = data.session.role === "super_admin";
@@ -484,6 +491,80 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const payrollTotal = data.payrollInputs.reduce((total, item) => total + Number(item.amount || 0), 0);
   const payrollReady = data.payrollInputs.filter((item) => item.status === "Ready").length;
   const payrollPaid = data.payrollInputs.filter((item) => item.status === "Paid").length;
+  const canManageExpenseClaims = data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageExpenses;
+  const pendingDocuments = data.documents.filter((document) => documentPending(document.notes) && !documentApproved(document.notes));
+  const pendingCrmSheets = data.crmSheets.filter((sheet) => sheet.status === "Pending");
+  const pendingApplicants = data.applicants.filter((applicant) => !["Offer", "Appointed", "Rejected"].includes(applicant.stage));
+  const pendingLeaveRequests = data.leaveRequests.filter((leave) => leave.status === "Pending");
+  const pendingExpenseClaims = data.expenses.filter((expense) => expense.status === "Pending");
+  const todayKey = portalDateFormatter.format(now);
+  const hasTodayAttendance = data.attendance.some((entry) => entry.employeeId === currentUserId && portalDateFormatter.format(validDate(entry.workDate) || now) === todayKey);
+  const notificationFeed = [
+    ...data.notifications.map((item) => ({
+      id: `notification-${item.id}`,
+      title: item.title,
+      body: item.body,
+      time: item.createdAt,
+      unread: !item.readAt,
+      actionLabel: !item.readAt ? "Mark read" : "",
+      action: () => runAction(() => markNotificationRead({ id: item.id.toString() })),
+    })),
+    ...data.announcements.slice(0, 5).map((item) => ({
+      id: `announcement-${item.id}`,
+      title: "New announcement",
+      body: item.title,
+      time: item.createdAt,
+      unread: false,
+      actionLabel: "",
+      action: undefined,
+    })),
+    ...upcomingMeetings.slice(0, 4).map((item) => ({
+      id: `meeting-${item.id}`,
+      title: "Meeting assigned",
+      body: item.title,
+      time: item.startsAt,
+      unread: false,
+      actionLabel: "Open",
+      action: () => openPortalTab("meetings"),
+    })),
+    ...data.documents.filter((item) => documentApproved(item.notes)).slice(0, 4).map((item) => ({
+      id: `document-${item.id}`,
+      title: "Document approved",
+      body: item.title,
+      time: item.updatedAt,
+      unread: false,
+      actionLabel: "Open",
+      action: () => openPortalTab("documents"),
+    })),
+    ...salesAssignedSheets.slice(0, 4).map((item) => ({
+      id: `sheet-${item.id}`,
+      title: "CRM sheet assigned",
+      body: item.title,
+      time: item.updatedAt,
+      unread: false,
+      actionLabel: "Open CRM",
+      action: () => openPortalTab("crm"),
+    })),
+    ...dueSoonTasks.slice(0, 4).map((item) => ({
+      id: `task-${item.id}`,
+      title: "Task due soon",
+      body: item.title,
+      time: item.dueAt || item.updatedAt,
+      unread: false,
+      actionLabel: "Open tasks",
+      action: () => openPortalTab("ops"),
+    })),
+    ...(!isWorking && !hasTodayAttendance ? [{
+      id: "attendance-issue",
+      title: "Attendance issue",
+      body: "No check-in found for today.",
+      time: now,
+      unread: false,
+      actionLabel: "Open Work Ops",
+      action: () => openPortalTab("ops"),
+    }] : []),
+  ].sort((a, b) => (validDate(b.time)?.getTime() || 0) - (validDate(a.time)?.getTime() || 0));
+  const unreadBellCount = notificationFeed.filter((item) => item.unread).length;
 
   const downloadCsv = (fileName: string, rows: Record<string, string | number | null | undefined>[]) => {
     if (!rows.length) {
@@ -715,6 +796,25 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     });
   };
 
+  const handleCrmRowStatusChange = (rowId: number, status: string) => {
+    setData(prev => ({
+      ...prev,
+      crmSheets: prev.crmSheets.map((sheet) => ({
+        ...sheet,
+        rows: sheet.rows.map((row) => row.id === rowId ? {
+          ...row,
+          status,
+          reason: status,
+          doneAt: status === "Done" ? new Date() : null,
+          updatedBy: currentUserId,
+          updatedByName: data.session.name,
+          updatedAt: new Date(),
+        } : row),
+      })),
+    }));
+    runAction(() => updateCrmSheetRowStatus({ rowId: rowId.toString(), status, reason: status }));
+  };
+
   const importEmployees = async (file?: File) => {
     if (!file) return;
     setError("");
@@ -895,29 +995,12 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               </button>
               <button type="button" className={styles.refreshIconButton} onClick={() => setNotificationsOpen(!notificationsOpen)} aria-label="Notifications" style={{ position: "relative" }}>
                 <Bell size={18} />
-                {data.notifications.some((n: PortalNotification) => !n.readAt) && (
+                {unreadBellCount > 0 && (
                   <span style={{ position: "absolute", top: 4, right: 4, width: 8, height: 8, background: "#ef4444", borderRadius: "50%", border: "1px solid var(--bg-card)" }} />
                 )}
               </button>
               {notificationsOpen && (
-                <div 
-                  className={styles.notificationPopover} 
-                  style={{
-                    position: "absolute",
-                    right: 0,
-                    top: "100%",
-                    zIndex: 120,
-                    background: "var(--bg-card)",
-                    border: "1px solid var(--border-color)",
-                    borderRadius: 16,
-                    boxShadow: "var(--shadow-lg)",
-                    width: 320,
-                    maxHeight: 400,
-                    overflowY: "auto",
-                    marginTop: 8,
-                    padding: 16,
-                  }}
-                >
+                <div className={styles.notificationPopover}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, borderBottom: "1px solid var(--border-color)", paddingBottom: 8 }}>
                     <strong style={{ fontSize: "0.95rem" }}>Notifications</strong>
                     <button 
@@ -930,16 +1013,16 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                     </button>
                   </div>
                   <div style={{ display: "grid", gap: 10 }}>
-                    {data.notifications.length === 0 ? (
+                    {notificationFeed.length === 0 ? (
                       <div className={styles.muted} style={{ fontSize: "0.85rem", textAlign: "center", padding: "12px 0" }}>No new notifications</div>
                     ) : (
-                      data.notifications.map((item: PortalNotification) => (
+                      notificationFeed.slice(0, 18).map((item) => (
                         <div 
                           key={item.id} 
                           style={{ 
                             padding: 10, 
                             borderRadius: 8, 
-                            background: item.readAt ? "transparent" : "var(--pill-bg)", 
+                            background: item.unread ? "var(--pill-bg)" : "transparent", 
                             border: "1px solid var(--border-color)",
                             display: "flex",
                             flexDirection: "column",
@@ -947,20 +1030,23 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                           }}
                         >
                           <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
-                            <span style={{ fontWeight: 700, fontSize: "0.85rem", color: item.readAt ? "var(--text-primary)" : "var(--text-brand)" }}>{item.title}</span>
-                            {!item.readAt && (
+                            <span style={{ fontWeight: 700, fontSize: "0.85rem", color: item.unread ? "var(--text-brand)" : "var(--text-primary)" }}>{item.title}</span>
+                            {item.actionLabel && item.action && (
                               <button 
                                 className={styles.ghostButton} 
                                 style={{ padding: "2px 6px", minHeight: 20, fontSize: "0.7rem", flexShrink: 0 }}
                                 type="button" 
-                                onClick={() => runAction(() => markNotificationRead({ id: item.id.toString() }))}
+                                onClick={() => {
+                                  item.action?.();
+                                  if (item.actionLabel !== "Mark read") setNotificationsOpen(false);
+                                }}
                               >
-                                Mark read
+                                {item.actionLabel}
                               </button>
                             )}
                           </div>
                           <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: 1.4 }}>{item.body}</p>
-                          <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{formatPortalTimeAgo(item.createdAt)}</span>
+                          <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{formatPortalTimeAgo(item.time)}</span>
                         </div>
                       ))
                     )}
@@ -972,7 +1058,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               <span className={`${styles.workDot} ${isWorking ? styles.workDotOn : ""}`} />
               <div>
                 <strong>{isWorking ? "Working now" : "Off work"}</strong>
-                <span>{currentEmployee?.workStartTime || "09:00"} â€“ {currentEmployee?.workEndTime || "18:00"} {clockSaving ? "saving..." : ""}</span>
+                <span>{currentEmployee?.workStartTime || "09:00"} to {currentEmployee?.workEndTime || "18:00"} {clockSaving ? "saving..." : ""}</span>
               </div>
             </div>
             <button className={`${styles.workSwitch} ${isWorking ? styles.workSwitchOn : ""}`} type="button" onClick={isWorking ? handleClockOut : handleClockIn} aria-pressed={isWorking} disabled={clockSaving}>
@@ -1035,19 +1121,19 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               <p className={styles.muted}>{currentEmployee?.workStartTime || "09:00"} to {currentEmployee?.workEndTime || "18:00"}</p>
             </div>
             <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}>
-              <h2 className={styles.cardTitle}>My Tasks</h2>
-              <span className={styles.metricValue}>{myOpenTasks.length}</span>
-              <p className={styles.muted}>{myOpenTasks.filter((task) => task.status === "Blocked").length} blocked, {myOpenTasks.filter((task) => task.dueAt).length} with due dates.</p>
+              <h2 className={styles.cardTitle}>{normalizedRole.includes("sales") ? "Assigned Sheets" : "My Tasks"}</h2>
+              <span className={styles.metricValue}>{normalizedRole.includes("sales") ? salesAssignedSheets.length : myOpenTasks.length}</span>
+              <p className={styles.muted}>{normalizedRole.includes("sales") ? "CRM sheets visible to you." : `${myOpenTasks.filter((task) => task.status === "Blocked").length} blocked, ${myOpenTasks.filter((task) => task.dueAt).length} with due dates.`}</p>
             </div>
             <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}>
-              <h2 className={styles.cardTitle}>{normalizedRole.includes("sales") ? "CRM Follow-ups" : normalizedRole.includes("content") ? "Content Queue" : "Assigned Work"}</h2>
-              <span className={styles.metricValue}>{normalizedRole.includes("sales") ? roleActionableCrmRows.length : myOpenTasks.length}</span>
-              <p className={styles.muted}>{normalizedRole.includes("sales") ? "Open and callback rows visible to you." : "Visible tasks for your role."}</p>
+              <h2 className={styles.cardTitle}>{normalizedRole.includes("sales") ? "Due Today" : normalizedRole.includes("content") ? "Content Queue" : "Assigned Work"}</h2>
+              <span className={styles.metricValue}>{normalizedRole.includes("sales") ? salesFollowUpsDueToday.length : myOpenTasks.length}</span>
+              <p className={styles.muted}>{normalizedRole.includes("sales") ? "Callbacks or rows marked for today." : "Visible tasks for your role."}</p>
             </div>
             <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}>
-              <h2 className={styles.cardTitle}>My Hours</h2>
-              <span className={styles.metricValue}>{formatWorkHours(selectedEmployeeWorkHours)}</span>
-              <p className={styles.muted}>{selectedEmployeeSessions} work sessions recorded.</p>
+              <h2 className={styles.cardTitle}>{normalizedRole.includes("sales") ? "Callbacks / Done" : "My Hours"}</h2>
+              <span className={styles.metricValue}>{normalizedRole.includes("sales") ? `${salesCallbackRows.length}/${salesDoneRows.length}` : formatWorkHours(selectedEmployeeWorkHours)}</span>
+              <p className={styles.muted}>{normalizedRole.includes("sales") ? "Callback queue and completed rows." : `${selectedEmployeeSessions} work sessions recorded.`}</p>
             </div>
 
             <div className={`${styles.card} ${styles.span8}`}>
@@ -1432,7 +1518,145 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
             setError={setError}
             submit={submit}
             handleCellChange={handleCellChange}
+            handleRowStatusChange={handleCrmRowStatusChange}
           />
+        )}
+
+        {tab === "approvals" && (
+          <section className={styles.grid}>
+            <div className={`${styles.dashboardHero} ${styles.span12}`}>
+              <div>
+                <span className={styles.eyebrow}>Leadership Queue</span>
+                <h2 className={styles.heroTitle} style={{ margin: "4px 0" }}>One place to approve operational requests.</h2>
+                <p className={styles.muted} style={{ margin: 0 }}>Documents, CRM source access, applicants, leave, and expenses are grouped here for directors/admins.</p>
+              </div>
+              <div className={styles.heroActions}>
+                <button className={styles.button} type="button" onClick={() => refresh(sortResources, "approvals")}>Refresh Queue</button>
+              </div>
+            </div>
+
+            {[
+              ["Documents", pendingDocuments.length, "Pending director/signatory approval."],
+              ["CRM Sheets", pendingCrmSheets.length, "Waiting for source approval."],
+              ["Applicants", pendingApplicants.length, "Awaiting accept/reject decision."],
+              ["Leave", pendingLeaveRequests.length, "Pending leave approvals."],
+              ["Expenses", pendingExpenseClaims.length, "Pending claim approvals."],
+            ].map(([title, count, hint]) => (
+              <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`} key={String(title)}>
+                <h2 className={styles.cardTitle}>{title}</h2>
+                <span className={styles.metricValue}>{count}</span>
+                <p className={styles.muted}>{hint}</p>
+              </div>
+            ))}
+
+            <div className={`${styles.card} ${styles.span6}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>Document Approvals</h2>
+                  <p className={styles.muted}>Employees see approved documents only after signature approval.</p>
+                </div>
+                <span className={styles.pill}>{pendingDocuments.length} pending</span>
+              </div>
+              <div className={styles.list}>
+                {pendingDocuments.length === 0 ? <div className={styles.emptyState}>No documents waiting for approval.</div> : pendingDocuments.map((document) => (
+                  <div className={styles.row} key={`approval-document-${document.id}`}>
+                    <div className={styles.rowHeader}><strong>{document.title}</strong><span className={styles.pill}>{document.documentType}</span></div>
+                    <p className={styles.muted}>{document.employeeName || "General document"} - {cleanDocumentNotes(document.notes) || "Pending signatory action."}</p>
+                    <div className={styles.toolbar}>
+                      <a className={styles.ghostButton} href={document.url} target="_blank" rel="noopener noreferrer">Open</a>
+                      {data.capabilities.canSignDocuments && <button className={styles.button} type="button" onClick={() => runAction(() => approveEmployeeDocument({ id: document.id.toString() }))}>Approve & Sign</button>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className={`${styles.card} ${styles.span6}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>CRM Sheet Access</h2>
+                  <p className={styles.muted}>Approve source sheets before sales/content teams can work them.</p>
+                </div>
+                <span className={styles.pill}>{pendingCrmSheets.length} pending</span>
+              </div>
+              <div className={styles.list}>
+                {pendingCrmSheets.length === 0 ? <div className={styles.emptyState}>No CRM sheets waiting for approval.</div> : pendingCrmSheets.map((sheet) => (
+                  <div className={styles.row} key={`approval-sheet-${sheet.id}`}>
+                    <div className={styles.rowHeader}><strong>{sheet.title}</strong><span className={styles.pill}>{sheet.rows.length} rows</span></div>
+                    <p className={styles.muted}>{sheet.sourceName || "Imported source"} - requested by {sheet.requestedByName || "Unknown"}</p>
+                    <div className={styles.toolbar}>
+                      <button className={styles.button} type="button" onClick={() => runAction(() => approveCrmSheet({ id: sheet.id.toString(), status: "Approved" }))}>Approve</button>
+                      <button className={styles.ghostButton} type="button" onClick={() => runAction(() => approveCrmSheet({ id: sheet.id.toString(), status: "Rejected" }))}>Reject</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className={`${styles.card} ${styles.span4}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>Applicant Decisions</h2>
+                  <p className={styles.muted}>Open Applicants for appointment details.</p>
+                </div>
+                <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("applicants")}>Open</button>
+              </div>
+              <div className={styles.list}>
+                {pendingApplicants.length === 0 ? <div className={styles.emptyState}>No applicant decisions pending.</div> : pendingApplicants.slice(0, 6).map((applicant) => (
+                  <div className={styles.row} key={`approval-applicant-${applicant.id}`}>
+                    <div className={styles.rowHeader}><strong>{applicant.name}</strong><span className={styles.pill}>{applicant.stage}</span></div>
+                    <p className={styles.muted}>{applicant.roleApplied} - {applicant.email}</p>
+                    <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "applicant", id: applicant.id.toString(), status: "Rejected" }))}>Reject</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className={`${styles.card} ${styles.span4}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>Leave Requests</h2>
+                  <p className={styles.muted}>Approve or reject employee leave.</p>
+                </div>
+                <span className={styles.pill}>{pendingLeaveRequests.length} pending</span>
+              </div>
+              <div className={styles.list}>
+                {pendingLeaveRequests.length === 0 ? <div className={styles.emptyState}>No leave waiting.</div> : pendingLeaveRequests.map((leave) => (
+                  <div className={styles.row} key={`approval-leave-${leave.id}`}>
+                    <div className={styles.rowHeader}><strong>{leave.employeeName}</strong><span className={styles.pill}>{leave.leaveType}</span></div>
+                    <p className={styles.muted}>{formatPortalDate(leave.startsAt)} to {formatPortalDate(leave.endsAt)} {leave.reason ? `- ${leave.reason}` : ""}</p>
+                    <div className={styles.toolbar}>
+                      <button className={styles.button} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "leave", id: leave.id.toString(), status: "Approved" }))}>Approve</button>
+                      <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "leave", id: leave.id.toString(), status: "Rejected" }))}>Reject</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className={`${styles.card} ${styles.span4}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>Expenses</h2>
+                  <p className={styles.muted}>Review pending claims.</p>
+                </div>
+                <span className={styles.pill}>{pendingExpenseClaims.length} pending</span>
+              </div>
+              <div className={styles.list}>
+                {pendingExpenseClaims.length === 0 ? <div className={styles.emptyState}>No expenses waiting.</div> : pendingExpenseClaims.map((claim) => (
+                  <div className={styles.row} key={`approval-expense-${claim.id}`}>
+                    <div className={styles.rowHeader}><strong>{claim.employeeName}</strong><span className={styles.pill}>Rs. {formatPortalNumber(claim.amount)}</span></div>
+                    <p className={styles.muted}>{claim.category} - {formatPortalDate(claim.claimDate)}</p>
+                    <div className={styles.toolbar}>
+                      {claim.receiptUrl && <a className={styles.ghostButton} href={claim.receiptUrl} target="_blank" rel="noopener noreferrer">Receipt</a>}
+                      <button className={styles.button} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "expense", id: claim.id.toString(), status: "Approved" }))}>Approve</button>
+                      <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "expense", id: claim.id.toString(), status: "Rejected" }))}>Reject</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
         )}
 
         {tab === "applicants" && (
@@ -1449,7 +1673,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
 
         {tab === "ops" && (
           <section className={styles.grid}>
-            {data.capabilities.canManageOps && (
+            {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && (
               <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveAttendance)}>
                 <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Attendance Entry</h2>
                 <Field label="Employee" name="employeeId" options={employeeOptions} required wide />
@@ -1462,7 +1686,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Attendance</button>
               </form>
             )}
-            <div className={`${styles.card} ${data.capabilities.canManageOps ? styles.span8 : styles.span12}`}>
+            <div className={`${styles.card} ${data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps ? styles.span8 : styles.span12}`}>
               <div className={styles.sectionHeader}>
                 <div>
                   <h2 className={styles.cardTitle}>Attendance & Timesheets</h2>
@@ -1477,18 +1701,18 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                     {formatPortalDate(entry.workDate)} - In: {formatPortalDateTime(entry.loginAt)} - Out: {entry.logoutAt ? formatPortalDateTime(entry.logoutAt) : "Still working"} - {entry.totalHours.toFixed(2)} hours
                   </p>
                   {entry.notes && <p>{entry.notes}</p>}
-                  {data.capabilities.canManageOps && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "attendance", id: entry.id.toString() }))}>Delete</button>}
+                  {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "attendance", id: entry.id.toString() }))}>Delete</button>}
                 </div>
               ))}</div>
             </div>
 
             <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveLeaveRequest)}>
               <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Leave Request</h2>
-              {data.capabilities.canManageOps && <Field label="Employee" name="employeeId" options={employeeOptions} wide />}
+              {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && <Field label="Employee" name="employeeId" options={employeeOptions} wide />}
               <Field label="Leave Type" name="leaveType" options={["Casual", "Sick", "Unpaid", "Emergency", "Comp Off"]} />
               <Field label="Starts" name="startsAt" type="date" required />
               <Field label="Ends" name="endsAt" type="date" required />
-              {data.capabilities.canManageOps && <Field label="Status" name="status" options={["Pending", "Approved", "Rejected"]} />}
+              {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && <Field label="Status" name="status" options={["Pending", "Approved", "Rejected"]} />}
               <Field label="Reason" name="reason" textarea wide />
               <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Leave</button>
             </form>
@@ -1505,7 +1729,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   <div className={styles.rowHeader}><strong>{leave.employeeName}</strong><span className={leave.status === "Approved" ? `${styles.pill} ${styles.pillSuccess}` : leave.status === "Rejected" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{leave.status}</span></div>
                   <p className={styles.muted}>{leave.leaveType} - {formatPortalDate(leave.startsAt)} to {formatPortalDate(leave.endsAt)}</p>
                   {leave.reason && <p>{leave.reason}</p>}
-                  {data.capabilities.canManageOps && (
+                  {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && (
                     <div className={styles.toolbar}>
                       <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "leave", id: leave.id.toString(), status: "Approved" }))}>Approve</button>
                       <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "leave", id: leave.id.toString(), status: "Rejected" }))}>Reject</button>
@@ -1516,7 +1740,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               ))}</div>
             </div>
 
-            <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveTask)}>
+            {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveTask)}>
               <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Assign Task</h2>
               <Field label="Title" name="title" required wide />
               <Field label="Assign To" name="assignedTo" options={[{ label: "Role based / unassigned", value: "" }, ...employeeOptions]} wide />
@@ -1527,8 +1751,8 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               <Field label="Proof URL" name="proofUrl" type="url" wide />
               <Field label="Description" name="description" textarea wide />
               <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Task</button>
-            </form>
-            <div className={`${styles.card} ${styles.span8}`}>
+            </form>}
+            <div className={`${styles.card} ${data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps ? styles.span8 : styles.span12}`}>
               <div className={styles.sectionHeader}>
                 <div>
                   <h2 className={styles.cardTitle}>Task Tracker</h2>
@@ -1543,9 +1767,9 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   {task.proofUrl && <a href={task.proofUrl} target="_blank" rel="noopener noreferrer">Open proof</a>}
                   <div className={styles.toolbar}>
                     {["In Progress", "Blocked", "Done"].map((status) => <button className={styles.ghostButton} key={status} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "task", id: task.id.toString(), status }))}>{status}</button>)}
-                    {data.capabilities.canManageOps && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "task", id: task.id.toString() }))}>Delete</button>}
+                    {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "task", id: task.id.toString() }))}>Delete</button>}
                   </div>
-                  {data.capabilities.canManageOps && (
+                  {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && (
                     <details className={styles.editPanel}>
                       <summary>Edit task</summary>
                       <form className={styles.formGrid} onSubmit={submit(saveTask)}>
@@ -1570,16 +1794,44 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
 
         {tab === "expenses" && (
           <section className={styles.grid}>
+            <div className={`${styles.dashboardHero} ${styles.span12}`}>
+              <div>
+                <span className={styles.eyebrow}>{canManageExpenseClaims ? "Expense Desk" : "My Claims"}</span>
+                <h2 className={styles.heroTitle} style={{ margin: "4px 0" }}>{canManageExpenseClaims ? "Review employee claims and submit on behalf when needed." : "Submit your own reimbursement claims."}</h2>
+                <p className={styles.muted} style={{ margin: 0 }}>{canManageExpenseClaims ? "Managers can approve, reject, pay, and create claims for team members." : "Employees can only create and edit their own pending claims."}</p>
+              </div>
+            </div>
+            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}>
+              <h2 className={styles.cardTitle}>Pending</h2>
+              <span className={styles.metricValue}>{data.expenses.filter((claim) => claim.status === "Pending").length}</span>
+              <p className={styles.muted}>Claims awaiting review.</p>
+            </div>
+            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}>
+              <h2 className={styles.cardTitle}>Approved</h2>
+              <span className={styles.metricValue}>{data.expenses.filter((claim) => claim.status === "Approved").length}</span>
+              <p className={styles.muted}>Accepted but not paid.</p>
+            </div>
+            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}>
+              <h2 className={styles.cardTitle}>Paid</h2>
+              <span className={styles.metricValue}>{data.expenses.filter((claim) => claim.status === "Paid").length}</span>
+              <p className={styles.muted}>Completed reimbursements.</p>
+            </div>
+            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}>
+              <h2 className={styles.cardTitle}>Total Value</h2>
+              <span className={styles.metricValue}>Rs. {formatPortalNumber(data.expenses.reduce((sum, claim) => sum + Number(claim.amount || 0), 0))}</span>
+              <p className={styles.muted}>Visible claims.</p>
+            </div>
             <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveExpenseClaim)}>
-              <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Expense Claim</h2>
-              {data.capabilities.canManageOps && <Field label="Employee" name="employeeId" options={employeeOptions} wide />}
+              <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>{canManageExpenseClaims ? "Create / Record Claim" : "New Expense Claim"}</h2>
+              <p className={`${styles.muted} ${styles.fieldWide}`}>{canManageExpenseClaims ? "Select an employee only when recording a claim on behalf of someone else." : `This claim will be submitted as ${data.session.name}.`}</p>
+              {canManageExpenseClaims && <Field label="Employee" name="employeeId" options={employeeOptions} wide />}
               <Field label="Category" name="category" options={["Travel", "Food", "Software", "Office", "General"]} />
               <Field label="Amount" name="amount" type="number" required />
               <Field label="Claim Date" name="claimDate" type="date" required />
               <Field label="Receipt URL" name="receiptUrl" type="url" wide />
-              {data.capabilities.canManageOps && <Field label="Status" name="status" options={["Pending", "Approved", "Rejected", "Paid"]} />}
+              {canManageExpenseClaims && <Field label="Status" name="status" options={["Pending", "Approved", "Rejected", "Paid"]} />}
               <Field label="Notes" name="notes" textarea wide />
-              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Expense</button>
+              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">{canManageExpenseClaims ? "Save Claim" : "Submit Claim"}</button>
             </form>
             <div className={`${styles.card} ${styles.span8}`}>
               <div className={styles.sectionHeader}>
@@ -1594,18 +1846,18 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   <div className={styles.rowHeader}><strong>{claim.employeeName}</strong><span className={styles.pill}>{claim.status}</span></div>
                   <p className={styles.muted}>{claim.category} - Rs. {formatPortalNumber(claim.amount)} - {formatPortalDate(claim.claimDate)}</p>
                   {claim.receiptUrl && <a href={claim.receiptUrl} target="_blank" rel="noopener noreferrer">Open receipt</a>}
-                  {data.capabilities.canManageOps && <div className={styles.toolbar}>{["Approved", "Rejected", "Paid"].map((status) => <button className={styles.ghostButton} key={status} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "expense", id: claim.id.toString(), status }))}>{status}</button>)}<button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "expense", id: claim.id.toString() }))}>Delete</button></div>}
-                  {data.capabilities.canManageExpenses && (
+                  {canManageExpenseClaims && <div className={styles.toolbar}>{["Approved", "Rejected", "Paid"].map((status) => <button className={styles.ghostButton} key={status} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "expense", id: claim.id.toString(), status }))}>{status}</button>)}<button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "expense", id: claim.id.toString() }))}>Delete</button></div>}
+                  {(canManageExpenseClaims || claim.status === "Pending") && (
                     <details className={styles.editPanel}>
                       <summary>Edit expense</summary>
                       <form className={styles.formGrid} onSubmit={submit(saveExpenseClaim)}>
                         <input type="hidden" name="id" value={claim.id} />
-                        <Field label="Employee" name="employeeId" options={employeeOptions} defaultValue={claim.employeeId.toString()} wide />
+                        {canManageExpenseClaims && <Field label="Employee" name="employeeId" options={employeeOptions} defaultValue={claim.employeeId.toString()} wide />}
                         <Field label="Category" name="category" options={["Travel", "Food", "Software", "Office", "General"]} defaultValue={claim.category} />
                         <Field label="Amount" name="amount" type="number" defaultValue={claim.amount.toString()} required />
                         <Field label="Claim Date" name="claimDate" type="date" defaultValue={inputDate(claim.claimDate)} required />
                         <Field label="Receipt URL" name="receiptUrl" type="url" defaultValue={claim.receiptUrl || ""} wide />
-                        <Field label="Status" name="status" options={["Pending", "Approved", "Rejected", "Paid"]} defaultValue={claim.status} />
+                        {canManageExpenseClaims && <Field label="Status" name="status" options={["Pending", "Approved", "Rejected", "Paid"]} defaultValue={claim.status} />}
                         <Field label="Notes" name="notes" textarea defaultValue={claim.notes || ""} wide />
                         <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Expense</button>
                       </form>
@@ -2190,7 +2442,6 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
             applicationLink={applicationLink}
             submit={submit}
             formatPortalDateTime={formatPortalDateTime}
-            downloadCsv={downloadCsv}
             importEmployees={importEmployees}
             openPortalTab={openPortalTab}
             setUserManagementOpen={setUserManagementOpen}

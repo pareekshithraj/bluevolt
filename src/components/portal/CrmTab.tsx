@@ -6,7 +6,6 @@ import { Handshake } from "lucide-react";
 import {
   approveCrmSheet,
   deleteEmployeeEntity,
-  updateCrmSheetRowStatus,
   getEmployeePortalData,
   saveCrmSheetRequest,
 } from "@/app/actions/employee-portal";
@@ -34,6 +33,7 @@ interface CrmTabProps {
   setError: (err: string) => void;
   submit: <T extends Record<string, string>>(handler: (payload: T) => Promise<{ success: boolean; error?: string }>, cb?: () => void) => (e: React.FormEvent<HTMLFormElement>) => void;
   handleCellChange: (rowId: number, colName: string, newValue: string) => void;
+  handleRowStatusChange: (rowId: number, status: string) => void;
 }
 
 export default function CrmTab({
@@ -48,6 +48,7 @@ export default function CrmTab({
   setError,
   submit,
   handleCellChange,
+  handleRowStatusChange,
 }: CrmTabProps) {
   const [crmSheetPaste, setCrmSheetPaste] = useState("");
   const [crmSheetFileName, setCrmSheetFileName] = useState("");
@@ -82,7 +83,7 @@ export default function CrmTab({
   };
 
   const handleUpdateCrmRowStatus = (rowId: number, status: string) => {
-    runAction(() => updateCrmSheetRowStatus({ rowId: rowId.toString(), status, reason: status }));
+    handleRowStatusChange(rowId, status);
   };
 
 
@@ -152,8 +153,8 @@ export default function CrmTab({
   };
 
   return (
-    <section className={styles.grid}>
-      <div className={`${styles.card} ${styles.span12} ${styles.crmCommandBar}`}>
+    <section className={`${styles.grid} ${activeCrmSheet ? styles.crmFullScreenGrid : ""}`}>
+      {!activeCrmSheet && <div className={`${styles.card} ${styles.span12} ${styles.crmCommandBar}`}>
         <div>
           <h2 className={styles.cardTitle}><Handshake size={20} style={{ marginRight: 8, verticalAlign: "middle" }} /> CRM Sheets</h2>
           <p className={styles.muted}>{canEditCrmSheet ? "Open a source list, work it like a sheet, and mark each row by call outcome." : "Open approved source lists in read-only mode."}</p>
@@ -166,7 +167,7 @@ export default function CrmTab({
           )}
           {activeCrmSheet && <button className={styles.ghostButton} type="button" onClick={() => setActiveCrmSheetId(null)}>Back to list</button>}
         </div>
-      </div>
+      </div>}
 
       {!activeCrmSheet && canEditCrmSheet && crmPanel === "source" && (
         <form className={`${styles.card} ${styles.span12} ${styles.formGrid}`} onSubmit={submit(saveCrmSheetRequest, () => setCrmPanel("none"))}>
@@ -242,7 +243,7 @@ export default function CrmTab({
         const openRows = activeCrmSheet.rows.filter((row) => row.status === "Open").length;
         const sheetRows = activeCrmSheet.rows;
         const selectedCrmRow = sheetRows.find((row) => row.id === selectedCrmRowId) || sheetRows[0] || null;
-        const canMarkRows = canEditCrmSheet && data.capabilities.canUpdateCrmSheetRows && !activeCrmSheet.locked && Boolean(selectedCrmRow);
+        const canMarkRows = data.capabilities.canUseCrm && activeCrmSheet.status === "Approved" && !activeCrmSheet.locked && Boolean(selectedCrmRow);
         const selectedReference = selectedCrmCell ? cellReference(selectedCrmCell.rowIndex, selectedCrmCell.columnIndex) : "A1";
         const selectedValue = selectedCrmCell ? selectedCrmCell.value : "";
         const blankRowCount = Math.max(80 - sheetRows.length, 30);
@@ -315,7 +316,7 @@ export default function CrmTab({
                 <strong>{canEditCrmSheet ? "Mark selected row" : "Selected row"}</strong>
                 <span>{selectedCrmRow ? `Row ${sheetRows.findIndex((row) => row.id === selectedCrmRow.id) + 2}: ${selectedCrmRow.status}` : "Select a row in the sheet"}</span>
               </div>
-              {canEditCrmSheet && (
+              {canMarkRows && (
                 <div className={styles.sheetMarkButtons}>
                   {[
                     { status: "Open", label: "Open" },

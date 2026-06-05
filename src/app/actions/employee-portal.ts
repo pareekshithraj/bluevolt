@@ -720,6 +720,13 @@ function isWithinWorkHours(startTime: string, endTime: string, now = new Date())
   return currentMinutes >= startMinutes || currentMinutes <= endMinutes;
 }
 
+function scheduledWorkHours(startTime: string, endTime: string): number {
+  const startMinutes = minutesFromTime(startTime || "09:00");
+  let endMinutes = minutesFromTime(endTime || "18:00");
+  if (endMinutes <= startMinutes) endMinutes += 24 * 60;
+  return Math.max(0, (endMinutes - startMinutes) / 60);
+}
+
 function employeeDurationLabel(start?: Date | null, end?: Date | null): string {
   if (!start && !end) return "Not set";
   const format = (date: Date) => date.toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
@@ -960,13 +967,13 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
   });
 
   const [users, crmRecords, crmSheets, applicants, meetings, resources, attendance, leaveRequests, tasks, payrollInputs, reviews, documents, announcements, comments, departments, notifications, expenses, auditEvents] = await Promise.all([
-    canManage && ["dashboard", "admin", "ops", "reports", "crm"].includes(activeTab)
+    canManage && ["dashboard", "admin", "ops", "reports", "crm", "approvals"].includes(activeTab)
       ? prisma.employeeUser.findMany({ orderBy: { createdAt: "desc" } })
       : prisma.employeeUser.findMany({ where: { id: user.id } }),
     canUseCrm && ["dashboard", "crm", "reports"].includes(activeTab)
       ? prisma.employeeCrmRecord.findMany({ orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }] })
       : Promise.resolve([]),
-    activeTab === "crm" && canUseCrm
+    ["dashboard", "crm", "approvals"].includes(activeTab) && canUseCrm
       ? prisma.employeeCrmSheet.findMany({
           where: canManage
             ? {}
@@ -984,13 +991,13 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
           take: 30,
         })
       : Promise.resolve([]),
-    capabilities.canManageApplicants && ["admin", "applicants", "reports"].includes(activeTab)
+    capabilities.canManageApplicants && ["admin", "applicants", "reports", "approvals"].includes(activeTab)
       ? prisma.employeeApplicant.findMany({ orderBy: { updatedAt: "desc" } })
       : Promise.resolve([]),
-    canViewMeetings && ["dashboard", "meetings", "reports"].includes(activeTab)
+    canViewMeetings && ["dashboard", "meetings", "reports", "approvals"].includes(activeTab)
       ? prisma.employeeMeeting.findMany({ orderBy: { startsAt: "asc" } })
       : Promise.resolve([]),
-    canViewResources && ["dashboard", "resources", "reports"].includes(activeTab)
+    canViewResources && ["dashboard", "resources", "reports", "approvals"].includes(activeTab)
       ? prisma.employeeResource.findMany({
           orderBy:
             sortResources === "title"
@@ -1000,17 +1007,17 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
               : { createdAt: "desc" },
         })
       : Promise.resolve([]),
-    ["dashboard", "ops", "reports"].includes(activeTab)
+    ["dashboard", "ops", "reports", "approvals"].includes(activeTab)
       ? (canManage
         ? prisma.employeeAttendance.findMany({ orderBy: [{ workDate: "desc" }, { createdAt: "desc" }], take: 500 })
         : prisma.employeeAttendance.findMany({ where: { employeeId: user.id }, orderBy: [{ workDate: "desc" }, { createdAt: "desc" }], take: 120 }))
       : Promise.resolve([]),
-    capabilities.canManageOps && activeTab === "ops"
+    ["ops", "approvals"].includes(activeTab)
       ? (canManage
         ? prisma.employeeLeaveRequest.findMany({ orderBy: [{ updatedAt: "desc" }, { startsAt: "desc" }], take: 80 })
         : prisma.employeeLeaveRequest.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }, { startsAt: "desc" }], take: 40 }))
       : Promise.resolve([]),
-    capabilities.canManageOps && ["dashboard", "ops"].includes(activeTab)
+    ["dashboard", "ops", "approvals"].includes(activeTab)
       ? prisma.employeeTask.findMany({
           where: session.role === "super_admin" ? {} : {
             OR: [
@@ -1033,19 +1040,19 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
         ? prisma.employeePerformanceReview.findMany({ orderBy: [{ updatedAt: "desc" }], take: 80 })
         : prisma.employeePerformanceReview.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }], take: 24 }))
       : Promise.resolve([]),
-    capabilities.canViewDocuments && ["dashboard", "documents", "reports"].includes(activeTab)
+    capabilities.canViewDocuments && ["dashboard", "documents", "reports", "approvals"].includes(activeTab)
       ? prisma.employeeDocument.findMany({ orderBy: [{ updatedAt: "desc" }], take: 100 })
       : activeTab === "documents"
         ? prisma.employeeDocument.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }], take: 50 })
       : Promise.resolve([]),
-    canViewAnnouncements && ["dashboard", "announcements", "reports"].includes(activeTab)
+    canViewAnnouncements && ["dashboard", "announcements", "reports", "approvals"].includes(activeTab)
       ? prisma.employeeAnnouncement.findMany({ orderBy: [{ createdAt: "desc" }], take: 40 })
       : Promise.resolve([]),
     capabilities.canManageOps && activeTab === "ops"
       ? prisma.employeeComment.findMany({ orderBy: { createdAt: "desc" }, take: 120 })
       : Promise.resolve([]),
     activeTab === "admin" && canManage ? prisma.employeeDepartment.findMany({ orderBy: { name: "asc" } }) : Promise.resolve([]),
-    ["dashboard", "admin"].includes(activeTab) || (activeTab === "access" && canManageAccess)
+    ["dashboard", "admin", "approvals"].includes(activeTab) || (activeTab === "access" && canManageAccess)
       ? prisma.employeeNotification.findMany({
           where: {
             OR: [
@@ -1058,7 +1065,7 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
           take: 50,
         })
       : Promise.resolve([]),
-    capabilities.canManageExpenses && ["expenses", "reports"].includes(activeTab)
+    capabilities.canManageExpenses && ["expenses", "reports", "approvals"].includes(activeTab)
       ? (canManage
         ? prisma.employeeExpenseClaim.findMany({ orderBy: [{ updatedAt: "desc" }], take: 80 })
         : prisma.employeeExpenseClaim.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }], take: 40 }))
@@ -1572,9 +1579,25 @@ export async function updateCrmSheetRowStatus(input: {
   status: string;
   reason?: string;
 }) {
-  const { session } = await requireEmployee();
-  if (session.role !== "super_admin") {
-    return { success: false, error: "Only super admin can mark CRM sheet rows." };
+  const { session, user } = await requireEmployee();
+  const canUseCrm = await employeeSessionCanAccessFeature(session, "crm");
+  if (!canUseCrm) return { success: false, error: "You do not have CRM access." };
+  const row = await prisma.employeeCrmSheetRow.findUnique({
+    where: { id: Number(input.rowId) },
+    include: { sheet: true },
+  });
+  if (!row) return { success: false, error: "CRM row not found." };
+  const sheet = row.sheet;
+  const canAccessSheet = session.role === "super_admin" ||
+    sheet.requestedBy === user.id ||
+    (sheet.status === "Approved" && (
+      sheet.audienceRoles === "all" ||
+      sheet.audienceRoles === session.role ||
+      sheet.ownerRole === session.role ||
+      (sheet.audienceUsers || "").includes(`,${user.id},`)
+    ));
+  if (!canAccessSheet || sheet.status !== "Approved" || sheet.locked) {
+    return { success: false, error: "This CRM sheet is not available for row updates." };
   }
   const status = ["Open", "Done", "Callback", "Not Interested", "Invalid"].includes(input.status) ? input.status : "Open";
   await prisma.employeeCrmSheetRow.update({
@@ -1982,9 +2005,16 @@ export async function clockOutEmployee() {
   }
 
   const totalHours = Math.max(0, (now.getTime() - openSession.loginAt.getTime()) / (1000 * 60 * 60));
+  const expectedHours = scheduledWorkHours(user.workStartTime, user.workEndTime);
+  const status = expectedHours > 0 && totalHours >= expectedHours / 2 ? "Present" : "Half-day";
   await prisma.employeeAttendance.update({
     where: { id: openSession.id },
-    data: { logoutAt: now, totalHours: Number(totalHours.toFixed(2)) },
+    data: {
+      logoutAt: now,
+      totalHours: Number(totalHours.toFixed(2)),
+      status,
+      notes: `Auto-marked ${status}. Worked ${totalHours.toFixed(2)} of ${expectedHours.toFixed(2)} scheduled hours.`,
+    },
   });
   await prisma.employeeUser.update({ where: { id: user.id }, data: { lastSeenAt: now } });
   await logEmployeeAudit({ actorId: user.id, actorName: session.name, action: "attendance.clock_out", entityType: "attendance", entityId: openSession.id.toString() });
@@ -2263,8 +2293,19 @@ export async function saveExpenseClaim(input: {
   notes?: string;
 }) {
   const { session, user } = await requireEmployee();
-  const canManage = await employeeSessionCanAccessFeature(session, "expenses");
-  const employeeId = canManage && input.employeeId ? Number(input.employeeId) : user.id;
+  const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
+  const capabilities = capabilitiesForRole(session.role, roleDefinitions);
+  const canManageClaims = capabilities.canUseSuperiorDashboard && capabilities.canManageExpenses;
+  const employeeId = canManageClaims && input.employeeId ? Number(input.employeeId) : user.id;
+  if (input.id && !canManageClaims) {
+    const existing = await prisma.employeeExpenseClaim.findUnique({ where: { id: Number(input.id) } });
+    if (!existing || existing.employeeId !== user.id) {
+      return { success: false, error: "You can only edit your own expense claims." };
+    }
+    if (existing.status !== "Pending") {
+      return { success: false, error: "Approved or rejected claims cannot be edited by employees." };
+    }
+  }
   const data = {
     employeeId,
     employeeName: await employeeNameForId(employeeId),
@@ -2272,8 +2313,8 @@ export async function saveExpenseClaim(input: {
     amount: numberValue(input.amount),
     claimDate: optionalDate(input.claimDate) || new Date(),
     receiptUrl: input.receiptUrl,
-    status: canManage ? input.status || "Pending" : "Pending",
-    reviewerId: canManage ? Number(session.userId) : null,
+    status: canManageClaims ? input.status || "Pending" : "Pending",
+    reviewerId: canManageClaims && input.status && input.status !== "Pending" ? Number(session.userId) : null,
     notes: input.notes,
   };
   if (input.id) await prisma.employeeExpenseClaim.update({ where: { id: Number(input.id) }, data });

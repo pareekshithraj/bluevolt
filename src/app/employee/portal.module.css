@@ -803,6 +803,7 @@
   -webkit-text-fill-color: transparent;
 }
 
+.span2 { grid-column: span 2; }
 .span4 { grid-column: span 4; }
 .span5 { grid-column: span 5; }
 .span3 { grid-column: span 3; }
@@ -2315,9 +2316,16 @@
 .sheetGridShell {
   flex: 1;
   min-height: 0;
-  max-height: calc(100vh - 280px);
+  height: calc(100dvh - 280px);
+  max-height: calc(100dvh - 280px);
   overflow: auto;
   overscroll-behavior: contain;
+}
+
+.virtualSpacerCell {
+  padding: 0 !important;
+  border-right: 0 !important;
+  background: var(--sheet-cell-bg) !important;
 }
 
 .googleSheetGrid {
@@ -2522,6 +2530,7 @@
   }
 
   .span3,
+  .span2,
   .span4,
   .span5,
   .span6,
@@ -2593,7 +2602,8 @@
   }
 
   .sheetGridShell {
-    max-height: calc(100vh - 320px);
+    height: calc(100dvh - 360px);
+    max-height: calc(100dvh - 360px);
   }
 }
 
@@ -2621,6 +2631,34 @@
   .sheetToolbarButton,
   .sheetMarkButton {
     width: 100%;
+  }
+
+  .notificationPopover {
+    position: fixed;
+    top: 86px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: min(70dvh, 520px);
+  }
+
+  .fullSheetApp {
+    min-height: calc(100dvh - 112px);
+    margin: -8px -10px 0;
+    border-radius: 16px;
+  }
+
+  .sheetGridShell {
+    height: calc(100dvh - 380px);
+  }
+
+  .googleSheetGrid th,
+  .googleSheetGrid td {
+    min-width: 124px;
+  }
+
+  .metricValue {
+    font-size: 2rem;
   }
 }
 

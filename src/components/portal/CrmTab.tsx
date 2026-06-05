@@ -53,6 +53,7 @@ export default function CrmTab({
   const [crmSheetPaste, setCrmSheetPaste] = useState("");
   const [crmSheetFileName, setCrmSheetFileName] = useState("");
   const [crmPanel, setCrmPanel] = useState<"none" | "source">("none");
+  const [sheetScrollTop, setSheetScrollTop] = useState(0);
 
   const canEditCrmSheet = data.session.role === "super_admin";
   const activeRoleOptions = (data.roleDefinitions || [])
@@ -242,6 +243,14 @@ export default function CrmTab({
         const callbackRows = activeCrmSheet.rows.filter((row) => row.status === "Callback").length;
         const openRows = activeCrmSheet.rows.filter((row) => row.status === "Open").length;
         const sheetRows = activeCrmSheet.rows;
+        const rowHeight = 42;
+        const virtualViewportRows = 34;
+        const overscanRows = 14;
+        const visibleStart = Math.max(0, Math.floor(sheetScrollTop / rowHeight) - overscanRows);
+        const visibleEnd = Math.min(sheetRows.length, visibleStart + virtualViewportRows + overscanRows * 2);
+        const visibleRows = sheetRows.slice(visibleStart, visibleEnd);
+        const topSpacerHeight = visibleStart * rowHeight;
+        const bottomSpacerHeight = Math.max(0, (sheetRows.length - visibleEnd) * rowHeight);
         const selectedCrmRow = sheetRows.find((row) => row.id === selectedCrmRowId) || sheetRows[0] || null;
         const canMarkRows = data.capabilities.canUseCrm && activeCrmSheet.status === "Approved" && !activeCrmSheet.locked && Boolean(selectedCrmRow);
         const selectedReference = selectedCrmCell ? cellReference(selectedCrmCell.rowIndex, selectedCrmCell.columnIndex) : "A1";
@@ -350,7 +359,7 @@ export default function CrmTab({
               <input className={styles.sheetFormulaInput} readOnly value={selectedValue} placeholder="Select a cell to preview its value" />
             </div>
 
-            <div className={styles.sheetGridShell}>
+            <div className={styles.sheetGridShell} onScroll={(event) => setSheetScrollTop(event.currentTarget.scrollTop)}>
               <table className={styles.googleSheetGrid}>
                 <thead>
                   <tr>
@@ -378,7 +387,14 @@ export default function CrmTab({
                       </tr>
                     ))
                   ) : (
-                    sheetRows.map((row, rowIndex: number) => {
+                    <>
+                    {topSpacerHeight > 0 && (
+                      <tr aria-hidden="true">
+                        <td className={styles.virtualSpacerCell} colSpan={columns.length + 2} style={{ height: topSpacerHeight }} />
+                      </tr>
+                    )}
+                    {visibleRows.map((row, visibleRowIndex: number) => {
+                      const rowIndex = visibleStart + visibleRowIndex;
                       const cells = rowData(row);
                       return (
                         <tr className={`${rowTint(row.status)} ${selectedCrmRow?.id === row.id ? styles.sheetSelectedRow : ""}`} key={row.id} onClick={() => setSelectedCrmRowId(row.id)}>
@@ -435,7 +451,13 @@ export default function CrmTab({
                           })}
                         </tr>
                       );
-                    })
+                    })}
+                    {bottomSpacerHeight > 0 && (
+                      <tr aria-hidden="true">
+                        <td className={styles.virtualSpacerCell} colSpan={columns.length + 2} style={{ height: bottomSpacerHeight }} />
+                      </tr>
+                    )}
+                    </>
                   )}
                   {Array.from({ length: blankRowCount }).map((_, blankIndex) => (
                     <tr key={`blank-after-${blankIndex}`}>

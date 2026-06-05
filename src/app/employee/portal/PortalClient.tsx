@@ -13,6 +13,7 @@ import {
   deleteEmployeeEntity,
   getEmployeePortalData,
   logoutEmployee,
+  markAllNotificationsRead,
   markNotificationRead,
   saveAnnouncement,
   saveAttendance,
@@ -57,6 +58,7 @@ type EmployeeListItem = PortalData["users"][number] & {
 
 const tabs = [
   { id: "dashboard", label: "Dashboard", icon: Users },
+  { id: "today", label: "Today", icon: Target },
   { id: "approvals", label: "Approvals", icon: ClipboardList },
   { id: "crm", label: "CRM", icon: Handshake },
   { id: "applicants", label: "Applicants", icon: Users },
@@ -220,10 +222,32 @@ function documentPending(notes?: string | null) {
   return (notes || "").includes("Approval status: Pending");
 }
 
+function documentMeta(notes: string | null | undefined, label: string) {
+  const match = (notes || "").match(new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:\\s*(.*)$`, "im"));
+  return match?.[1]?.trim() || "";
+}
+
+function documentWorkflowStatus(notes?: string | null) {
+  const workflow = documentMeta(notes, "Workflow status");
+  if (workflow) return workflow;
+  if (documentApproved(notes)) return "Released to Employee";
+  if (documentPending(notes)) return "Pending Director Approval";
+  return "Draft";
+}
+
 function cleanDocumentNotes(notes?: string | null) {
   return (notes || "")
     .split(/\r?\n/)
-    .filter((line) => !line.startsWith("Approval status:") && !line.startsWith("Approved by:") && !line.startsWith("Signature:"))
+    .filter((line) => (
+      !line.startsWith("Approval status:") &&
+      !line.startsWith("Workflow status:") &&
+      !line.startsWith("Approved by:") &&
+      !line.startsWith("Signed at:") &&
+      !line.startsWith("Released at:") &&
+      !line.startsWith("Sent status:") &&
+      !line.startsWith("Downloaded status:") &&
+      !line.startsWith("Signature:")
+    ))
     .join("\n")
     .trim();
 }
@@ -255,24 +279,24 @@ function mergePortalData(previous: PortalData, incoming: PortalData, activeTab: 
   return {
     ...previous,
     ...incoming,
-    users: ["dashboard", "admin", "ops", "reports", "crm", "approvals"].includes(activeTab) ? incoming.users : previous.users,
-    crmRecords: ["dashboard", "crm", "reports"].includes(activeTab) ? incoming.crmRecords : previous.crmRecords,
-    crmSheets: ["dashboard", "crm", "approvals"].includes(activeTab) ? incoming.crmSheets : previous.crmSheets,
+    users: ["dashboard", "today", "admin", "ops", "reports", "crm", "approvals"].includes(activeTab) ? incoming.users : previous.users,
+    crmRecords: ["dashboard", "today", "crm", "reports"].includes(activeTab) ? incoming.crmRecords : previous.crmRecords,
+    crmSheets: ["dashboard", "today", "crm", "approvals"].includes(activeTab) ? incoming.crmSheets : previous.crmSheets,
     applicants: ["applicants", "admin", "reports", "approvals"].includes(activeTab) ? incoming.applicants : previous.applicants,
-    meetings: ["dashboard", "meetings", "reports"].includes(activeTab) ? incoming.meetings : previous.meetings,
-    resources: ["dashboard", "resources", "reports", "approvals"].includes(activeTab) ? incoming.resources : previous.resources,
-    attendance: ["dashboard", "ops", "reports", "approvals"].includes(activeTab) ? incoming.attendance : previous.attendance,
-    leaveRequests: ["ops", "approvals"].includes(activeTab) ? incoming.leaveRequests : previous.leaveRequests,
-    tasks: ["dashboard", "ops"].includes(activeTab) ? incoming.tasks : previous.tasks,
+    meetings: ["dashboard", "today", "meetings", "reports"].includes(activeTab) ? incoming.meetings : previous.meetings,
+    resources: ["dashboard", "today", "resources", "reports", "approvals"].includes(activeTab) ? incoming.resources : previous.resources,
+    attendance: ["dashboard", "today", "ops", "reports", "approvals"].includes(activeTab) ? incoming.attendance : previous.attendance,
+    leaveRequests: ["today", "ops", "approvals"].includes(activeTab) ? incoming.leaveRequests : previous.leaveRequests,
+    tasks: ["dashboard", "today", "ops"].includes(activeTab) ? incoming.tasks : previous.tasks,
     payrollInputs: ["payroll", "reports"].includes(activeTab) ? incoming.payrollInputs : previous.payrollInputs,
     reviews: ["reviews", "reports"].includes(activeTab) ? incoming.reviews : previous.reviews,
-    documents: ["dashboard", "documents", "reports", "approvals"].includes(activeTab) ? incoming.documents : previous.documents,
-    announcements: ["dashboard", "announcements", "reports", "approvals"].includes(activeTab) ? incoming.announcements : previous.announcements,
+    documents: ["dashboard", "today", "documents", "reports", "approvals"].includes(activeTab) ? incoming.documents : previous.documents,
+    announcements: ["dashboard", "today", "announcements", "reports", "approvals"].includes(activeTab) ? incoming.announcements : previous.announcements,
     comments: activeTab === "ops" ? incoming.comments : previous.comments,
     departments: activeTab === "admin" ? incoming.departments : previous.departments,
     roleDefinitions: ["admin", "access"].includes(activeTab) ? incoming.roleDefinitions : previous.roleDefinitions,
-    notifications: ["dashboard", "admin", "access", "approvals"].includes(activeTab) ? incoming.notifications : previous.notifications,
-    expenses: ["expenses", "reports", "approvals"].includes(activeTab) ? incoming.expenses : previous.expenses,
+    notifications: ["dashboard", "today", "admin", "access", "approvals"].includes(activeTab) ? incoming.notifications : previous.notifications,
+    expenses: ["today", "expenses", "reports", "approvals"].includes(activeTab) ? incoming.expenses : previous.expenses,
     auditEvents: ["admin", "access", "reports"].includes(activeTab) ? incoming.auditEvents : previous.auditEvents,
     chatMessages: ["dashboard", "chat"].includes(activeTab) ? incoming.chatMessages : previous.chatMessages,
   };
@@ -388,6 +412,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
 
   const visibleTabs = useMemo(() => tabs.filter((item) => {
     if (item.id === "dashboard") return true;
+    if (item.id === "today") return true;
     if (item.id === "approvals") return data.capabilities.canUseSuperiorDashboard || data.capabilities.canManage;
     if (item.id === "crm") return data.capabilities.canRequestCrmSource || data.capabilities.canUseCrm;
     if (item.id === "applicants") return data.capabilities.canManageApplicants;
@@ -499,69 +524,94 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const pendingExpenseClaims = data.expenses.filter((expense) => expense.status === "Pending");
   const todayKey = portalDateFormatter.format(now);
   const hasTodayAttendance = data.attendance.some((entry) => entry.employeeId === currentUserId && portalDateFormatter.format(validDate(entry.workDate) || now) === todayKey);
+  const todaysTasks = myOpenTasks.filter((task) => task.dueAt && portalDateFormatter.format(validDate(task.dueAt) || now) === todayKey);
+  const todaysMeetings = data.meetings.filter((meeting) => portalDateFormatter.format(validDate(meeting.startsAt) || now) === todayKey);
+  const todaysCrmCallbacks = data.crmSheets.flatMap((sheet) => sheet.rows).filter((row) => row.status === "Callback");
+  const attendanceIssues = data.attendance.filter((entry) => ["Absent", "Late", "Half-day"].includes(entry.status));
+  const pendingApprovalCount = pendingDocuments.length + pendingCrmSheets.length + pendingApplicants.length + pendingLeaveRequests.length + pendingExpenseClaims.length;
   const notificationFeed = [
-    ...data.notifications.map((item) => ({
+    ...data.notifications.filter((item) => !item.readAt).map((item) => ({
       id: `notification-${item.id}`,
+      category: "Alert",
       title: item.title,
       body: item.body,
       time: item.createdAt,
       unread: !item.readAt,
-      actionLabel: !item.readAt ? "Mark read" : "",
+      actionLabel: "Mark read",
       action: () => runAction(() => markNotificationRead({ id: item.id.toString() })),
+      openAction: () => openPortalTab("today"),
     })),
     ...data.announcements.slice(0, 5).map((item) => ({
       id: `announcement-${item.id}`,
+      category: "Announcement",
       title: "New announcement",
       body: item.title,
       time: item.createdAt,
       unread: false,
-      actionLabel: "",
-      action: undefined,
+      actionLabel: "Open",
+      action: () => openPortalTab("announcements"),
+      openAction: () => openPortalTab("announcements"),
     })),
     ...upcomingMeetings.slice(0, 4).map((item) => ({
       id: `meeting-${item.id}`,
+      category: "Meeting",
       title: "Meeting assigned",
       body: item.title,
       time: item.startsAt,
       unread: false,
       actionLabel: "Open",
       action: () => openPortalTab("meetings"),
+      openAction: () => openPortalTab("meetings"),
     })),
     ...data.documents.filter((item) => documentApproved(item.notes)).slice(0, 4).map((item) => ({
       id: `document-${item.id}`,
+      category: "Document",
       title: "Document approved",
       body: item.title,
       time: item.updatedAt,
       unread: false,
       actionLabel: "Open",
       action: () => openPortalTab("documents"),
+      openAction: () => openPortalTab("documents"),
     })),
     ...salesAssignedSheets.slice(0, 4).map((item) => ({
       id: `sheet-${item.id}`,
+      category: "CRM",
       title: "CRM sheet assigned",
       body: item.title,
       time: item.updatedAt,
       unread: false,
       actionLabel: "Open CRM",
-      action: () => openPortalTab("crm"),
+      action: () => {
+        setActiveCrmSheetId(item.id);
+        openPortalTab("crm");
+      },
+      openAction: () => {
+        setActiveCrmSheetId(item.id);
+        openPortalTab("crm");
+      },
     })),
     ...dueSoonTasks.slice(0, 4).map((item) => ({
       id: `task-${item.id}`,
+      category: "Task",
       title: "Task due soon",
       body: item.title,
       time: item.dueAt || item.updatedAt,
       unread: false,
       actionLabel: "Open tasks",
       action: () => openPortalTab("ops"),
+      openAction: () => openPortalTab("ops"),
     })),
     ...(!isWorking && !hasTodayAttendance ? [{
       id: "attendance-issue",
+      category: "Attendance",
       title: "Attendance issue",
       body: "No check-in found for today.",
       time: now,
       unread: false,
       actionLabel: "Open Work Ops",
       action: () => openPortalTab("ops"),
+      openAction: () => openPortalTab("ops"),
     }] : []),
   ].sort((a, b) => (validDate(b.time)?.getTime() || 0) - (validDate(a.time)?.getTime() || 0));
   const unreadBellCount = notificationFeed.filter((item) => item.unread).length;
@@ -812,7 +862,14 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
         } : row),
       })),
     }));
-    runAction(() => updateCrmSheetRowStatus({ rowId: rowId.toString(), status, reason: status }));
+    startTransition(async () => {
+      try {
+        const result = await updateCrmSheetRowStatus({ rowId: rowId.toString(), status, reason: status });
+        if (!result.success) setError(result.error || "Could not update CRM row.");
+      } catch (statusError) {
+        setError(simplePortalError(statusError, "Could not update CRM row."));
+      }
+    });
   };
 
   const importEmployees = async (file?: File) => {
@@ -995,48 +1052,79 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               </button>
               <button type="button" className={styles.refreshIconButton} onClick={() => setNotificationsOpen(!notificationsOpen)} aria-label="Notifications" style={{ position: "relative" }}>
                 <Bell size={18} />
-                {unreadBellCount > 0 && (
+                {notificationFeed.length > 0 && (
                   <span style={{ position: "absolute", top: 4, right: 4, width: 8, height: 8, background: "#ef4444", borderRadius: "50%", border: "1px solid var(--bg-card)" }} />
                 )}
               </button>
               {notificationsOpen && (
                 <div className={styles.notificationPopover}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, borderBottom: "1px solid var(--border-color)", paddingBottom: 8 }}>
-                    <strong style={{ fontSize: "0.95rem" }}>Notifications</strong>
-                    <button 
-                      className={styles.ghostButton} 
-                      style={{ padding: "4px 8px", minHeight: 24, fontSize: "0.75rem" }}
-                      type="button" 
-                      onClick={() => setNotificationsOpen(false)}
-                    >
-                      Close
-                    </button>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 12, borderBottom: "1px solid var(--border-color)", paddingBottom: 8 }}>
+                    <div>
+                      <strong style={{ fontSize: "0.95rem" }}>Notifications</strong>
+                      <p className={styles.muted} style={{ margin: "3px 0 0", fontSize: "0.72rem" }}>{notificationFeed.length} actionable updates</p>
+                    </div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {unreadBellCount > 0 && (
+                        <button
+                          className={styles.ghostButton}
+                          style={{ padding: "4px 8px", minHeight: 24, fontSize: "0.75rem" }}
+                          type="button"
+                          onClick={() => runAction(() => markAllNotificationsRead())}
+                        >
+                          Mark all read
+                        </button>
+                      )}
+                      <button
+                        className={styles.ghostButton}
+                        style={{ padding: "4px 8px", minHeight: 24, fontSize: "0.75rem" }}
+                        type="button"
+                        onClick={() => setNotificationsOpen(false)}
+                      >
+                        Close
+                      </button>
+                    </div>
                   </div>
                   <div style={{ display: "grid", gap: 10 }}>
                     {notificationFeed.length === 0 ? (
                       <div className={styles.muted} style={{ fontSize: "0.85rem", textAlign: "center", padding: "12px 0" }}>No new notifications</div>
                     ) : (
                       notificationFeed.slice(0, 18).map((item) => (
-                        <div 
+                        <div
                           key={item.id} 
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => {
+                            item.openAction?.();
+                            setNotificationsOpen(false);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              item.openAction?.();
+                              setNotificationsOpen(false);
+                            }
+                          }}
                           style={{ 
+                            textAlign: "left",
                             padding: 10, 
                             borderRadius: 8, 
                             background: item.unread ? "var(--pill-bg)" : "transparent", 
                             border: "1px solid var(--border-color)",
                             display: "flex",
                             flexDirection: "column",
-                            gap: 4
+                            gap: 4,
+                            cursor: "pointer"
                           }}
                         >
                           <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
                             <span style={{ fontWeight: 700, fontSize: "0.85rem", color: item.unread ? "var(--text-brand)" : "var(--text-primary)" }}>{item.title}</span>
+                            <span className={styles.pill} style={{ fontSize: "0.62rem", minHeight: 20 }}>{item.category}</span>
                             {item.actionLabel && item.action && (
                               <button 
                                 className={styles.ghostButton} 
                                 style={{ padding: "2px 6px", minHeight: 20, fontSize: "0.7rem", flexShrink: 0 }}
                                 type="button" 
-                                onClick={() => {
+                                onClick={(event) => {
+                                  event.stopPropagation();
                                   item.action?.();
                                   if (item.actionLabel !== "Mark read") setNotificationsOpen(false);
                                 }}
@@ -1090,6 +1178,140 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               <button className={styles.button} type="button" onClick={() => openPortalTab("profile")}>Change Password</button>
             </div>
           </div>
+        )}
+
+        {tab === "today" && (
+          <section className={styles.grid}>
+            <div className={`${styles.dashboardHero} ${styles.span12}`}>
+              <div>
+                <div className={styles.eyebrow}>Today</div>
+                <h1 className={styles.heroTitle}>Daily command center.</h1>
+                <p className={styles.muted}>Check-in status, tasks, meetings, CRM callbacks, approvals, announcements, and attendance issues in one working view.</p>
+              </div>
+              <div className={styles.heroActions}>
+                <button className={isWorking ? styles.ghostButton : styles.button} type="button" onClick={isWorking ? handleClockOut : handleClockIn} disabled={clockSaving}>
+                  {isWorking ? "Check out" : "Check in"}
+                </button>
+                {data.capabilities.canUseCrm && <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("crm")}>Open CRM</button>}
+                {data.capabilities.canUseSuperiorDashboard && <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("approvals")}>Approvals</button>}
+              </div>
+            </div>
+
+            {[
+              ["Check-in", isWorking ? "Working" : "Off", currentEmployee ? `${currentEmployee.workStartTime} to ${currentEmployee.workEndTime}` : "Work window not set"],
+              ["Tasks due today", todaysTasks.length, `${dueSoonTasks.length} due soon, ${blockedTasks.length} blocked`],
+              ["Meetings today", todaysMeetings.length, "Visible sessions assigned to you"],
+              ["CRM callbacks", todaysCrmCallbacks.length, "Rows waiting for follow-up"],
+              ["Pending approvals", pendingApprovalCount, "Documents, CRM, applicants, leave, expenses"],
+              ["Attendance issues", attendanceIssues.length, "Late, absent, or half-day records"],
+            ].map(([label, value, hint]) => (
+              <div className={`${styles.card} ${styles.span2} ${styles.metricCard}`} key={String(label)}>
+                <h2 className={styles.cardTitle}>{label}</h2>
+                <span className={styles.metricValue}>{value}</span>
+                <p className={styles.muted}>{hint}</p>
+              </div>
+            ))}
+
+            <div className={`${styles.card} ${styles.span6}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>Tasks Due Today</h2>
+                  <p className={styles.muted}>Use consistent statuses: Pending, Done, Blocked, Needs Review.</p>
+                </div>
+                <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("ops")}>Open Work Ops</button>
+              </div>
+              <div className={styles.list}>
+                {todaysTasks.length === 0 ? <div className={styles.emptyState}>No task due today.</div> : todaysTasks.slice(0, 8).map((task) => (
+                  <div className={styles.row} key={`today-task-${task.id}`}>
+                    <div className={styles.rowHeader}><strong>{task.title}</strong><span className={task.status === "Blocked" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{task.status}</span></div>
+                    <p className={styles.muted}>{task.description || "No notes."}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className={`${styles.card} ${styles.span6}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>Meetings Today</h2>
+                  <p className={styles.muted}>Join assigned sessions directly.</p>
+                </div>
+                <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("meetings")}>Open Meetings</button>
+              </div>
+              <div className={styles.list}>
+                {todaysMeetings.length === 0 ? <div className={styles.emptyState}>No meeting today.</div> : todaysMeetings.slice(0, 8).map((meeting) => (
+                  <div className={styles.row} key={`today-meeting-${meeting.id}`}>
+                    <div className={styles.rowHeader}><strong>{meeting.title}</strong><span className={styles.pill}>{formatPortalTime(meeting.startsAt)}</span></div>
+                    <p className={styles.muted}>{meeting.notes || "Scheduled meeting."}</p>
+                    {meeting.meetUrl && <a className={styles.ghostButton} href={meeting.meetUrl} target="_blank" rel="noopener noreferrer">Join</a>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className={`${styles.card} ${styles.span4}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>CRM Callbacks</h2>
+                  <p className={styles.muted}>Rows marked Callback from visible sheets.</p>
+                </div>
+                <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("crm")}>Open CRM</button>
+              </div>
+              <div className={styles.list}>
+                {todaysCrmCallbacks.length === 0 ? <div className={styles.emptyState}>No callback rows.</div> : todaysCrmCallbacks.slice(0, 6).map((row) => {
+                  const cells = row.data && typeof row.data === "object" ? row.data as Record<string, string> : {};
+                  return (
+                    <div className={styles.row} key={`today-callback-${row.id}`}>
+                      <div className={styles.rowHeader}><strong>{cells["School Name"] || cells.Company || `Row ${row.rowNumber}`}</strong><span className={`${styles.pill} ${styles.pillWarn}`}>Callback</span></div>
+                      <p className={styles.muted}>{cells["Phone Number"] || cells.Phone || row.reason || "Call back."}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className={`${styles.card} ${styles.span4}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>Announcements</h2>
+                  <p className={styles.muted}>Latest role-visible notices.</p>
+                </div>
+                <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("announcements")}>Open</button>
+              </div>
+              <div className={styles.list}>
+                {data.announcements.length === 0 ? <div className={styles.emptyState}>No announcements.</div> : data.announcements.slice(0, 5).map((announcement) => (
+                  <div className={styles.row} key={`today-announcement-${announcement.id}`}>
+                    <div className={styles.rowHeader}><strong>{announcement.title}</strong><span className={announcement.priority === "Urgent" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{announcement.priority}</span></div>
+                    <p className={styles.muted}>{announcement.body}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className={`${styles.card} ${styles.span4}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>Approval Queue</h2>
+                  <p className={styles.muted}>For directors, admins, and super admins.</p>
+                </div>
+                {data.capabilities.canUseSuperiorDashboard && <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("approvals")}>Open</button>}
+              </div>
+              <div className={styles.quickGrid}>
+                {[
+                  ["Documents", pendingDocuments.length],
+                  ["CRM", pendingCrmSheets.length],
+                  ["Applicants", pendingApplicants.length],
+                  ["Leave", pendingLeaveRequests.length],
+                  ["Expenses", pendingExpenseClaims.length],
+                ].map(([label, count]) => (
+                  <div className={styles.row} key={`approval-count-${label}`}>
+                    <span className={styles.label}>{label}</span>
+                    <strong>{count}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
         )}
 
         {tab === "dashboard" && !isSuperiorDashboard && (
@@ -1359,7 +1581,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               </div>
               <div className={styles.list}>
                 {[
-                  ["Active builds", `${openTasks.filter((task) => ["In Progress", "Blocked"].includes(task.status)).length} tasks in motion`],
+                  ["Active builds", `${openTasks.filter((task) => ["Pending", "Needs Review", "Blocked"].includes(task.status)).length} tasks in motion`],
                   ["Proof review", `${data.tasks.filter((task) => task.proofUrl).length} proof links submitted`],
                   ["Docs", `${data.documents.filter((doc) => ["NDA", "Certificate", "General"].includes(doc.documentType)).length} technical/admin docs visible`],
                 ].map(([title, copy]) => <div className={styles.row} key={title}><strong>{title}</strong><p className={styles.muted}>{copy}</p></div>)}
@@ -1561,7 +1783,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 {pendingDocuments.length === 0 ? <div className={styles.emptyState}>No documents waiting for approval.</div> : pendingDocuments.map((document) => (
                   <div className={styles.row} key={`approval-document-${document.id}`}>
                     <div className={styles.rowHeader}><strong>{document.title}</strong><span className={styles.pill}>{document.documentType}</span></div>
-                    <p className={styles.muted}>{document.employeeName || "General document"} - {cleanDocumentNotes(document.notes) || "Pending signatory action."}</p>
+                    <p className={styles.muted}>{document.employeeName || "General document"} - {documentWorkflowStatus(document.notes)} - {cleanDocumentNotes(document.notes) || "Pending signatory action."}</p>
                     <div className={styles.toolbar}>
                       <a className={styles.ghostButton} href={document.url} target="_blank" rel="noopener noreferrer">Open</a>
                       {data.capabilities.canSignDocuments && <button className={styles.button} type="button" onClick={() => runAction(() => approveEmployeeDocument({ id: document.id.toString() }))}>Approve & Sign</button>}
@@ -1746,7 +1968,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               <Field label="Assign To" name="assignedTo" options={[{ label: "Role based / unassigned", value: "" }, ...employeeOptions]} wide />
               <Field label="Owner Role" name="ownerRole" options={ownerRoleOptions} />
               <Field label="Priority" name="priority" options={["High", "Medium", "Low"]} />
-              <Field label="Status" name="status" options={["Open", "In Progress", "Blocked", "Done"]} />
+              <Field label="Status" name="status" options={["Pending", "Needs Review", "Blocked", "Done"]} />
               <Field label="Due At" name="dueAt" type="datetime-local" />
               <Field label="Proof URL" name="proofUrl" type="url" wide />
               <Field label="Description" name="description" textarea wide />
@@ -1766,7 +1988,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   <p className={styles.muted}>{task.assignedName || displayRole(task.ownerRole)} - {task.status}{task.dueAt ? ` - Due ${formatPortalDateTime(task.dueAt)}` : ""}</p>
                   {task.proofUrl && <a href={task.proofUrl} target="_blank" rel="noopener noreferrer">Open proof</a>}
                   <div className={styles.toolbar}>
-                    {["In Progress", "Blocked", "Done"].map((status) => <button className={styles.ghostButton} key={status} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "task", id: task.id.toString(), status }))}>{status}</button>)}
+                    {["Pending", "Needs Review", "Blocked", "Done"].map((status) => <button className={styles.ghostButton} key={status} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "task", id: task.id.toString(), status }))}>{status}</button>)}
                     {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "task", id: task.id.toString() }))}>Delete</button>}
                   </div>
                   {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && (
@@ -1778,7 +2000,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                         <Field label="Assign To" name="assignedTo" options={[{ label: "Role based / unassigned", value: "" }, ...employeeOptions]} defaultValue={task.assignedTo?.toString() || ""} wide />
                         <Field label="Owner Role" name="ownerRole" options={ownerRoleOptions} defaultValue={task.ownerRole} />
                         <Field label="Priority" name="priority" options={["High", "Medium", "Low"]} defaultValue={task.priority} />
-                        <Field label="Status" name="status" options={["Open", "In Progress", "Blocked", "Done"]} defaultValue={task.status} />
+                        <Field label="Status" name="status" options={["Pending", "Needs Review", "Blocked", "Done"]} defaultValue={task.status === "Open" ? "Pending" : task.status} />
                         <Field label="Due At" name="dueAt" type="datetime-local" defaultValue={inputDateTime(task.dueAt)} />
                         <Field label="Proof URL" name="proofUrl" type="url" defaultValue={task.proofUrl || ""} wide />
                         <Field label="Description" name="description" textarea defaultValue={task.description || ""} wide />
@@ -2092,11 +2314,17 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                     <div className={styles.compactMeta}>
                       <span className={styles.pill}>{document.documentType}</span>
                       <span className={documentApproved(document.notes) ? `${styles.pill} ${styles.pillSuccess}` : documentPending(document.notes) ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>
-                        {documentApproved(document.notes) ? "Signed" : documentPending(document.notes) ? "Pending approval" : "General"}
+                        {documentWorkflowStatus(document.notes)}
                       </span>
                     </div>
                   </div>
                   <p className={styles.muted}>{document.employeeName || "General"} - {document.visibilityRoles}</p>
+                  <div className={styles.compactMeta}>
+                    <span className={styles.pill}>Signatory: {documentMeta(document.notes, "Approved by") || "Not signed"}</span>
+                    <span className={styles.pill}>Signed: {documentMeta(document.notes, "Signed at") ? formatPortalDateTime(documentMeta(document.notes, "Signed at")) : "Pending"}</span>
+                    <span className={styles.pill}>{documentMeta(document.notes, "Sent status") || "Sent status not set"}</span>
+                    <span className={styles.pill}>{documentMeta(document.notes, "Downloaded status") || "Downloaded status not set"}</span>
+                  </div>
                   {cleanDocumentNotes(document.notes) && <p className={styles.muted}>{cleanDocumentNotes(document.notes)}</p>}
                   <a href={document.url} target="_blank" rel="noopener noreferrer">Open document</a>
                   {data.capabilities.canSignDocuments && !documentApproved(document.notes) && (

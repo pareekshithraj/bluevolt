@@ -596,6 +596,8 @@ function applicantStartDate(notes: string | null | undefined): Date | null {
 
 const documentApprovalPending = "Approval status: Pending Director Approval";
 const documentApprovalApproved = "Approval status: Approved";
+const documentWorkflowPending = "Workflow status: Pending Director Approval";
+const documentWorkflowReleased = "Workflow status: Released to Employee";
 const signatorySignatureUrl = "/Assets/signatures/swathi_kn-removebg-preview.png";
 
 function documentIsApproved(notes?: string | null): boolean {
@@ -605,12 +607,27 @@ function documentIsApproved(notes?: string | null): boolean {
 function documentApprovalNotes(notes?: string | null, approvedBy?: string) {
   const cleaned = (notes || "")
     .split(/\r?\n/)
-    .filter((line) => !line.startsWith("Approval status:") && !line.startsWith("Approved by:") && !line.startsWith("Signature:"))
+    .filter((line) => (
+      !line.startsWith("Approval status:") &&
+      !line.startsWith("Workflow status:") &&
+      !line.startsWith("Approved by:") &&
+      !line.startsWith("Signed at:") &&
+      !line.startsWith("Released at:") &&
+      !line.startsWith("Sent status:") &&
+      !line.startsWith("Downloaded status:") &&
+      !line.startsWith("Signature:")
+    ))
     .join("\n")
     .trim();
+  const signedAt = new Date().toISOString();
   return [
     documentApprovalApproved,
+    documentWorkflowReleased,
     approvedBy ? `Approved by: ${approvedBy}` : "",
+    `Signed at: ${signedAt}`,
+    `Released at: ${signedAt}`,
+    "Sent status: Ready to send",
+    "Downloaded status: Not downloaded",
     `Signature: ${signatorySignatureUrl}`,
     cleaned,
   ].filter(Boolean).join("\n");
@@ -632,7 +649,7 @@ async function createEmployeeStarterDocuments(input: {
       documentType: letterType,
       url: letterUrl,
       visibilityRoles: "super_admin,director,authorized_signatory,admin,hr",
-      notes: `${documentApprovalPending}\nAuto-generated when the employee account was created.`,
+      notes: `${documentApprovalPending}\n${documentWorkflowPending}\nSent status: Not sent\nDownloaded status: Not downloaded\nAuto-generated when the employee account was created.`,
       uploadedBy: input.uploadedBy,
     },
   });
@@ -967,13 +984,13 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
   });
 
   const [users, crmRecords, crmSheets, applicants, meetings, resources, attendance, leaveRequests, tasks, payrollInputs, reviews, documents, announcements, comments, departments, notifications, expenses, auditEvents] = await Promise.all([
-    canManage && ["dashboard", "admin", "ops", "reports", "crm", "approvals"].includes(activeTab)
+    canManage && ["dashboard", "today", "admin", "ops", "reports", "crm", "approvals"].includes(activeTab)
       ? prisma.employeeUser.findMany({ orderBy: { createdAt: "desc" } })
       : prisma.employeeUser.findMany({ where: { id: user.id } }),
-    canUseCrm && ["dashboard", "crm", "reports"].includes(activeTab)
+    canUseCrm && ["dashboard", "today", "crm", "reports"].includes(activeTab)
       ? prisma.employeeCrmRecord.findMany({ orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }] })
       : Promise.resolve([]),
-    ["dashboard", "crm", "approvals"].includes(activeTab) && canUseCrm
+    ["dashboard", "today", "crm", "approvals"].includes(activeTab) && canUseCrm
       ? prisma.employeeCrmSheet.findMany({
           where: canManage
             ? {}
@@ -994,10 +1011,10 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
     capabilities.canManageApplicants && ["admin", "applicants", "reports", "approvals"].includes(activeTab)
       ? prisma.employeeApplicant.findMany({ orderBy: { updatedAt: "desc" } })
       : Promise.resolve([]),
-    canViewMeetings && ["dashboard", "meetings", "reports", "approvals"].includes(activeTab)
+    canViewMeetings && ["dashboard", "today", "meetings", "reports", "approvals"].includes(activeTab)
       ? prisma.employeeMeeting.findMany({ orderBy: { startsAt: "asc" } })
       : Promise.resolve([]),
-    canViewResources && ["dashboard", "resources", "reports", "approvals"].includes(activeTab)
+    canViewResources && ["dashboard", "today", "resources", "reports", "approvals"].includes(activeTab)
       ? prisma.employeeResource.findMany({
           orderBy:
             sortResources === "title"
@@ -1007,17 +1024,17 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
               : { createdAt: "desc" },
         })
       : Promise.resolve([]),
-    ["dashboard", "ops", "reports", "approvals"].includes(activeTab)
+    ["dashboard", "today", "ops", "reports", "approvals"].includes(activeTab)
       ? (canManage
         ? prisma.employeeAttendance.findMany({ orderBy: [{ workDate: "desc" }, { createdAt: "desc" }], take: 500 })
         : prisma.employeeAttendance.findMany({ where: { employeeId: user.id }, orderBy: [{ workDate: "desc" }, { createdAt: "desc" }], take: 120 }))
       : Promise.resolve([]),
-    ["ops", "approvals"].includes(activeTab)
+    ["today", "ops", "approvals"].includes(activeTab)
       ? (canManage
         ? prisma.employeeLeaveRequest.findMany({ orderBy: [{ updatedAt: "desc" }, { startsAt: "desc" }], take: 80 })
         : prisma.employeeLeaveRequest.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }, { startsAt: "desc" }], take: 40 }))
       : Promise.resolve([]),
-    ["dashboard", "ops", "approvals"].includes(activeTab)
+    ["dashboard", "today", "ops", "approvals"].includes(activeTab)
       ? prisma.employeeTask.findMany({
           where: session.role === "super_admin" ? {} : {
             OR: [
@@ -1040,19 +1057,19 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
         ? prisma.employeePerformanceReview.findMany({ orderBy: [{ updatedAt: "desc" }], take: 80 })
         : prisma.employeePerformanceReview.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }], take: 24 }))
       : Promise.resolve([]),
-    capabilities.canViewDocuments && ["dashboard", "documents", "reports", "approvals"].includes(activeTab)
+    capabilities.canViewDocuments && ["dashboard", "today", "documents", "reports", "approvals"].includes(activeTab)
       ? prisma.employeeDocument.findMany({ orderBy: [{ updatedAt: "desc" }], take: 100 })
       : activeTab === "documents"
         ? prisma.employeeDocument.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }], take: 50 })
       : Promise.resolve([]),
-    canViewAnnouncements && ["dashboard", "announcements", "reports", "approvals"].includes(activeTab)
+    canViewAnnouncements && ["dashboard", "today", "announcements", "reports", "approvals"].includes(activeTab)
       ? prisma.employeeAnnouncement.findMany({ orderBy: [{ createdAt: "desc" }], take: 40 })
       : Promise.resolve([]),
     capabilities.canManageOps && activeTab === "ops"
       ? prisma.employeeComment.findMany({ orderBy: { createdAt: "desc" }, take: 120 })
       : Promise.resolve([]),
     activeTab === "admin" && canManage ? prisma.employeeDepartment.findMany({ orderBy: { name: "asc" } }) : Promise.resolve([]),
-    ["dashboard", "admin", "approvals"].includes(activeTab) || (activeTab === "access" && canManageAccess)
+    ["dashboard", "today", "admin", "approvals"].includes(activeTab) || (activeTab === "access" && canManageAccess)
       ? prisma.employeeNotification.findMany({
           where: {
             OR: [
@@ -1065,7 +1082,7 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
           take: 50,
         })
       : Promise.resolve([]),
-    capabilities.canManageExpenses && ["expenses", "reports", "approvals"].includes(activeTab)
+    capabilities.canManageExpenses && ["today", "expenses", "reports", "approvals"].includes(activeTab)
       ? (canManage
         ? prisma.employeeExpenseClaim.findMany({ orderBy: [{ updatedAt: "desc" }], take: 80 })
         : prisma.employeeExpenseClaim.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }], take: 40 }))
@@ -2195,7 +2212,7 @@ export async function saveEmployeeDocument(input: {
     visibilityRoles: input.visibilityRoles || "super_admin,director,authorized_signatory,admin,hr",
     notes: input.notes?.includes("Approval status:")
       ? input.notes
-      : `${documentApprovalPending}${input.notes?.trim() ? `\n${input.notes.trim()}` : ""}`,
+      : `${documentApprovalPending}\n${documentWorkflowPending}\nSent status: Not sent\nDownloaded status: Not downloaded${input.notes?.trim() ? `\n${input.notes.trim()}` : ""}`,
     uploadedBy: Number(session.userId),
   };
   if (input.id) await prisma.employeeDocument.update({ where: { id: Number(input.id) }, data });
@@ -2412,6 +2429,24 @@ export async function markNotificationRead(input: { id: string }) {
   const { user } = await requireEmployee();
   await prisma.employeeNotification.update({
     where: { id: Number(input.id) },
+    data: { readAt: new Date() },
+  });
+  await prisma.employeeUser.update({ where: { id: user.id }, data: { lastSeenAt: new Date() } });
+  revalidatePath("/employee/portal");
+  return { success: true };
+}
+
+export async function markAllNotificationsRead() {
+  const { session, user } = await requireEmployee();
+  await prisma.employeeNotification.updateMany({
+    where: {
+      readAt: null,
+      OR: [
+        { employeeId: user.id },
+        { targetRoles: "all" },
+        { targetRoles: session.role },
+      ],
+    },
     data: { readAt: new Date() },
   });
   await prisma.employeeUser.update({ where: { id: user.id }, data: { lastSeenAt: new Date() } });

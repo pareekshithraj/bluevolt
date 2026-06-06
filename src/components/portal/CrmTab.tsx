@@ -113,6 +113,32 @@ export default function CrmTab({
     return value.includes("phone") || value.includes("mobile") || value.includes("contact number") || value.includes("call number");
   };
 
+  const crmImportPreview = React.useMemo(() => {
+    const source = crmSheetPaste.trim();
+    if (!source) return null;
+    const lines = source.split(/\r?\n/).filter((line) => line.trim().length > 0);
+    if (lines.length === 0) return null;
+    const delimiter = lines[0].includes("\t") ? "\t" : ",";
+    const headers = lines[0].split(delimiter).map((cell) => cell.trim()).filter(Boolean);
+    const rows = Math.max(lines.length - 1, 0);
+    const phoneIndexes = headers
+      .map((header, index) => ({ header, index }))
+      .filter((item) => isPhoneColumn(item.header))
+      .map((item) => item.index);
+    const phones = lines.slice(1).flatMap((line) => {
+      const cells = line.split(delimiter);
+      return phoneIndexes.map((index) => cells[index]?.replace(/\D/g, "") || "").filter(Boolean);
+    });
+    const duplicatePhones = phones.length - new Set(phones).size;
+    return { rows, columns: headers.length, phoneColumns: phoneIndexes.length, duplicatePhones };
+  }, [crmSheetPaste]);
+
+  const formatSheetDate = (value: Date | string | null | undefined) => {
+    if (!value) return "";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "" : date.toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  };
+
   const formatPhoneValue = (value: string) => {
     const trimmed = value.trim();
     if (!trimmed) return "";
@@ -202,6 +228,19 @@ export default function CrmTab({
             <span className={styles.label}>Paste Excel / CSV Rows</span>
             <textarea className={styles.textarea} name="pasteData" value={crmSheetPaste} onChange={(event) => setCrmSheetPaste(event.target.value)} placeholder={"Company\tContact\tEmail\tPhone\tNext Action\nAcme Pvt Ltd\tRavi\travi@example.com\t9999999999\tCall today"} required />
           </label>
+          {crmImportPreview && (
+            <div className={`${styles.importPreview} ${styles.fieldWide}`}>
+              <div>
+                <span className={styles.label}>Import Preview</span>
+                <strong>{crmImportPreview.rows} rows, {crmImportPreview.columns} columns</strong>
+              </div>
+              <div className={styles.miniStatGrid}>
+                <span>{crmImportPreview.phoneColumns} phone columns</span>
+                <span>{crmImportPreview.duplicatePhones} duplicate phones</span>
+                <span>{crmImportPreview.rows > 1000 ? "Large sheet: virtual scroll ready" : "Ready for quick import"}</span>
+              </div>
+            </div>
+          )}
           <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Create Sheet</button>
         </form>
       )}
@@ -224,6 +263,7 @@ export default function CrmTab({
                 <div>
                   <strong>{sheet.title}</strong>
                   <p className={styles.muted}>{sheet.sourceName || "Source not named"} - requested by {sheet.requestedByName || "Unknown"}</p>
+                  <p className={styles.muted}>Visible to {sheet.audienceRoles === "all" ? "all roles" : sheet.audienceRoles || "selected roles"}{sheet.audienceUsers && sheet.audienceUsers !== "," ? " + selected people" : ""}</p>
                 </div>
                 <div className={styles.sheetMetaGrid}>
                   <span className={sheet.status === "Approved" ? `${styles.pill} ${styles.pillSuccess}` : sheet.status === "Rejected" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{sheet.status}{sheet.locked ? " / Locked" : ""}</span>
@@ -323,7 +363,7 @@ export default function CrmTab({
             <div className={styles.sheetMarkingToolbar}>
               <div className={styles.sheetMarkSummary}>
                 <strong>{canEditCrmSheet ? "Mark selected row" : "Selected row"}</strong>
-                <span>{selectedCrmRow ? `Row ${sheetRows.findIndex((row) => row.id === selectedCrmRow.id) + 2}: ${selectedCrmRow.status}` : "Select a row in the sheet"}</span>
+                <span>{selectedCrmRow ? `Row ${sheetRows.findIndex((row) => row.id === selectedCrmRow.id) + 2}: ${selectedCrmRow.status}${selectedCrmRow.updatedByName ? ` - by ${selectedCrmRow.updatedByName}` : ""}` : "Select a row in the sheet"}</span>
               </div>
               {canMarkRows && (
                 <div className={styles.sheetMarkButtons}>
@@ -351,6 +391,13 @@ export default function CrmTab({
                 <span>{callbackRows} callback</span>
                 <span>{doneRows} done</span>
               </div>
+            </div>
+
+            <div className={styles.sheetAccessStrip}>
+              <span><strong>Access</strong> {activeCrmSheet.audienceRoles === "all" ? "All roles" : activeCrmSheet.audienceRoles || "Role restricted"}</span>
+              <span><strong>People</strong> {activeCrmSheet.audienceUsers && activeCrmSheet.audienceUsers !== "," ? activeCrmSheet.audienceUsers.split(",").filter(Boolean).length : 0} selected</span>
+              <span><strong>Requested by</strong> {activeCrmSheet.requestedByName || "Unknown"}</span>
+              <span><strong>Activity</strong> {selectedCrmRow?.updatedAt ? `${formatSheetDate(selectedCrmRow.updatedAt)}${selectedCrmRow.reason ? ` - ${selectedCrmRow.reason}` : ""}` : "No row activity"}</span>
             </div>
 
             <div className={styles.sheetFormulaRow}>

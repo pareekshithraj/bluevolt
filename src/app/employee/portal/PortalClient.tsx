@@ -59,6 +59,7 @@ type EmployeeListItem = PortalData["users"][number] & {
 const tabs = [
   { id: "dashboard", label: "Dashboard", icon: Users },
   { id: "today", label: "Today", icon: Target },
+  { id: "notifications", label: "Notifications", icon: Bell },
   { id: "approvals", label: "Approvals", icon: ClipboardList },
   { id: "crm", label: "CRM", icon: Handshake },
   { id: "applicants", label: "Applicants", icon: Users },
@@ -279,25 +280,25 @@ function mergePortalData(previous: PortalData, incoming: PortalData, activeTab: 
   return {
     ...previous,
     ...incoming,
-    users: ["dashboard", "today", "admin", "ops", "reports", "crm", "approvals"].includes(activeTab) ? incoming.users : previous.users,
-    crmRecords: ["dashboard", "today", "crm", "reports"].includes(activeTab) ? incoming.crmRecords : previous.crmRecords,
-    crmSheets: ["dashboard", "today", "crm", "approvals"].includes(activeTab) ? incoming.crmSheets : previous.crmSheets,
+    users: ["dashboard", "today", "notifications", "admin", "ops", "reports", "crm", "approvals"].includes(activeTab) ? incoming.users : previous.users,
+    crmRecords: ["dashboard", "today", "notifications", "crm", "reports"].includes(activeTab) ? incoming.crmRecords : previous.crmRecords,
+    crmSheets: ["dashboard", "today", "notifications", "crm", "approvals"].includes(activeTab) ? incoming.crmSheets : previous.crmSheets,
     applicants: ["applicants", "admin", "reports", "approvals"].includes(activeTab) ? incoming.applicants : previous.applicants,
-    meetings: ["dashboard", "today", "meetings", "reports"].includes(activeTab) ? incoming.meetings : previous.meetings,
-    resources: ["dashboard", "today", "resources", "reports", "approvals"].includes(activeTab) ? incoming.resources : previous.resources,
-    attendance: ["dashboard", "today", "ops", "reports", "approvals"].includes(activeTab) ? incoming.attendance : previous.attendance,
-    leaveRequests: ["today", "ops", "approvals"].includes(activeTab) ? incoming.leaveRequests : previous.leaveRequests,
-    tasks: ["dashboard", "today", "ops"].includes(activeTab) ? incoming.tasks : previous.tasks,
+    meetings: ["dashboard", "today", "notifications", "meetings", "reports"].includes(activeTab) ? incoming.meetings : previous.meetings,
+    resources: ["dashboard", "today", "notifications", "resources", "reports", "approvals"].includes(activeTab) ? incoming.resources : previous.resources,
+    attendance: ["dashboard", "today", "notifications", "ops", "reports", "approvals"].includes(activeTab) ? incoming.attendance : previous.attendance,
+    leaveRequests: ["today", "notifications", "ops", "approvals"].includes(activeTab) ? incoming.leaveRequests : previous.leaveRequests,
+    tasks: ["dashboard", "today", "notifications", "ops"].includes(activeTab) ? incoming.tasks : previous.tasks,
     payrollInputs: ["payroll", "reports"].includes(activeTab) ? incoming.payrollInputs : previous.payrollInputs,
     reviews: ["reviews", "reports"].includes(activeTab) ? incoming.reviews : previous.reviews,
-    documents: ["dashboard", "today", "documents", "reports", "approvals"].includes(activeTab) ? incoming.documents : previous.documents,
-    announcements: ["dashboard", "today", "announcements", "reports", "approvals"].includes(activeTab) ? incoming.announcements : previous.announcements,
+    documents: ["dashboard", "today", "notifications", "documents", "reports", "approvals"].includes(activeTab) ? incoming.documents : previous.documents,
+    announcements: ["dashboard", "today", "notifications", "announcements", "reports", "approvals"].includes(activeTab) ? incoming.announcements : previous.announcements,
     comments: activeTab === "ops" ? incoming.comments : previous.comments,
     departments: activeTab === "admin" ? incoming.departments : previous.departments,
     roleDefinitions: ["admin", "access"].includes(activeTab) ? incoming.roleDefinitions : previous.roleDefinitions,
-    notifications: ["dashboard", "today", "admin", "access", "approvals"].includes(activeTab) ? incoming.notifications : previous.notifications,
-    expenses: ["today", "expenses", "reports", "approvals"].includes(activeTab) ? incoming.expenses : previous.expenses,
-    auditEvents: ["admin", "access", "reports"].includes(activeTab) ? incoming.auditEvents : previous.auditEvents,
+    notifications: ["dashboard", "today", "notifications", "admin", "access", "approvals"].includes(activeTab) ? incoming.notifications : previous.notifications,
+    expenses: ["today", "notifications", "expenses", "reports", "approvals"].includes(activeTab) ? incoming.expenses : previous.expenses,
+    auditEvents: ["dashboard", "today", "notifications", "admin", "access", "reports", "approvals"].includes(activeTab) ? incoming.auditEvents : previous.auditEvents,
     chatMessages: ["dashboard", "chat"].includes(activeTab) ? incoming.chatMessages : previous.chatMessages,
   };
 }
@@ -413,6 +414,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const visibleTabs = useMemo(() => tabs.filter((item) => {
     if (item.id === "dashboard") return true;
     if (item.id === "today") return true;
+    if (item.id === "notifications") return true;
     if (item.id === "approvals") return data.capabilities.canUseSuperiorDashboard || data.capabilities.canManage;
     if (item.id === "crm") return data.capabilities.canRequestCrmSource || data.capabilities.canUseCrm;
     if (item.id === "applicants") return data.capabilities.canManageApplicants;
@@ -514,7 +516,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const completedSessions = data.attendance.filter((entry) => entry.logoutAt).length;
   const selectedEmployeeSessions = data.attendance.filter((entry) => entry.employeeId === selectedHoursEmployeeId).length;
   const payrollTotal = data.payrollInputs.reduce((total, item) => total + Number(item.amount || 0), 0);
-  const payrollReady = data.payrollInputs.filter((item) => item.status === "Ready").length;
+  const payrollReady = data.payrollInputs.filter((item) => ["Pending Approval", "Approved", "Ready"].includes(item.status)).length;
   const payrollPaid = data.payrollInputs.filter((item) => item.status === "Paid").length;
   const canManageExpenseClaims = data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageExpenses;
   const pendingDocuments = data.documents.filter((document) => documentPending(document.notes) && !documentApproved(document.notes));
@@ -615,6 +617,46 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     }] : []),
   ].sort((a, b) => (validDate(b.time)?.getTime() || 0) - (validDate(a.time)?.getTime() || 0));
   const unreadBellCount = notificationFeed.filter((item) => item.unread).length;
+  const notificationGroups = ["Alert", "Announcement", "Meeting", "Document", "CRM", "Task", "Attendance"]
+    .map((category) => ({ category, items: notificationFeed.filter((item) => item.category === category) }))
+    .filter((group) => group.items.length > 0);
+  const roleFocusCards = normalizedRole.includes("sales")
+    ? [
+      ["Assigned CRM sheets", salesAssignedSheets.length, "Open approved sheets and move rows by status."],
+      ["Follow-ups due today", salesFollowUpsDueToday.length, "Callback queue and due follow-ups."],
+      ["Done rows", salesDoneRows.length, "Completed sales rows visible to you."],
+      ["Callback queue", salesCallbackRows.length, "Rows needing another contact attempt."],
+    ]
+    : normalizedRole.includes("content")
+      ? [
+        ["Content tasks", myOpenTasks.length, "Assigned content and delivery work."],
+        ["Resources", recentResources.length, "Role-visible files, links, decks, and sheets."],
+        ["Meetings", upcomingMeetings.length, "Upcoming sessions assigned to you."],
+        ["Documents", data.documents.filter((document) => documentApproved(document.notes)).length, "Released documents available to download."],
+      ]
+      : [
+        ["My tasks", myOpenTasks.length, "Assigned tasks and due work."],
+        ["Meetings", upcomingMeetings.length, "Upcoming sessions assigned to you."],
+        ["Resources", recentResources.length, "Files and links visible to your role."],
+        ["My hours", formatWorkHours(selectedEmployeeWorkHours), `${selectedEmployeeSessions} work sessions recorded.`],
+      ];
+  const calendarItems = [
+    ...data.attendance.slice(0, 10).map((entry) => ({
+      id: `attendance-${entry.id}`,
+      title: entry.employeeName,
+      meta: `${entry.status} - ${Number(entry.totalHours || 0).toFixed(2)} hrs`,
+      date: entry.workDate,
+      kind: "Attendance",
+    })),
+    ...data.leaveRequests.slice(0, 10).map((leave) => ({
+      id: `leave-${leave.id}`,
+      title: leave.employeeName,
+      meta: `${leave.leaveType} - ${leave.status}`,
+      date: leave.startsAt,
+      kind: "Leave",
+    })),
+  ].sort((a, b) => (validDate(b.date)?.getTime() || 0) - (validDate(a.date)?.getTime() || 0)).slice(0, 12);
+  const recentAuditEvents = data.auditEvents.slice(0, 8);
 
   const downloadCsv = (fileName: string, rows: Record<string, string | number | null | undefined>[]) => {
     if (!rows.length) {
@@ -918,7 +960,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   };
 
   return (
-    <div className={`${styles.shell} ${theme === "light" ? styles.themeLight : styles.themeDark} ${sidebarCollapsed ? styles.shellCollapsed : ""}`}>
+    <div className={`${styles.shell} ${theme === "light" ? styles.themeLight : styles.themeDark} ${sidebarCollapsed ? styles.shellCollapsed : ""} ${tab === "crm" && activeCrmSheetId ? styles.sheetMode : ""}`}>
       {/* Mobile hamburger button */}
       <button className={styles.mobileMenuButton} type="button" onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)} aria-label="Toggle navigation">
         {mobileSidebarOpen ? <X size={22} /> : <Menu size={22} />}
@@ -1180,6 +1222,96 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
           </div>
         )}
 
+        {tab === "notifications" && (
+          <section className={styles.grid}>
+            <div className={`${styles.dashboardHero} ${styles.span12}`}>
+              <div>
+                <div className={styles.eyebrow}>Notification Center</div>
+                <h1 className={styles.heroTitle}>One place for every work update.</h1>
+                <p className={styles.muted}>Announcements, meetings, approved documents, CRM assignments, due tasks, and attendance issues are grouped here with direct open actions.</p>
+              </div>
+              <div className={styles.heroActions}>
+                <button className={styles.button} type="button" onClick={() => runAction(() => markAllNotificationsRead())} disabled={unreadBellCount === 0}>Mark all read</button>
+                <button className={styles.ghostButton} type="button" onClick={() => refresh(sortResources, "notifications")}>Refresh</button>
+              </div>
+            </div>
+
+            <div className={`${styles.card} ${styles.span12}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>Updates by Category</h2>
+                  <p className={styles.muted}>{notificationFeed.length} current updates. Read alerts disappear after they are marked read.</p>
+                </div>
+                <span className={styles.pill}>{unreadBellCount} unread</span>
+              </div>
+              <div className={styles.notificationCenterGrid}>
+                {notificationGroups.length === 0 ? <div className={styles.emptyState}>No updates waiting right now.</div> : notificationGroups.map((group) => (
+                  <div className={styles.notificationGroup} key={group.category}>
+                    <div className={styles.rowHeader}>
+                      <strong>{group.category}</strong>
+                      <span className={styles.pill}>{group.items.length}</span>
+                    </div>
+                    <div className={styles.list}>
+                      {group.items.map((item) => (
+                        <button className={styles.notificationRow} type="button" key={item.id} onClick={item.openAction}>
+                          <span className={item.unread ? `${styles.notificationDot} ${styles.notificationDotUnread}` : styles.notificationDot} />
+                          <span>
+                            <strong>{item.title}</strong>
+                            <small>{item.body}</small>
+                            <em>{formatPortalTimeAgo(item.time)}</em>
+                          </span>
+                          <span className={styles.actionStack}>
+                            <span className={styles.pill}>{item.actionLabel || "Open"}</span>
+                            {item.unread && item.action && (
+                              <span
+                                className={styles.ghostInline}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  item.action?.();
+                                }}
+                              >
+                                Mark read
+                              </span>
+                            )}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {recentAuditEvents.length > 0 && data.capabilities.canUseSuperiorDashboard && (
+              <div className={`${styles.card} ${styles.span12}`}>
+                <div className={styles.sectionHeader}>
+                  <div>
+                    <h2 className={styles.cardTitle}>Recent Audit Trail</h2>
+                    <p className={styles.muted}>Latest management actions for accountability.</p>
+                  </div>
+                  <span className={styles.pill}>{recentAuditEvents.length} events</span>
+                </div>
+                <div className={styles.smartTable}>
+                  <div className={styles.smartTableHeader}>
+                    <span>Actor</span>
+                    <span>Action</span>
+                    <span>Entity</span>
+                    <span>When</span>
+                  </div>
+                  {recentAuditEvents.map((event) => (
+                    <div className={styles.smartTableRow} key={event.id}>
+                      <strong>{event.actorName || "System"}</strong>
+                      <span>{event.action}</span>
+                      <span>{event.entityType}</span>
+                      <span>{formatPortalTimeAgo(event.createdAt)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
         {tab === "today" && (
           <section className={styles.grid}>
             <div className={`${styles.dashboardHero} ${styles.span12}`}>
@@ -1311,6 +1443,27 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 ))}
               </div>
             </div>
+
+            {recentAuditEvents.length > 0 && data.capabilities.canUseSuperiorDashboard && (
+              <div className={`${styles.card} ${styles.span12}`}>
+                <div className={styles.sectionHeader}>
+                  <div>
+                    <h2 className={styles.cardTitle}>Recent Audit Trail</h2>
+                    <p className={styles.muted}>Latest edits, approvals, status changes, and deletes.</p>
+                  </div>
+                  <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("notifications")}>Open Notification Center</button>
+                </div>
+                <div className={styles.auditTimeline}>
+                  {recentAuditEvents.map((event) => (
+                    <div className={styles.auditItem} key={`today-audit-${event.id}`}>
+                      <span className={styles.pill}>{event.entityType}</span>
+                      <strong>{event.action}</strong>
+                      <p className={styles.muted}>{event.actorName || "System"} - {formatPortalTimeAgo(event.createdAt)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
         )}
 
@@ -1334,6 +1487,25 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 {data.capabilities.canUseCrm && <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("crm")}>My CRM sheets</button>}
                 <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("resources")}>Resources</button>
                 {currentEmployee && <a className={styles.ghostButton} href={idCardUrlFor(currentEmployee)} target="_blank" rel="noopener noreferrer">My ID card</a>}
+              </div>
+            </div>
+
+            <div className={`${styles.card} ${styles.span12}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>{normalizedRole.includes("sales") ? "Sales Focus" : normalizedRole.includes("content") ? "Content Focus" : "My Focus"}</h2>
+                  <p className={styles.muted}>Role-specific work surfaced first, without admin-only controls.</p>
+                </div>
+                <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("today")}>Open Today</button>
+              </div>
+              <div className={styles.roleFocusGrid}>
+                {roleFocusCards.map(([label, value, hint]) => (
+                  <div className={styles.roleFocusCard} key={String(label)}>
+                    <span className={styles.label}>{label}</span>
+                    <strong>{value}</strong>
+                    <p className={styles.muted}>{hint}</p>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -1895,6 +2067,24 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
 
         {tab === "ops" && (
           <section className={styles.grid}>
+            <div className={`${styles.card} ${styles.span12}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.cardTitle}>Leave & Attendance Calendar</h2>
+                  <p className={styles.muted}>Recent check-ins, auto attendance outcomes, and leave requests in one timeline.</p>
+                </div>
+                <span className={styles.pill}>{calendarItems.length} items</span>
+              </div>
+              <div className={styles.calendarStrip}>
+                {calendarItems.length === 0 ? <div className={styles.emptyState}>No calendar activity yet.</div> : calendarItems.map((item) => (
+                  <div className={styles.calendarItem} key={item.id}>
+                    <span className={styles.label}>{formatPortalDate(item.date)}</span>
+                    <strong>{item.title}</strong>
+                    <p className={styles.muted}>{item.kind} - {item.meta}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
             {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && (
               <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveAttendance)}>
                 <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Attendance Entry</h2>
@@ -2131,7 +2321,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   <Field label="Unpaid Leave Days" name="unpaidLeaveDays" type="number" />
                   <Field label="Bonus" name="bonus" type="number" />
                   <Field label="Deductions" name="deductions" type="number" />
-                  <Field label="Status" name="status" options={["Draft", "Ready", "Paid", "Hold"]} />
+                  <Field label="Status" name="status" options={["Draft", "Pending Approval", "Approved", "Paid", "Hold"]} />
                   <Field label="Notes" name="notes" textarea wide />
                   <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Payroll</button>
                 </form>
@@ -2166,7 +2356,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                     <span className={payroll.status === "Paid" ? `${styles.pill} ${styles.pillSuccess}` : payroll.status === "Hold" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{payroll.status}</span>
                     {data.capabilities.canManagePayroll && (
                       <span className={styles.actionStack}>
-                        {["Ready", "Paid", "Hold"].map((status) => <button className={styles.ghostButton} key={status} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "payroll", id: payroll.id.toString(), status }))}>{status}</button>)}
+                        {["Pending Approval", "Approved", "Paid", "Hold"].map((status) => <button className={styles.ghostButton} key={status} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "payroll", id: payroll.id.toString(), status }))}>{status}</button>)}
                         <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "payroll", id: payroll.id.toString() }))}>Delete</button>
                       </span>
                     )}

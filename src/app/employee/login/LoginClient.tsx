@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Lock, Mail, Info } from "lucide-react";
+import { BarChart3, CheckCircle2, Eye, EyeOff, Lock, Mail, ShieldCheck, TrendingUp } from "lucide-react";
 import styles from "../portal.module.css";
 
 function simpleLoginError(message?: string) {
@@ -130,62 +130,83 @@ export default function LoginClient() {
   };
 
   return (
-    <main className={`${styles.loginWrapper} ${theme === "light" ? styles.themeLight : styles.themeDark}`}>
-      <div className={styles.loginVisual}>
-        <div className={styles.loginVisualContent}>
-          <Image src="/logo.png" alt="BlueVolt Logo" width={132} height={56} style={{ height: 56, width: "auto", filter: "brightness(0) invert(1)", opacity: 0.95 }} />
+    <main className={`${styles.salesaiLogin} ${theme === "light" ? styles.themeLight : styles.themeDark}`}>
+      <section className={styles.salesaiVisual} aria-hidden="true">
+        <div className={styles.salesaiBrand}>
+          <Image src="/logo.png" alt="BlueVolt Logo" width={118} height={50} />
+          <span>BLUEVOLT</span>
         </div>
-        <div className={`${styles.loginVisualContent} ${styles.loginQuote}`}>
-          BlueVolt internal<br />workspace access.
-        </div>
-      </div>
-      <div className={styles.loginFormContainer}>
-        <section className={styles.loginCardPremium}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, marginBottom: 30 }}>
-            <span className={styles.loginStatusPill}>Private employee access</span>
-            <div className={styles.loginLogoMark}>
-              <Image src="/logo.png" alt="BlueVolt Logo" width={168} height={112} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-            </div>
-            <div style={{ textAlign: "center" }}>
-              <h1 className={styles.title} style={{ fontSize: "2.15rem", marginBottom: 6 }}>Employee Gateway</h1>
-              <p className={styles.muted}>Sign in to dashboard, CRM, resources, meetings, and attendance.</p>
-            </div>
+        <div className={`${styles.floatPanel} ${styles.floatPanelOne}`}>
+          <div className={styles.panelMenu}>...</div>
+          <span className={styles.panelKicker}>Workspace pulse</span>
+          <strong>92.4%</strong>
+          <p>active delivery health</p>
+          <div className={styles.miniHeatmap}>
+            {Array.from({ length: 12 }).map((_, index) => <i key={index} />)}
           </div>
-          {error && <div className={`${styles.toast} ${styles.toastError}`} style={{ position: "relative", top: 0, right: 0, marginBottom: 20 }}><span>{error}</span></div>}
-          <form onSubmit={submit} className={styles.formGrid}>
-            <label className={`${styles.field} ${styles.fieldWide}`}>
-              <span className={styles.label}>Employee Email</span>
-              <div style={{ position: "relative" }}>
-                <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", display: "flex", pointerEvents: "none" }}>
-                  <Mail size={18} />
-                </span>
-                <input className={styles.input} type="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={isLockedOut} style={{ paddingLeft: 42 }} />
-              </div>
+        </div>
+        <div className={`${styles.floatPanel} ${styles.floatPanelTwo}`}>
+          <span className={styles.panelIcon}><TrendingUp size={20} /></span>
+          <span className={styles.panelKicker}>CRM progress</span>
+          <strong>1,248</strong>
+          <p>rows updated this week</p>
+          <em>18.6% up</em>
+        </div>
+        <div className={`${styles.floatPanel} ${styles.floatPanelThree}`}>
+          <span className={styles.panelIcon}><BarChart3 size={20} /></span>
+          <span className={styles.panelKicker}>Team hours</span>
+          <strong>384.5</strong>
+          <p>verified work hours</p>
+        </div>
+        <div className={`${styles.floatPanel} ${styles.floatPanelFour}`}>
+          <span className={styles.panelIcon}><CheckCircle2 size={20} /></span>
+          <strong>218</strong>
+          <p>tasks closed</p>
+        </div>
+        <div className={styles.loginCenterLogo}>
+          <Image src="/logo.png" alt="" width={128} height={72} />
+        </div>
+      </section>
+      <section className={styles.salesaiFormPane}>
+        <div className={styles.salesaiFormShell}>
+          <div className={styles.salesaiMobileLogo}>
+            <Image src="/logo.png" alt="BlueVolt Logo" width={120} height={58} />
+          </div>
+          <h1>Sign in to BlueVolt</h1>
+          <p>Employee workspace, CRM, resources, meetings, and attendance.</p>
+          {error && <div className={styles.loginErrorCompact}><span>{error}</span></div>}
+          <form onSubmit={submit} className={styles.salesaiForm}>
+            <label>
+              <span>Email</span>
+              <Mail size={17} />
+              <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={isLockedOut} placeholder="Email" />
             </label>
-            <label className={`${styles.field} ${styles.fieldWide}`}>
-              <span className={styles.label}>Password</span>
-              <div style={{ position: "relative" }}>
-                <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", display: "flex", pointerEvents: "none" }}>
-                  <Lock size={18} />
-                </span>
-                <input className={styles.input} type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} required disabled={isLockedOut} style={{ paddingLeft: 42, paddingRight: 40 }} />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#64748b", display: "flex" }}>
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
+            <label>
+              <span>Password</span>
+              <Lock size={17} />
+              <input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} required disabled={isLockedOut} placeholder="Password" />
+              <button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? "Hide password" : "Show password"}>
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </label>
-            <button className={`${styles.button} ${styles.fieldWide}`} type="submit" disabled={pending || isLockedOut} style={{ marginTop: 8 }}>
-              {pending ? "Authorizing..." : "Secure Login"}
-            </button>
-            <div className={`${styles.loginSecurityHint} ${styles.fieldWide}`} style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "center", background: "var(--bg-shell)", padding: "10px 14px", borderRadius: 10, border: "1px dashed var(--border-color)", marginTop: 12 }}>
-              <Info size={16} style={{ color: "var(--text-brand)", flexShrink: 0 }} />
-              <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-muted)", textAlign: "left", lineHeight: "1.4" }}>
-                New employees use the default password, then reset it from Profile after first login.
-              </p>
+            <div className={styles.salesaiFormMeta}>
+              <label>
+                <input type="checkbox" />
+                <span>Remember me</span>
+              </label>
+              <button type="button">Forgot Password?</button>
             </div>
+            <button className={styles.salesaiSubmit} type="submit" disabled={pending || isLockedOut}>
+              {pending ? "Signing in..." : "Sign in"}
+            </button>
           </form>
-        </section>
-      </div>
+          <div className={styles.loginDivider}><span>Private access</span></div>
+          <div className={styles.loginSecurityLine}>
+            <ShieldCheck size={18} />
+            <span>New users sign in with the default password and reset it from Profile.</span>
+          </div>
+        </div>
+      </section>
     </main>
   );
 }

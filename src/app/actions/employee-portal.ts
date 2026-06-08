@@ -217,7 +217,6 @@ function parseFeatureAccess(value?: string | string[]): EmployeePortalFeature[] 
 
 function roleCanAccessFeature(role: string, roles: EmployeeRoleDefinition[], feature: EmployeePortalFeature): boolean {
   if (role === "super_admin") return true;
-  if (documentSignatoryRoles.has(role)) return true;
   const roleDefinition = mergeRoleDefinitions(roles).find((entry) => entry.key === role);
   return parseFeatureAccess(roleDefinition?.featureAccess).includes(feature);
 }
@@ -245,7 +244,7 @@ function capabilitiesForRole(role: string, roles: EmployeeRoleDefinition[]) {
     canManageApplicants: isSuperiorRole && roleCanAccessFeature(role, roles, "applicants"),
     canManageResources,
     canScheduleMeetings,
-    canManageOps: roleCanAccessFeature(role, roles, "ops"),
+    canManageOps: isSuperiorRole && roleCanAccessFeature(role, roles, "ops"),
     canManagePayroll: roleCanAccessFeature(role, roles, "payroll"),
     canReviewPerformance: roleCanAccessFeature(role, roles, "reviews"),
     canViewDocuments,
@@ -1003,9 +1002,9 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
                 { status: "Approved", ownerRole: session.role },
               ],
             },
-          include: { rows: { orderBy: { rowNumber: "asc" }, take: 300 } },
+          include: { rows: { orderBy: { rowNumber: "asc" }, take: 5000 } },
           orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-          take: 30,
+          take: 80,
         })
       : Promise.resolve([]),
     capabilities.canManageApplicants && ["admin", "applicants", "reports", "approvals"].includes(activeTab)
@@ -1493,6 +1492,7 @@ export async function saveCrmSheetRequest(input: {
   }
   await ensureEmployeeCrmSheetAccessColumns();
   const parsed = parseSheetText(input.pasteData);
+  const autoApproved = session.role === "super_admin" || hasEmployeeRole(session, ["admin", "hr"]);
   const sheet = await prisma.employeeCrmSheet.create({
     data: {
       title: input.title.trim(),
@@ -1502,29 +1502,31 @@ export async function saveCrmSheetRequest(input: {
       audienceRoles: input.audienceRoles?.trim() || input.ownerRole || "sales",
       audienceUsers: normalizeAudienceUsers(input.audienceUsers),
       description: input.description,
-      status: hasEmployeeRole(session, ["admin", "hr"]) ? "Approved" : "Pending",
-      locked: !hasEmployeeRole(session, ["admin", "hr"]),
+      status: autoApproved ? "Approved" : "Pending",
+      locked: !autoApproved,
       columns: parsed.columns,
       requestedBy: user.id,
       requestedByName: user.name,
-      approvedBy: hasEmployeeRole(session, ["admin", "hr"]) ? Number(session.userId) : null,
+      approvedBy: autoApproved ? Number(session.userId) : null,
       rows: {
         create: parsed.rows.map((row, index) => ({
           rowNumber: index + 1,
           data: row,
-          locked: !hasEmployeeRole(session, ["admin", "hr"]),
+          locked: !autoApproved,
         })),
       },
     },
   });
-  await prisma.employeeNotification.create({
-    data: {
-      targetRoles: "admin",
-      title: "CRM source approval requested",
-      body: `${user.name} requested access for "${sheet.title}" with ${parsed.rows.length} source rows.`,
-      createdBy: user.id,
-    },
-  });
+  if (!autoApproved) {
+    await prisma.employeeNotification.create({
+      data: {
+        targetRoles: "admin",
+        title: "CRM source approval requested",
+        body: `${user.name} requested access for "${sheet.title}" with ${parsed.rows.length} source rows.`,
+        createdBy: user.id,
+      },
+    });
+  }
   await logEmployeeAudit({
     actorId: user.id,
     actorName: session.name,
@@ -1933,7 +1935,8 @@ export async function saveAttendance(input: {
   notes?: string;
 }) {
   const { session } = await requireEmployee();
-  if (!(await employeeSessionCanAccessFeature(session, "ops"))) {
+  const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
+  if (!capabilitiesForRole(session.role, roleDefinitions).canManageOps) {
     return { success: false, error: "Only HR/admin roles can manage attendance." };
   }
   const employeeId = Number(input.employeeId);
@@ -2048,7 +2051,8 @@ export async function saveLeaveRequest(input: {
   reason?: string;
 }) {
   const { session, user } = await requireEmployee();
-  const canManage = await employeeSessionCanAccessFeature(session, "ops");
+  const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
+  const canManage = capabilitiesForRole(session.role, roleDefinitions).canManageOps;
   const employeeId = canManage && input.employeeId ? Number(input.employeeId) : user.id;
   await prisma.employeeLeaveRequest.create({
     data: {
@@ -2085,7 +2089,8 @@ export async function saveTask(input: {
   description?: string;
 }) {
   const { session } = await requireEmployee();
-  if (!(await employeeSessionCanAccessFeature(session, "ops"))) {
+  const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
+  if (!capabilitiesForRole(session.role, roleDefinitions).canManageOps) {
     return { success: false, error: "You do not have permission to create tasks." };
   }
   const assignedTo = input.assignedTo ? Number(input.assignedTo) : null;
@@ -2483,16 +2488,18 @@ export async function deleteEmployeeEntity(input: {
 }) {
   try {
     const { session } = await requireEmployee();
+    const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
+    const capabilities = capabilitiesForRole(session.role, roleDefinitions);
     if (["crm", "crmSheet"].includes(input.entityType) && session.role !== "super_admin") {
       return { success: false, error: "Only super admin can delete CRM records." };
     }
-    if (input.entityType === "resource" && !capabilitiesForRole(session.role, await getEmployeeRoleDefinitionsFromDatabase()).canManageResources) {
+    if (input.entityType === "resource" && !capabilities.canManageResources) {
       return { success: false, error: "Only mapped resource managers can delete resources." };
     }
-    if (input.entityType === "announcement" && !capabilitiesForRole(session.role, await getEmployeeRoleDefinitionsFromDatabase()).canPublishAnnouncements) {
+    if (input.entityType === "announcement" && !capabilities.canPublishAnnouncements) {
       return { success: false, error: "Only mapped announcement publishers can delete announcements." };
     }
-    if (input.entityType === "meeting" && !capabilitiesForRole(session.role, await getEmployeeRoleDefinitionsFromDatabase()).canScheduleMeetings) {
+    if (input.entityType === "meeting" && !capabilities.canScheduleMeetings) {
       return { success: false, error: "Only mapped meeting schedulers can delete meetings." };
     }
     const deleteFeature: EmployeePortalFeature =
@@ -2506,6 +2513,9 @@ export async function deleteEmployeeEntity(input: {
       input.entityType === "meeting" ? "meetings" :
       input.entityType === "expense" ? "expenses" :
       "ops";
+    if (deleteFeature === "ops" && !capabilities.canManageOps) {
+      return { success: false, error: "Only admin/superior roles can delete work operations records." };
+    }
     if (!(await employeeSessionCanAccessFeature(session, deleteFeature))) {
       return { success: false, error: "Only HR/admin roles can delete records." };
     }

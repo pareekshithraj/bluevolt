@@ -139,8 +139,8 @@ export default function LoginClient() {
         <div className={`${styles.floatPanel} ${styles.floatPanelOne}`}>
           <div className={styles.panelMenu}>...</div>
           <span className={styles.panelKicker}>Workspace pulse</span>
-          <strong>92.4%</strong>
-          <p>active delivery health</p>
+          <strong>Work</strong>
+          <p>tasks, attendance, and daily queues</p>
           <div className={styles.miniHeatmap}>
             {Array.from({ length: 12 }).map((_, index) => <i key={index} />)}
           </div>
@@ -148,20 +148,20 @@ export default function LoginClient() {
         <div className={`${styles.floatPanel} ${styles.floatPanelTwo}`}>
           <span className={styles.panelIcon}><TrendingUp size={20} /></span>
           <span className={styles.panelKicker}>CRM progress</span>
-          <strong>1,248</strong>
-          <p>rows updated this week</p>
-          <em>18.6% up</em>
+          <strong>CRM</strong>
+          <p>assigned sheets and callbacks</p>
+          <em>role based</em>
         </div>
         <div className={`${styles.floatPanel} ${styles.floatPanelThree}`}>
           <span className={styles.panelIcon}><BarChart3 size={20} /></span>
           <span className={styles.panelKicker}>Team hours</span>
-          <strong>384.5</strong>
-          <p>verified work hours</p>
+          <strong>Hours</strong>
+          <p>check-in and check-out history</p>
         </div>
         <div className={`${styles.floatPanel} ${styles.floatPanelFour}`}>
           <span className={styles.panelIcon}><CheckCircle2 size={20} /></span>
-          <strong>218</strong>
-          <p>tasks closed</p>
+          <strong>Docs</strong>
+          <p>signed employee records</p>
         </div>
         <div className={styles.loginCenterLogo}>
           <Image src="/logo.png" alt="" width={128} height={72} />
@@ -189,13 +189,6 @@ export default function LoginClient() {
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </label>
-            <div className={styles.salesaiFormMeta}>
-              <label>
-                <input type="checkbox" />
-                <span>Remember me</span>
-              </label>
-              <button type="button">Forgot Password?</button>
-            </div>
             <button className={styles.salesaiSubmit} type="submit" disabled={pending || isLockedOut}>
               {pending ? "Signing in..." : "Sign in"}
             </button>

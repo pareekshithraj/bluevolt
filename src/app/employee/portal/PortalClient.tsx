@@ -870,6 +870,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
 
   const handleCellChange = (rowId: number, colName: string, newValue: string) => {
     if (!canEditCrmSheet) return;
+    let previousData: Record<string, string> | null = null;
     setData(prev => {
         const crmSheets = [...prev.crmSheets];
         const sheetIndex = crmSheets.findIndex(s => s.id === activeCrmSheetId);
@@ -877,11 +878,45 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
             const rows = [...crmSheets[sheetIndex].rows];
             const rowIndex = rows.findIndex(r => r.id === rowId);
             if (rowIndex !== -1) {
-                const originalData = typeof rows[rowIndex].data === "string" ? JSON.parse(rows[rowIndex].data) : rows[rowIndex].data;
+                let originalData: Record<string, string> = {};
+                if (typeof rows[rowIndex].data === "string") {
+                  try {
+                    originalData = JSON.parse(rows[rowIndex].data) as Record<string, string>;
+                  } catch {
+                    originalData = {};
+                  }
+                } else if (rows[rowIndex].data && typeof rows[rowIndex].data === "object" && !Array.isArray(rows[rowIndex].data)) {
+                  originalData = rows[rowIndex].data as Record<string, string>;
+                }
+                previousData = originalData;
                 const newData = { ...originalData, [colName]: newValue };
                 rows[rowIndex] = { ...rows[rowIndex], data: newData };
                 crmSheets[sheetIndex] = { ...crmSheets[sheetIndex], rows };
-                updateCrmSheetRowData({ rowId: rowId.toString(), data: newData }).catch(console.error);
+                updateCrmSheetRowData({ rowId: rowId.toString(), data: newData }).then((result) => {
+                  if (!result.success) {
+                    setError(result.error || "Cell save failed. The value was restored.");
+                    if (previousData) {
+                      setData((latest) => ({
+                        ...latest,
+                        crmSheets: latest.crmSheets.map((sheet) => sheet.id === activeCrmSheetId ? {
+                          ...sheet,
+                          rows: sheet.rows.map((row) => row.id === rowId ? { ...row, data: previousData } : row),
+                        } : sheet),
+                      }));
+                    }
+                  }
+                }).catch((saveError) => {
+                  setError(simplePortalError(saveError, "Cell save failed. The value was restored."));
+                  if (previousData) {
+                    setData((latest) => ({
+                      ...latest,
+                      crmSheets: latest.crmSheets.map((sheet) => sheet.id === activeCrmSheetId ? {
+                        ...sheet,
+                        rows: sheet.rows.map((row) => row.id === rowId ? { ...row, data: previousData } : row),
+                      } : sheet),
+                    }));
+                  }
+                });
             }
         }
         return { ...prev, crmSheets };
@@ -889,6 +924,17 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   };
 
   const handleCrmRowStatusChange = (rowId: number, status: string) => {
+    const previousRow = data.crmSheets.flatMap((sheet) => sheet.rows).find((row) => row.id === rowId) || null;
+    const restorePreviousRow = () => {
+      if (!previousRow) return;
+      setData((latest) => ({
+        ...latest,
+        crmSheets: latest.crmSheets.map((sheet) => ({
+          ...sheet,
+          rows: sheet.rows.map((row) => row.id === rowId ? previousRow : row),
+        })),
+      }));
+    };
     setData(prev => ({
       ...prev,
       crmSheets: prev.crmSheets.map((sheet) => ({
@@ -907,8 +953,12 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     startTransition(async () => {
       try {
         const result = await updateCrmSheetRowStatus({ rowId: rowId.toString(), status, reason: status });
-        if (!result.success) setError(result.error || "Could not update CRM row.");
+        if (!result.success) {
+          restorePreviousRow();
+          setError(result.error || "Could not update CRM row.");
+        }
       } catch (statusError) {
+        restorePreviousRow();
         setError(simplePortalError(statusError, "Could not update CRM row."));
       }
     });

@@ -61,6 +61,21 @@ function modeText(employeeType: string) {
   return isInternType(employeeType) ? "Remote / Hybrid" : "As assigned by reporting manager";
 }
 
+function contactIcon(type: "phone" | "mail" | "web" | "location") {
+  const paths = {
+    phone:
+      '<path d="M22 16.92v2.18a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 3.4 2 2 0 0 1 4.11 1.22h2.18a2 2 0 0 1 2 1.72c.12.91.33 1.8.62 2.65a2 2 0 0 1-.45 2.11L7.56 8.6a16 16 0 0 0 7.84 7.84l.9-.9a2 2 0 0 1 2.11-.45c.85.29 1.74.5 2.65.62A2 2 0 0 1 22 16.92Z"/>',
+    mail:
+      '<path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"/><path d="m22 7-10 6L2 7"/>',
+    web:
+      '<circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z"/>',
+    location:
+      '<path d="M20 10c0 5.5-8 12-8 12S4 15.5 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+  };
+
+  return `<svg class="contact-svg" viewBox="0 0 24 24" aria-hidden="true">${paths[type]}</svg>`;
+}
+
 type LocalLetterEmployee = {
   id: number;
   name: string;
@@ -315,21 +330,40 @@ export async function GET(request: NextRequest) {
     }
     .contact {
       display: grid;
-      gap: 7px;
+      gap: 8px;
       color: #263244;
       font-size: 11px;
       line-height: 1.35;
+      justify-self: end;
+      max-width: 78mm;
     }
     .contact-row {
       display: grid;
-      grid-template-columns: 20px 1fr;
-      gap: 8px;
+      grid-template-columns: 18px minmax(0, 1fr);
+      gap: 9px;
       align-items: start;
     }
     .contact-icon {
-      color: #34517c;
-      font-weight: 800;
-      text-align: center;
+      width: 18px;
+      height: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #2f5183;
+    }
+    .contact-svg {
+      width: 15px;
+      height: 15px;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      display: block;
+    }
+    .contact-value {
+      color: #172033;
+      overflow-wrap: anywhere;
     }
     .date-row {
       text-align: right;
@@ -461,10 +495,10 @@ export async function GET(request: NextRequest) {
       <header class="header">
         <img class="logo" src="/logo.png" alt="BlueVolt Groups" />
         <div class="contact" aria-label="Company contact details">
-          <div class="contact-row"><span class="contact-icon">T</span><span>${escapeHtml(companyPhone)}</span></div>
-          <div class="contact-row"><span class="contact-icon">E</span><span>${escapeHtml(companyEmail)}</span></div>
-          <div class="contact-row"><span class="contact-icon">W</span><span>${escapeHtml(companyWebsite)}</span></div>
-          <div class="contact-row"><span class="contact-icon">A</span><span>${escapeHtml(companyAddress)}</span></div>
+          <div class="contact-row"><span class="contact-icon">${contactIcon("phone")}</span><span class="contact-value">${escapeHtml(companyPhone)}</span></div>
+          <div class="contact-row"><span class="contact-icon">${contactIcon("mail")}</span><span class="contact-value">${escapeHtml(companyEmail)}</span></div>
+          <div class="contact-row"><span class="contact-icon">${contactIcon("web")}</span><span class="contact-value">${escapeHtml(companyWebsite)}</span></div>
+          <div class="contact-row"><span class="contact-icon">${contactIcon("location")}</span><span class="contact-value">${escapeHtml(companyAddress)}</span></div>
         </div>
       </header>
 

@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "db:migrate": "prisma migrate deploy",
-    "db:sync": "prisma db execute --file prisma/migrations/0002_control_plane_and_studio_project/migration.sql && prisma db execute --file prisma/migrations/0003_employee_portal/migration.sql && prisma db execute --file prisma/migrations/0004_employee_work_profile/migration.sql && prisma db execute --file prisma/migrations/0005_employee_ops_modules/migration.sql && prisma db execute --file prisma/migrations/0006_employee_advanced_ops/migration.sql && prisma db execute --file prisma/migrations/0007_employee_crm_sheets/migration.sql",
+    "db:sync": "prisma db execute --file prisma/migrations/0002_control_plane_and_studio_project/migration.sql && prisma db execute --file prisma/migrations/0003_employee_portal/migration.sql && prisma db execute --file prisma/migrations/0004_employee_work_profile/migration.sql && prisma db execute --file prisma/migrations/0005_employee_ops_modules/migration.sql && prisma db execute --file prisma/migrations/0006_employee_advanced_ops/migration.sql && prisma db execute --file prisma/migrations/0007_employee_crm_sheets/migration.sql && prisma db execute --file prisma/migrations/0008_supabase_direct_api_deny_policies/migration.sql",
     "seed:stores24": "node scripts/seed-stores24.mjs",
     "test:tenancy": "node --import dotenv/config --test tests/*.test.mjs"
   },
@@ -27,9 +27,13 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-globe.gl": "^2.38.0",
+    "read-excel-file": "^9.1.1",
     "three": "^0.183.1",
-    "three-stdlib": "^2.36.1",
-    "xlsx": "^0.18.5"
+    "three-stdlib": "^2.36.1"
+  },
+  "overrides": {
+    "@hono/node-server": "^1.19.13",
+    "postcss": "^8.5.15"
   },
   "devDependencies": {
     "@types/node": "^20",

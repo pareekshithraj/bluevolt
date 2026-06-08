@@ -4,6 +4,10 @@ import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeSession, hasEmployeeRole } from "@/lib/employee/session";
 
+const localFallbackEnabled =
+  process.env.BLUEVOLT_ALLOW_LOCAL_FALLBACK === "true" ||
+  process.env.NODE_ENV !== "production";
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -32,6 +36,8 @@ function employeeCode(id: number) {
 }
 
 async function localEmployeeById(id: number) {
+  if (!localFallbackEnabled) return null;
+
   try {
     const raw = await fs.readFile(path.join(process.cwd(), ".bluevolt-employee-store.json"), "utf8");
     const store = JSON.parse(raw) as {

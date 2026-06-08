@@ -13,6 +13,9 @@ const companyAddress =
 const signatoryName = "K. N. Swathi";
 const signatoryTitle = "Director & Authorized Signatory";
 const signatorySignatureUrl = "/Assets/signatures/swathi_kn-removebg-preview.png";
+const localFallbackEnabled =
+  process.env.BLUEVOLT_ALLOW_LOCAL_FALLBACK === "true" ||
+  process.env.NODE_ENV !== "production";
 
 function escapeHtml(value: string) {
   return value
@@ -73,6 +76,8 @@ type LocalLetterEmployee = {
 };
 
 async function localEmployeeById(id: number) {
+  if (!localFallbackEnabled) return null;
+
   try {
     const raw = await fs.readFile(path.join(process.cwd(), ".bluevolt-employee-store.json"), "utf8");
     const store = JSON.parse(raw) as { users?: LocalLetterEmployee[] };

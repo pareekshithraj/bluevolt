@@ -76,6 +76,9 @@ function numberValue(value?: string): number {
 }
 
 const localEmployeeStorePath = path.join(process.cwd(), ".bluevolt-employee-store.json");
+const localFallbackEnabled =
+  process.env.BLUEVOLT_ALLOW_LOCAL_FALLBACK === "true" ||
+  process.env.NODE_ENV !== "production";
 
 type LocalEmployeeUser = {
   id: number;
@@ -165,7 +168,6 @@ const defaultRolePermissions: Record<string, string> = {
 
 const coreRoleKeys = new Set<string>(EMPLOYEE_ROLES);
 const defaultEmployeePassword = "abc123";
-const documentSignatoryRoles = new Set(["director", "authorized_signatory"]);
 const superiorDashboardRoles = new Set(["super_admin", "director", "authorized_signatory", "admin"]);
 
 function dashboardTypeForRole(key: string): string {
@@ -328,6 +330,10 @@ function localUserFromInput(input: {
 }
 
 async function readLocalEmployeeStore(): Promise<LocalEmployeeStore> {
+  if (!localFallbackEnabled) {
+    throw new Error("Local employee fallback is disabled in production.");
+  }
+
   try {
     const raw = await fs.readFile(localEmployeeStorePath, "utf8");
     const parsed = JSON.parse(raw) as LocalEmployeeStore;
@@ -378,6 +384,10 @@ async function readLocalEmployeeStore(): Promise<LocalEmployeeStore> {
 }
 
 async function writeLocalEmployeeStore(store: LocalEmployeeStore) {
+  if (!localFallbackEnabled) {
+    throw new Error("Local employee fallback is disabled in production.");
+  }
+
   const normalizedStore = { ...store, roles: mergeRoleDefinitions(store.roles) };
   globalForLocalEmployeeStore.bluevoltLocalEmployeeStore = normalizedStore;
 
@@ -515,7 +525,6 @@ export async function getEmployeeApplicationRoleOptions() {
 
 async function employeeSessionCanAccessFeature(session: { role: string }, feature: EmployeePortalFeature): Promise<boolean> {
   if (session.role === "super_admin") return true;
-  if (documentSignatoryRoles.has(session.role)) return true;
   try {
     return roleCanAccessFeature(session.role, await getEmployeeRoleDefinitionsFromDatabase(), feature);
   } catch (error) {
@@ -2399,8 +2408,18 @@ export async function updateEmployeeRecordStatus(input: {
     input.entityType === "expense" ? "expenses" :
     "ops";
   try {
-    const { session } = await requireEmployee();
-    if (!(await employeeSessionCanAccessFeature(session, feature))) {
+    const { session, user } = await requireEmployee();
+    const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
+    const capabilities = capabilitiesForRole(session.role, roleDefinitions);
+    const canManageStatus =
+      input.entityType === "applicant" ? capabilities.canManageApplicants :
+      input.entityType === "payroll" ? capabilities.canManagePayroll :
+      input.entityType === "expense" ? capabilities.canUseSuperiorDashboard && capabilities.canManageExpenses :
+      input.entityType === "leave" ? capabilities.canManageOps :
+      input.entityType === "task" ? true :
+      await employeeSessionCanAccessFeature(session, feature);
+
+    if (!canManageStatus) {
       return { success: false, error: "You do not have permission to approve records." };
     }
     const id = Number(input.id);
@@ -2408,7 +2427,14 @@ export async function updateEmployeeRecordStatus(input: {
     if (input.entityType === "leave") await prisma.employeeLeaveRequest.update({ where: { id }, data: { ...data, reviewedBy: Number(session.userId) } });
     else if (input.entityType === "expense") await prisma.employeeExpenseClaim.update({ where: { id }, data: { ...data, reviewerId: Number(session.userId) } });
     else if (input.entityType === "payroll") await prisma.employeePayrollInput.update({ where: { id }, data });
-    else if (input.entityType === "task") await prisma.employeeTask.update({ where: { id }, data });
+    else if (input.entityType === "task") {
+      const task = await prisma.employeeTask.findUnique({ where: { id } });
+      if (!task) return { success: false, error: "Task not found." };
+      if (!capabilities.canManageOps && task.assignedTo !== user.id) {
+        return { success: false, error: "You can only update tasks assigned to you." };
+      }
+      await prisma.employeeTask.update({ where: { id }, data });
+    }
     else if (input.entityType === "applicant") await prisma.employeeApplicant.update({ where: { id }, data: { stage: input.status } });
     else return { success: false, error: "Unsupported record type." };
     await logEmployeeAudit({ actorId: Number(session.userId), actorName: session.name, action: `${input.entityType}.status`, entityType: input.entityType, entityId: input.id, metadata: { status: input.status } });

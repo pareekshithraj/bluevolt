@@ -117,6 +117,7 @@ export default function PrivilegesTab({
 
   const selectedFeatures = activeRole ? featureAccessSet(activeRole.featureAccess) : new Set<string>();
   const activeRoleIsProtected = activeRole ? protectedRoleKeys.has(activeRole.key) : false;
+  const dashboardLockedRoleKeys = new Set(["super_admin", "director", "authorized_signatory"]);
   const superiorRoleKeys = new Set(["super_admin", "director", "authorized_signatory", "admin"]);
   const roleDashboardType = (roleKey: string, dashboardType?: string | null) => (
     dashboardType || (superiorRoleKeys.has(roleKey) ? "superior" : "workspace")
@@ -226,7 +227,8 @@ export default function PrivilegesTab({
           {roleDefinitions.map((role) => {
             const isSelected = selectedRoleKey === role.key && !isCreatingRole;
             const totalFeatures = EMPLOYEE_PORTAL_FEATURES.length;
-            const featuresCount = role.key === "super_admin" ? totalFeatures : featureAccessSet(role.featureAccess).size;
+            const roleType = roleDashboardType(role.key, role.dashboardType);
+            const featuresCount = role.key === "super_admin" || permanentFullAccessRoleKeys.has(role.key) ? totalFeatures : featureAccessSet(role.featureAccess).size;
             const progressPct = Math.round((featuresCount / totalFeatures) * 100);
             const assignedCount = employees.filter((user) => user.role === role.key).length;
             return (
@@ -251,6 +253,11 @@ export default function PrivilegesTab({
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.76rem", width: "100%", paddingLeft: 42 }}>
                   <code style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>{role.key}</code>
                   <span style={{ color: isSelected ? "var(--text-brand)" : "var(--text-muted)", fontWeight: 600 }}>{assignedCount} mapped</span>
+                </div>
+                <div style={{ width: "100%", paddingLeft: 42, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <span className={roleType === "superior" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>
+                    {roleType === "superior" ? "Superior dashboard" : "Workspace dashboard"}
+                  </span>
                 </div>
                 <div style={{ width: "100%", paddingLeft: 42 }}>
                   <div className={styles.progressBarContainer}>
@@ -323,7 +330,7 @@ export default function PrivilegesTab({
           <form key={`edit-role-${activeRole.key}`} onSubmit={submitRole} className={styles.formGrid}>
             <input type="hidden" name="key" value={activeRole.key} />
             <input type="hidden" name="label" value={activeRole.label} />
-            {activeRoleIsProtected && <input type="hidden" name="dashboardType" value={roleDashboardType(activeRole.key, activeRole.dashboardType)} />}
+            {dashboardLockedRoleKeys.has(activeRole.key) && <input type="hidden" name="dashboardType" value={roleDashboardType(activeRole.key, activeRole.dashboardType)} />}
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gridColumn: "1 / -1", marginBottom: 12, borderBottom: "1px solid var(--border-color)", paddingBottom: 12 }}>
               <div>
@@ -346,7 +353,7 @@ export default function PrivilegesTab({
                   <p>
                     {permanentFullAccessRoleKeys.has(activeRole.key)
                       ? "Director and Director / Authorized Signatory always keep full portal access, document approval, and signature rights."
-                      : "This is a system-protected access role. Basic definitions are locked to maintain database schema stability. Mapped feature capabilities below can still be modified."}
+                      : "This is a system-protected access role. Role identity is locked, but dashboard type and mapped feature capabilities can still be modified."}
                   </p>
                 </div>
               </div>
@@ -374,7 +381,7 @@ export default function PrivilegesTab({
                 className={styles.select}
                 name="dashboardType"
                 defaultValue={roleDashboardType(activeRole.key, activeRole.dashboardType)}
-                disabled={activeRoleIsProtected}
+                disabled={dashboardLockedRoleKeys.has(activeRole.key)}
               >
                 <option value="workspace">Workspace dashboard for employees/interns</option>
                 <option value="superior">Superior dashboard for directors/admins</option>

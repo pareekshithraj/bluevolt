@@ -73,11 +73,13 @@ export default function CrmTab({
       return;
     }
     if (extension === "xlsx" || extension === "xls") {
-      const XLSX = await import("xlsx");
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
-      const firstSheetName = workbook.SheetNames[0];
-      const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[firstSheetName], { FS: "\t" });
-      setCrmSheetPaste(csv);
+      const { readSheet } = await import("read-excel-file/browser");
+      const rows = await readSheet(file);
+      const tsv = rows
+        .map((row) => row.map((cell) => String(cell ?? "").replace(/\t/g, " ").trim()).join("\t"))
+        .filter((line) => line.trim().length > 0)
+        .join("\n");
+      setCrmSheetPaste(tsv);
       return;
     }
     setError("Upload an Excel, CSV, TSV, or text file.");

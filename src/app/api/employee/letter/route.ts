@@ -273,17 +273,18 @@ export async function GET(request: NextRequest) {
       box-shadow: 0 18px 50px rgba(15, 23, 42, 0.16);
     }
     .top-rule {
-      height: 8px;
-      background: linear-gradient(90deg, var(--deep) 0 12%, var(--blue) 12% 30%, var(--purple) 30% 100%);
+      height: 5px;
+      background: linear-gradient(90deg, var(--deep) 0 18%, var(--blue) 18% 42%, var(--purple) 42% 100%);
     }
     .corner-block {
       position: absolute;
-      width: 32mm;
-      height: 18mm;
+      width: 24mm;
+      height: 10mm;
       background: var(--blue);
-      opacity: 0.9;
-      left: 19mm;
-      top: 8px;
+      opacity: 0.12;
+      left: 20mm;
+      top: 5px;
+      border-radius: 0 0 10px 10px;
     }
     .bottom-block {
       position: absolute;

@@ -55,13 +55,30 @@ export default function CrmTab({
   const [crmPanel, setCrmPanel] = useState<"none" | "source">("none");
   const [sheetScrollTop, setSheetScrollTop] = useState(0);
 
-  const canEditCrmSheet = data.session.role === "super_admin";
+  const canEditCrmSheet = data.capabilities.canManageCrmSheets;
   const activeRoleOptions = (data.roleDefinitions || [])
     .filter((role) => role.status !== "Inactive")
     .map((role) => ({ label: role.label, value: role.key }));
   const audienceRoleOptions = [{ label: "All roles", value: "all" }, ...activeRoleOptions];
   const assignableEmployees = data.users.filter((user) => user.status === "Active");
   const activeCrmSheet = activeCrmSheetId ? data.crmSheets.find((sheet) => sheet.id === activeCrmSheetId) : null;
+
+  const normalizeRole = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  const roleList = (value?: string | null) => (value || "").split(",").map((role) => normalizeRole(role)).filter(Boolean);
+  const userList = (value?: string | null) => (value || "").split(",").filter(Boolean);
+  const currentUserId = data.session.userId.toString();
+  const canEditActiveSheet = activeCrmSheet ? (
+    canEditCrmSheet ||
+    (
+      activeCrmSheet.status === "Approved" &&
+      !activeCrmSheet.locked &&
+      (
+        roleList(activeCrmSheet.editorRoles).includes("all") ||
+        roleList(activeCrmSheet.editorRoles).includes(data.session.role) ||
+        userList(activeCrmSheet.editorUsers).includes(currentUserId)
+      )
+    )
+  ) : false;
 
   const loadCrmSheetFile = async (file?: File) => {
     if (!file) return;
@@ -201,7 +218,7 @@ export default function CrmTab({
       {!activeCrmSheet && canEditCrmSheet && crmPanel === "source" && (
         <form className={`${styles.card} ${styles.span12} ${styles.formGrid}`} onSubmit={submit(saveCrmSheetRequest, () => setCrmPanel("none"))}>
           <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Create / Import CRM Sheet</h2>
-          <p className={`${styles.muted} ${styles.fieldWide}`}>Upload or paste Excel/CSV data. Only super admin can create or change sheets.</p>
+          <p className={`${styles.muted} ${styles.fieldWide}`}>Upload or paste Excel/CSV data. Roles with CRM Manage access can create and change sheets.</p>
           <div className={`${styles.field} ${styles.fieldWide}`}>
             <span className={styles.label}>Sheet Title</span>
             <input className={styles.input} name="title" placeholder="e.g. May leads - Bengaluru" required />
@@ -220,6 +237,19 @@ export default function CrmTab({
               {assignableEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} ({employee.email})</option>)}
             </select>
             <span className={styles.muted}>Optional. Use Ctrl/Shift to select multiple people. They can see the sheet even if their role is not selected.</span>
+          </label>
+          <label className={`${styles.field} ${styles.fieldWide}`}>
+            <span className={styles.label}>Editor Roles</span>
+            <select className={styles.select} name="editorRoles" defaultValue={data.session.role}>
+              {audienceRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+            </select>
+            <span className={styles.muted}>Editors can mark rows and edit cells. They are automatically kept visible.</span>
+          </label>
+          <label className={`${styles.field} ${styles.fieldWide}`}>
+            <span className={styles.label}>Editor Employees</span>
+            <select className={styles.select} name="editorUsers" multiple size={Math.min(Math.max(assignableEmployees.length, 3), 8)}>
+              {assignableEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} ({employee.email})</option>)}
+            </select>
           </label>
           <label className={`${styles.field} ${styles.fieldWide}`}>
             <span className={styles.label}>Upload Excel / CSV</span>
@@ -294,7 +324,7 @@ export default function CrmTab({
         const topSpacerHeight = visibleStart * rowHeight;
         const bottomSpacerHeight = Math.max(0, (sheetRows.length - visibleEnd) * rowHeight);
         const selectedCrmRow = sheetRows.find((row) => row.id === selectedCrmRowId) || sheetRows[0] || null;
-        const canMarkRows = data.capabilities.canUseCrm && activeCrmSheet.status === "Approved" && !activeCrmSheet.locked && Boolean(selectedCrmRow);
+        const canMarkRows = data.capabilities.canUseCrm && canEditActiveSheet && Boolean(selectedCrmRow);
         const selectedReference = selectedCrmCell ? cellReference(selectedCrmCell.rowIndex, selectedCrmCell.columnIndex) : "A1";
         const selectedValue = selectedCrmCell ? selectedCrmCell.value : "";
         const blankRowCount = Math.max(80 - sheetRows.length, 30);
@@ -345,7 +375,7 @@ export default function CrmTab({
               </div>
               <div className={styles.sheetHeaderActions}>
                 <span className={activeCrmSheet.status === "Approved" ? `${styles.sheetStatusPill} ${styles.sheetStatusApproved}` : styles.sheetStatusPill}>{activeCrmSheet.status}{activeCrmSheet.locked ? " / Locked" : ""}</span>
-                {!canEditCrmSheet && <span className={styles.sheetStatusPill}>Read only</span>}
+                {!canEditActiveSheet && <span className={styles.sheetStatusPill}>Read only</span>}
                 {canEditCrmSheet && activeCrmSheet.status === "Pending" && (
                   <>
                     <button className={styles.sheetToolbarButton} type="button" onClick={() => runAction(() => approveCrmSheet({ id: activeCrmSheet.id.toString(), status: "Approved" }))}>Approve</button>
@@ -364,8 +394,8 @@ export default function CrmTab({
             </div>
             <div className={styles.sheetMarkingToolbar}>
               <div className={styles.sheetMarkSummary}>
-                <strong>{canEditCrmSheet ? "Mark selected row" : "Selected row"}</strong>
-                <span>{selectedCrmRow ? `Row ${sheetRows.findIndex((row) => row.id === selectedCrmRow.id) + 2}: ${selectedCrmRow.status}${selectedCrmRow.updatedByName ? ` - by ${selectedCrmRow.updatedByName}` : ""}` : "Select a row in the sheet"}</span>
+                <strong>{canEditActiveSheet ? "Mark selected row" : "Selected row"}</strong>
+                <span>{selectedCrmRow ? `Row ${sheetRows.findIndex((row) => row.id === selectedCrmRow.id) + 2}: ${selectedCrmRow.status}${selectedCrmRow.updatedByName ? ` - by ${selectedCrmRow.updatedByName}` : ""}${selectedCrmRow.updatedAt ? ` - ${formatSheetDate(selectedCrmRow.updatedAt)}` : ""}` : "Select a row in the sheet"}</span>
               </div>
               {canMarkRows && (
                 <div className={styles.sheetMarkButtons}>
@@ -398,9 +428,59 @@ export default function CrmTab({
             <div className={styles.sheetAccessStrip}>
               <span><strong>Access</strong> {activeCrmSheet.audienceRoles === "all" ? "All roles" : activeCrmSheet.audienceRoles || "Role restricted"}</span>
               <span><strong>People</strong> {activeCrmSheet.audienceUsers && activeCrmSheet.audienceUsers !== "," ? activeCrmSheet.audienceUsers.split(",").filter(Boolean).length : 0} selected</span>
+              <span><strong>Editors</strong> {activeCrmSheet.editorRoles === "all" ? "All roles" : activeCrmSheet.editorRoles || "Owner role"}</span>
               <span><strong>Requested by</strong> {activeCrmSheet.requestedByName || "Unknown"}</span>
-              <span><strong>Activity</strong> {selectedCrmRow?.updatedAt ? `${formatSheetDate(selectedCrmRow.updatedAt)}${selectedCrmRow.reason ? ` - ${selectedCrmRow.reason}` : ""}` : "No row activity"}</span>
             </div>
+
+            {canEditCrmSheet && (
+              <details className={styles.sheetAccessEditor}>
+                <summary>Edit sheet access</summary>
+                <form className={styles.sheetAccessForm} onSubmit={submit(saveCrmSheetRequest)}>
+                  <input type="hidden" name="id" value={activeCrmSheet.id} />
+                  <input type="hidden" name="sourceName" value={activeCrmSheet.sourceName || "Imported Data"} />
+                  <input type="hidden" name="pasteData" value="" />
+                  <label>
+                    <span className={styles.label}>Sheet title</span>
+                    <input className={styles.input} name="title" defaultValue={activeCrmSheet.title} required />
+                  </label>
+                  <label>
+                    <span className={styles.label}>Owner role</span>
+                    <select className={styles.select} name="ownerRole" defaultValue={activeCrmSheet.ownerRole || data.session.role}>
+                      {activeRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span className={styles.label}>Visible roles</span>
+                    <select className={styles.select} name="audienceRoles" defaultValue={activeCrmSheet.audienceRoles || "all"}>
+                      {audienceRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span className={styles.label}>Visible employees</span>
+                    <select className={styles.select} name="audienceUsers" multiple size={Math.min(Math.max(assignableEmployees.length, 3), 6)} defaultValue={(activeCrmSheet.audienceUsers || "").split(",").filter(Boolean)}>
+                      {assignableEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} ({employee.email})</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span className={styles.label}>Editor roles</span>
+                    <select className={styles.select} name="editorRoles" defaultValue={activeCrmSheet.editorRoles || activeCrmSheet.ownerRole || data.session.role}>
+                      {audienceRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span className={styles.label}>Editor employees</span>
+                    <select className={styles.select} name="editorUsers" multiple size={Math.min(Math.max(assignableEmployees.length, 3), 6)} defaultValue={(activeCrmSheet.editorUsers || "").split(",").filter(Boolean)}>
+                      {assignableEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} ({employee.email})</option>)}
+                    </select>
+                  </label>
+                  <label className={styles.sheetAccessNotes}>
+                    <span className={styles.label}>Notes</span>
+                    <textarea className={styles.textarea} name="description" defaultValue={activeCrmSheet.description || ""} placeholder="Internal notes for this sheet" />
+                  </label>
+                  <button className={styles.button} type="submit">Save access</button>
+                </form>
+              </details>
+            )}
 
             <div className={styles.sheetFormulaRow}>
               <span>{selectedReference}</span>
@@ -462,7 +542,7 @@ export default function CrmTab({
                             const columnIndex = colIndex + 1;
                             return (
                               <td className={selectedCrmCell && selectedCrmCell.rowId === row.id && selectedCrmCell.column === column ? styles.sheetSelectedCell : ""} key={`${row.id}-${column}`}>
-                                {activeCrmSheet.locked || !canEditCrmSheet ? (
+                                {activeCrmSheet.locked || !canEditActiveSheet ? (
                                   <div
                                     className={styles.sheetCellReadOnly}
                                     onClick={() => {

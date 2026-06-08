@@ -276,6 +276,8 @@ model EmployeeCrmSheet {
   ownerRole       String   @default("sales")
   audienceRoles   String   @default("sales")
   audienceUsers   String   @default("")
+  editorRoles     String   @default("sales")
+  editorUsers     String   @default("")
   status          String   @default("Pending")
   locked          Boolean  @default(true)
   columns         Json?
@@ -289,6 +291,8 @@ model EmployeeCrmSheet {
   @@index([ownerRole])
   @@index([audienceRoles])
   @@index([audienceUsers])
+  @@index([editorRoles])
+  @@index([editorUsers])
   @@index([status])
   @@index([requestedBy])
 }

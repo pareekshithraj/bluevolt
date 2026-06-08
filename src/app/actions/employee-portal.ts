@@ -38,6 +38,13 @@ function parseRoles(value: string): string[] {
     .filter(Boolean);
 }
 
+function normalizeAudienceRoles(value?: string, fallback = "sales"): string {
+  const roles = parseRoles(value || fallback).map(normalizeRole);
+  if (roles.includes("all")) return "all";
+  const uniqueRoles = [...new Set(roles.length ? roles : [normalizeRole(fallback)])];
+  return uniqueRoles.join(",");
+}
+
 function normalizeAudienceUsers(value?: string): string {
   const ids = (value || "")
     .split(",")
@@ -47,9 +54,84 @@ function normalizeAudienceUsers(value?: string): string {
   return uniqueIds.length ? `,${uniqueIds.join(",")},` : "";
 }
 
+function mergeAudienceUsers(...values: (string | undefined)[]): string {
+  return normalizeAudienceUsers(values.flatMap((value) => audienceUserIds(value).join(",")).join(","));
+}
+
+function ensureEditorsCanView(input: {
+  audienceRoles?: string;
+  audienceUsers?: string;
+  editorRoles?: string;
+  editorUsers?: string;
+  ownerRole?: string;
+}) {
+  const ownerRole = normalizeRole(input.ownerRole || "sales");
+  const editorRoles = normalizeAudienceRoles(input.editorRoles || ownerRole, ownerRole);
+  let audienceRoles = normalizeAudienceRoles(input.audienceRoles || ownerRole, ownerRole);
+
+  if (audienceRoles !== "all" && editorRoles !== "all") {
+    const visible = new Set(parseRoles(audienceRoles).map(normalizeRole));
+    for (const role of parseRoles(editorRoles).map(normalizeRole)) visible.add(role);
+    audienceRoles = [...visible].join(",");
+  }
+
+  return {
+    audienceRoles,
+    audienceUsers: mergeAudienceUsers(input.audienceUsers, input.editorUsers),
+    editorRoles,
+    editorUsers: normalizeAudienceUsers(input.editorUsers),
+  };
+}
+
+function audienceUserIds(value?: string): number[] {
+  return (value || "")
+    .split(",")
+    .map((entry) => Number(entry.trim()))
+    .filter((entry) => Number.isInteger(entry) && entry > 0);
+}
+
 function visibleToRole(audienceRoles: string, role: string): boolean {
   const roles = parseRoles(audienceRoles);
   return roles.includes("all") || roles.includes(role) || role === "super_admin";
+}
+
+function sheetRoleMatch(roles: string, role: string): boolean {
+  return visibleToRole(roles, role);
+}
+
+function sheetUserMatch(users: string | null | undefined, userId: number): boolean {
+  return (users || "").includes(`,${userId},`);
+}
+
+function canViewCrmSheet(sheet: {
+  status: string;
+  ownerRole: string;
+  audienceRoles: string;
+  audienceUsers?: string | null;
+  requestedBy?: number | null;
+}, session: { role: string }, userId: number): boolean {
+  return session.role === "super_admin" ||
+    sheet.requestedBy === userId ||
+    (sheet.status === "Approved" && (
+      sheetRoleMatch(sheet.audienceRoles, session.role) ||
+      sheetRoleMatch(sheet.ownerRole, session.role) ||
+      sheetUserMatch(sheet.audienceUsers, userId)
+    ));
+}
+
+function canEditCrmSheet(sheet: {
+  status: string;
+  locked: boolean;
+  ownerRole: string;
+  audienceRoles: string;
+  audienceUsers?: string | null;
+  editorRoles?: string | null;
+  editorUsers?: string | null;
+  requestedBy?: number | null;
+}, session: { role: string }, userId: number, canManageCrmSheets: boolean): boolean {
+  if (canManageCrmSheets) return true;
+  if (!canViewCrmSheet(sheet, session, userId) || sheet.status !== "Approved" || sheet.locked) return false;
+  return sheetRoleMatch(sheet.editorRoles || "", session.role) || sheetUserMatch(sheet.editorUsers, userId);
 }
 
 function optionalDate(value?: string): Date | null {
@@ -404,6 +486,7 @@ async function writeLocalEmployeeStore(store: LocalEmployeeStore) {
 let roleTableEnsured = false;
 let crmSheetAccessEnsured = false;
 let chatTableEnsured = false;
+let retentionCleanupLastRun = 0;
 
 async function ensureEmployeeRoleDefinitionTable() {
   if (roleTableEnsured) return;
@@ -439,7 +522,21 @@ async function ensureEmployeeCrmSheetAccessColumns() {
     ADD COLUMN IF NOT EXISTS "audienceUsers" TEXT NOT NULL DEFAULT ''
   `;
   await prisma.$executeRaw`
+    ALTER TABLE "EmployeeCrmSheet"
+    ADD COLUMN IF NOT EXISTS "editorRoles" TEXT NOT NULL DEFAULT 'sales'
+  `;
+  await prisma.$executeRaw`
+    ALTER TABLE "EmployeeCrmSheet"
+    ADD COLUMN IF NOT EXISTS "editorUsers" TEXT NOT NULL DEFAULT ''
+  `;
+  await prisma.$executeRaw`
     CREATE INDEX IF NOT EXISTS "EmployeeCrmSheet_audienceUsers_idx" ON "EmployeeCrmSheet"("audienceUsers")
+  `;
+  await prisma.$executeRaw`
+    CREATE INDEX IF NOT EXISTS "EmployeeCrmSheet_editorRoles_idx" ON "EmployeeCrmSheet"("editorRoles")
+  `;
+  await prisma.$executeRaw`
+    CREATE INDEX IF NOT EXISTS "EmployeeCrmSheet_editorUsers_idx" ON "EmployeeCrmSheet"("editorUsers")
   `;
   crmSheetAccessEnsured = true;
 }
@@ -460,6 +557,20 @@ async function ensureEmployeeChatTable() {
     CREATE INDEX IF NOT EXISTS "EmployeeChatMessage_createdAt_idx" ON "EmployeeChatMessage"("createdAt")
   `;
   chatTableEnsured = true;
+}
+
+async function cleanupEmployeeRetentionData(now = new Date()) {
+  const twelveHours = 12 * 60 * 60 * 1000;
+  if (Date.now() - retentionCleanupLastRun < twelveHours) return;
+  retentionCleanupLastRun = Date.now();
+
+  const daysAgo = (days: number) => new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  await Promise.allSettled([
+    prisma.employeeNotification.deleteMany({ where: { readAt: { lt: daysAgo(30) } } }),
+    prisma.employeeAuditEvent.deleteMany({ where: { createdAt: { lt: daysAgo(180) } } }),
+    prisma.employeeAttendance.deleteMany({ where: { workDate: { lt: daysAgo(400) } } }),
+    prisma.$executeRaw`DELETE FROM "EmployeeChatMessage" WHERE "createdAt" < ${daysAgo(90)}`.catch(() => ({ count: 0 })),
+  ]);
 }
 
 let defaultRolesSeeded = false;
@@ -986,6 +1097,10 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
   const canViewAnnouncements = capabilities.canViewAnnouncements;
   const now = new Date();
 
+  void cleanupEmployeeRetentionData(now).catch((error) => {
+    console.warn("Employee retention cleanup skipped.", error);
+  });
+
   await prisma.employeeUser.update({
     where: { id: user.id },
     data: { lastSeenAt: now },
@@ -1000,15 +1115,17 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
       : Promise.resolve([]),
     ["dashboard", "today", "notifications", "crm", "approvals"].includes(activeTab) && canUseCrm
       ? prisma.employeeCrmSheet.findMany({
-          where: canManage
+          where: canManage || capabilities.canManageCrmSheets
             ? {}
             : {
               OR: [
                 { requestedBy: user.id },
                 { status: "Approved", audienceRoles: "all" },
                 { status: "Approved", audienceRoles: session.role },
+                { status: "Approved", audienceRoles: { contains: session.role } },
                 { status: "Approved", audienceUsers: { contains: `,${user.id},` } },
                 { status: "Approved", ownerRole: session.role },
+                { status: "Approved", ownerRole: { contains: session.role } },
               ],
             },
           include: { rows: { orderBy: { rowNumber: "asc" }, take: 5000 } },
@@ -1487,29 +1604,72 @@ export async function saveCrmRecord(input: {
 }
 
 export async function saveCrmSheetRequest(input: {
+  id?: string;
   title: string;
   sourceName?: string;
   ownerRole: string;
   audienceRoles?: string;
   audienceUsers?: string;
+  editorRoles?: string;
+  editorUsers?: string;
   description?: string;
   pasteData?: string;
 }) {
   const { session, user } = await requireEmployee();
-  if (session.role !== "super_admin") {
-    return { success: false, error: "Only super admin can create CRM sheets." };
+  const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
+  const capabilities = capabilitiesForRole(session.role, roleDefinitions);
+  if (!capabilities.canManageCrmSheets) {
+    return { success: false, error: "Your role is not mapped to manage CRM sheets." };
   }
   await ensureEmployeeCrmSheetAccessColumns();
+  const ownerRole = normalizeRole(input.ownerRole || session.role);
+  const access = ensureEditorsCanView({
+    ownerRole,
+    audienceRoles: input.audienceRoles,
+    audienceUsers: input.audienceUsers,
+    editorRoles: input.editorRoles,
+    editorUsers: input.editorUsers,
+  });
+
+  if (input.id) {
+    const sheet = await prisma.employeeCrmSheet.update({
+      where: { id: Number(input.id) },
+      data: {
+        title: input.title.trim(),
+        sourceName: input.sourceName?.trim() || "Pasted or CSV source",
+        ownerRole,
+        audienceRoles: access.audienceRoles,
+        audienceUsers: access.audienceUsers,
+        editorRoles: access.editorRoles,
+        editorUsers: access.editorUsers,
+        description: input.description,
+        updatedAt: new Date(),
+      },
+    });
+    await logEmployeeAudit({
+      actorId: user.id,
+      actorName: session.name,
+      action: "crm_sheet.access_update",
+      entityType: "crm_sheet",
+      entityId: sheet.id.toString(),
+      metadata: { audienceRoles: sheet.audienceRoles, audienceUsers: sheet.audienceUsers, editorRoles: sheet.editorRoles, editorUsers: sheet.editorUsers },
+    });
+    revalidatePath("/employee/portal");
+    return { success: true };
+  }
+
   const parsed = parseSheetText(input.pasteData);
-  const autoApproved = session.role === "super_admin" || hasEmployeeRole(session, ["admin", "hr"]);
+  const autoApproved = capabilities.canManageCrmSheets || hasEmployeeRole(session, ["admin", "hr"]);
   const sheet = await prisma.employeeCrmSheet.create({
     data: {
       title: input.title.trim(),
       sourceName: input.sourceName?.trim() || "Pasted or CSV source",
       sourceType: "Pasted sheet",
-      ownerRole: normalizeRole(input.ownerRole),
-      audienceRoles: input.audienceRoles?.trim() || input.ownerRole || "sales",
-      audienceUsers: normalizeAudienceUsers(input.audienceUsers),
+      ownerRole,
+      audienceRoles: access.audienceRoles,
+      audienceUsers: access.audienceUsers,
+      editorRoles: access.editorRoles,
+      editorUsers: access.editorUsers,
       description: input.description,
       status: autoApproved ? "Approved" : "Pending",
       locked: !autoApproved,
@@ -1550,8 +1710,9 @@ export async function saveCrmSheetRequest(input: {
 
 export async function approveCrmSheet(input: { id: string; status: string }) {
   const { session } = await requireEmployee();
-  if (session.role !== "super_admin") {
-    return { success: false, error: "Only super admin can approve CRM source sheets." };
+  const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
+  if (!capabilitiesForRole(session.role, roleDefinitions).canManageCrmSheets) {
+    return { success: false, error: "Your role is not mapped to approve CRM source sheets." };
   }
   const status = input.status === "Rejected" ? "Rejected" : "Approved";
   const sheet = await prisma.employeeCrmSheet.update({
@@ -1580,8 +1741,9 @@ export async function approveCrmSheet(input: { id: string; status: string }) {
 
 export async function addCrmSheetRows(input: { sheetId: string; pasteData: string }) {
   const { session, user } = await requireEmployee();
-  if (session.role !== "super_admin") {
-    return { success: false, error: "Only super admin can add CRM sheet rows." };
+  const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
+  if (!capabilitiesForRole(session.role, roleDefinitions).canManageCrmSheets) {
+    return { success: false, error: "Your role is not mapped to add CRM sheet rows." };
   }
   const sheet = await prisma.employeeCrmSheet.findUnique({ where: { id: Number(input.sheetId) }, include: { rows: { orderBy: { rowNumber: "desc" }, take: 1 } } });
   if (!sheet) return { success: false, error: "Sheet not found." };
@@ -1610,21 +1772,15 @@ export async function updateCrmSheetRowStatus(input: {
   const { session, user } = await requireEmployee();
   const canUseCrm = await employeeSessionCanAccessFeature(session, "crm");
   if (!canUseCrm) return { success: false, error: "You do not have CRM access." };
+  const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
+  const capabilities = capabilitiesForRole(session.role, roleDefinitions);
   const row = await prisma.employeeCrmSheetRow.findUnique({
     where: { id: Number(input.rowId) },
     include: { sheet: true },
   });
   if (!row) return { success: false, error: "CRM row not found." };
   const sheet = row.sheet;
-  const canAccessSheet = session.role === "super_admin" ||
-    sheet.requestedBy === user.id ||
-    (sheet.status === "Approved" && (
-      sheet.audienceRoles === "all" ||
-      sheet.audienceRoles === session.role ||
-      sheet.ownerRole === session.role ||
-      (sheet.audienceUsers || "").includes(`,${user.id},`)
-    ));
-  if (!canAccessSheet || sheet.status !== "Approved" || sheet.locked) {
+  if (!canEditCrmSheet(sheet, session, user.id, capabilities.canManageCrmSheets)) {
     return { success: false, error: "This CRM sheet is not available for row updates." };
   }
   const status = ["Open", "Done", "Callback", "Not Interested", "Invalid"].includes(input.status) ? input.status : "Open";
@@ -2489,20 +2645,25 @@ export async function updateCrmSheetRowData(input: {
   rowId: string;
   data: Record<string, string>;
 }) {
-  const { session } = await requireEmployee();
-  if (session.role !== "super_admin") {
-    return { success: false, error: "Only super admin can edit CRM sheet cells." };
-  }
+  const { session, user } = await requireEmployee();
+  const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
+  const capabilities = capabilitiesForRole(session.role, roleDefinitions);
   const row = await prisma.employeeCrmSheetRow.findUnique({ where: { id: Number(input.rowId) }, include: { sheet: true } });
   if (!row) return { success: false, error: "Row not found." };
-  
-  if (row.sheet.locked) {
-    return { success: false, error: "Sheet is locked." };
+  if (!canEditCrmSheet(row.sheet, session, user.id, capabilities.canManageCrmSheets)) {
+    return { success: false, error: "Your role is not mapped to edit CRM sheet cells." };
   }
 
   await prisma.employeeCrmSheetRow.update({
     where: { id: Number(input.rowId) },
-    data: { data: input.data },
+    data: {
+      data: Object.fromEntries(
+        Object.entries(input.data).map(([column, value]) => [
+          column,
+          isPhoneColumn(column) ? normalizePhoneValue(value) : value,
+        ])
+      ),
+    },
   });
   await prisma.employeeCrmSheet.update({ where: { id: row.sheetId }, data: { updatedAt: new Date() } });
   return { success: true };
@@ -2516,8 +2677,8 @@ export async function deleteEmployeeEntity(input: {
     const { session } = await requireEmployee();
     const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
     const capabilities = capabilitiesForRole(session.role, roleDefinitions);
-    if (["crm", "crmSheet"].includes(input.entityType) && session.role !== "super_admin") {
-      return { success: false, error: "Only super admin can delete CRM records." };
+    if (["crm", "crmSheet"].includes(input.entityType) && !capabilities.canManageCrmSheets) {
+      return { success: false, error: "Your role is not mapped to delete CRM records." };
     }
     if (input.entityType === "resource" && !capabilities.canManageResources) {
       return { success: false, error: "Only mapped resource managers can delete resources." };

@@ -164,7 +164,7 @@
 }
 
 
-/* â”€â”€ Stunning Login UI â”€â”€ */
+/* Stunning Login UI */
 .loginWrapper {
   display: flex;
   min-height: 100vh;
@@ -317,7 +317,7 @@
   color: var(--text-muted);
 }
 
-/* â”€â”€ Centered Apply Form Layout â”€â”€ */
+/* Centered Apply Form Layout */
 .login {
   display: flex;
   min-height: 100vh;
@@ -881,7 +881,7 @@
 
 .sheetAccessStrip {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   padding: 10px 14px;
   border-bottom: 1px solid var(--sheet-border);
@@ -901,10 +901,52 @@
   margin-right: 4px;
 }
 
+.sheetAccessEditor {
+  border-bottom: 1px solid var(--sheet-border);
+  background: #ffffff;
+  padding: 10px 14px;
+}
+
+.sheetAccessEditor summary {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #d7def0;
+  border-radius: 8px;
+  color: #0f172a;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.sheetAccessForm {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.sheetAccessNotes {
+  grid-column: span 3;
+}
+
+.sheetAccessForm .textarea {
+  min-height: 86px;
+}
+
 @media (max-width: 1024px) {
   .roleFocusGrid,
   .sheetAccessStrip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sheetAccessForm {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sheetAccessNotes {
+    grid-column: span 2;
   }
 
   .salesaiLogin {
@@ -963,6 +1005,12 @@
   .roleFocusGrid,
   .sheetAccessStrip {
     grid-template-columns: 1fr;
+  }
+
+  .sheetAccessForm,
+  .sheetAccessNotes {
+    grid-template-columns: 1fr;
+    grid-column: span 1;
   }
 
   .salesaiVisual {

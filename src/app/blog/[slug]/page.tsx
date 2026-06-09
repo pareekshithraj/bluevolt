@@ -23,10 +23,10 @@ export async function generateMetadata({
   if (!post) {
     return {
       title: {
-        absolute: "BlueVolt Blog",
+        absolute: "BLUEVOLT Blog",
       },
       description:
-        "Perspectives from BlueVolt Groups Private Limited on digital infrastructure and integrated ecosystems.",
+        "Perspectives from BLUEVOLT Groups Private Limited on digital infrastructure and integrated ecosystems.",
     };
   }
 
@@ -47,7 +47,7 @@ export async function generateMetadata({
       url,
       type: "article",
       locale: "en_IN",
-      siteName: "BlueVolt",
+      siteName: "BLUEVOLT",
       publishedTime: post.publishedAt,
     },
     twitter: {
@@ -109,11 +109,11 @@ export default async function BlogArticlePage({ params }: BlogPageProps) {
     articleSection: post.sections.map((section) => section.title),
     author: {
       "@type": "Organization",
-      name: "BlueVolt Groups Private Limited",
+      name: "BLUEVOLT Groups Private Limited",
     },
     publisher: {
       "@type": "Organization",
-      name: "BlueVolt Groups Private Limited",
+      name: "BLUEVOLT Groups Private Limited",
       logo: {
         "@type": "ImageObject",
         url: "https://bluevolt.group/icon.png",
@@ -130,7 +130,7 @@ export default async function BlogArticlePage({ params }: BlogPageProps) {
 
       <article className={styles.article}>
         <header className={styles.hero}>
-          <p className={styles.eyebrow}>BlueVolt Insights</p>
+          <p className={styles.eyebrow}>BLUEVOLT Insights</p>
           <h1 className={styles.title}>{post.title}</h1>
           <p className={styles.subtitle}>{post.subtitle}</p>
           <p className={styles.meta}>

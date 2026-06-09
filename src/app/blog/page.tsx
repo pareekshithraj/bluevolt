@@ -3,9 +3,9 @@ import Link from "next/link";
 import styles from "./page.module.css";
 import { blogPosts, formatBlogDate } from "./posts";
 
-const BLOG_TITLE = "BlueVolt Blog: Insights on Integrated Digital Infrastructure";
+const BLOG_TITLE = "BLUEVOLT Blog: Insights on Integrated Digital Infrastructure";
 const BLOG_DESCRIPTION =
-  "Perspectives from BlueVolt Groups Private Limited on integrated software ecosystems, digital infrastructure, enterprise operations, and global market readiness.";
+  "Perspectives from BLUEVOLT Groups Private Limited on integrated software ecosystems, digital infrastructure, enterprise operations, and global market readiness.";
 const BLOG_URL = "https://bluevolt.group/blog";
 
 export const metadata: Metadata = {
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     "NEP 2020",
     "school management software India",
     "education digital infrastructure",
-    "BlueVolt blog",
+    "BLUEVOLT blog",
   ],
   alternates: {
     canonical: "/blog",
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     url: BLOG_URL,
     type: "website",
     locale: "en_IN",
-    siteName: "BlueVolt",
+    siteName: "BLUEVOLT",
   },
   twitter: {
     card: "summary_large_image",
@@ -60,12 +60,12 @@ export default function BlogIndexPage() {
       />
 
       <section className={styles.hero} aria-labelledby="blog-heading">
-        <p className={styles.eyebrow}>BlueVolt Perspectives</p>
+        <p className={styles.eyebrow}>BLUEVOLT Perspectives</p>
         <h1 id="blog-heading" className={styles.title}>
           Strategic Insights for the Global Digital Economy
         </h1>
         <p className={styles.subtitle}>
-          Editorial perspectives from BlueVolt Groups Private Limited on
+          Editorial perspectives from BLUEVOLT Groups Private Limited on
           integrated software ecosystems, enterprise execution, and digital
           infrastructure at scale.
         </p>

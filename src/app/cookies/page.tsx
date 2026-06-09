@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import styles from "../legal/page.module.css";
 import CookiePreferencesManager from "./CookiePreferencesManager";
 
-const title = "Cookie Preferences | BlueVolt";
+const title = "Cookie Preferences | BLUEVOLT";
 const description =
-  "Cookie categories and preference controls for BlueVolt websites and services.";
+  "Cookie categories and preference controls for BLUEVOLT websites and services.";
 const url = "https://bluevolt.group/cookies";
 const image = "https://bluevolt.group/icon.png";
 
@@ -18,14 +18,14 @@ export const metadata: Metadata = {
     title,
     description,
     url,
-    siteName: "BlueVolt",
+    siteName: "BLUEVOLT",
     type: "article",
     images: [
       {
         url: image,
         width: 1200,
         height: 630,
-        alt: "BlueVolt Cookie Preferences",
+        alt: "BLUEVOLT Cookie Preferences",
       },
     ],
   },

@@ -2,10 +2,10 @@ import { Metadata } from "next";
 
 export const metadata: Metadata = {
     title: "Careers",
-    description: "Join BlueVolt and build the future of education. Discover open roles in engineering, design, and operations.",
+    description: "Join BLUEVOLT and build the future of education. Discover open roles in engineering, design, and operations.",
     openGraph: {
-        title: "Careers | BlueVolt",
-        description: "Join BlueVolt and build the future of education. Discover open roles in engineering, design, and operations.",
+        title: "Careers | BLUEVOLT",
+        description: "Join BLUEVOLT and build the future of education. Discover open roles in engineering, design, and operations.",
         url: "https://bluevolt.group/careers",
     },
 };

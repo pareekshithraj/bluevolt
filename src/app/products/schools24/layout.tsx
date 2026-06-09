@@ -4,7 +4,7 @@ export const metadata: Metadata = {
     title: "Schools24",
     description: "End-to-end infrastructure for modern schools. We handle technology, smart classrooms, and systems so you can focus on education.",
     openGraph: {
-        title: "Schools24 | BlueVolt",
+        title: "Schools24 | BLUEVOLT",
         description: "End-to-end infrastructure for modern schools. We handle technology, smart classrooms, and systems so you can focus on education.",
         url: "https://bluevolt.group/products/schools24",
     },

@@ -512,7 +512,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const currentEmployee = employees.find((user) => user.id === currentUserId);
   const activeAttendance = data.attendance.find((entry) => entry.employeeId === currentUserId && entry.loginAt && !entry.logoutAt);
   const isWorking = clockOverride ? clockOverride === "working" : Boolean(activeAttendance);
-  const recentAttendance = data.attendance.slice(0, data.capabilities.canManage ? 12 : 6);
+  const recentAttendance = data.attendance.slice(0, visibleDashboardAttendance);
   const selectedHoursEmployeeId = Number(workHoursEmployeeId || currentUserId);
   const selectedHoursEmployee = employees.find((user) => user.id === selectedHoursEmployeeId) || currentEmployee;
   const teamWorkHours = data.attendance.reduce((total, entry) => total + Number(entry.totalHours || 0), 0);
@@ -993,7 +993,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
 
   const copyApplicationLink = async () => {
     try {
-      const message = `BlueVolt application link:\n${applicationLink}\n\nPlease fill this form if you are applying for an employee or internship role.`;
+      const message = `BLUEVOLT application link:\n${applicationLink}\n\nPlease fill this form if you are applying for an employee or internship role.`;
       await navigator.clipboard.writeText(message);
       setNotice("Application link copied. Paste it in WhatsApp.");
     } catch {
@@ -1045,23 +1045,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               <Field label="Email" name="email" type="email" required />
               <input type="hidden" name="password" value="abc123" />
               <Field label="Role" name="role" options={roleOptions} defaultValue={roleOptions.some((role) => role.value === "employee") ? "employee" : roleOptions[0]?.value} />
-              
-              <details className={styles.fieldWide} style={{ cursor: "pointer", padding: "10px 0", borderTop: "1px solid var(--border-color)", marginTop: "10px" }}>
-                <summary style={{ fontWeight: 600, color: "var(--text-primary)" }}>Advanced Options (Department, Title, Hours)</summary>
-                <div className={styles.formGrid} style={{ marginTop: "16px" }}>
-                  <Field label="Department" name="departmentId" options={departmentOptions} />
-                  <Field label="Title" name="title" defaultValue="Team Member" />
-                  <Field label="Employee Type" name="employeeType" options={["Full-time", "Part-time", "Intern", "Contractor", "Consultant"]} />
-                  <Field label="Paid Status" name="compensationStatus" options={["Paid", "Unpaid"]} />
-                  <Field label="Employment Start" name="employmentStart" type="date" />
-                  <Field label="Employment End" name="employmentEnd" type="date" />
-                  <Field label="Work Starts" name="workStartTime" type="time" defaultValue="09:00" />
-                  <Field label="Work Ends" name="workEndTime" type="time" defaultValue="18:00" />
-                  <Field label="Status" name="status" options={["Active", "Inactive"]} />
-                </div>
-              </details>
-              
-              <div className={`${styles.notice} ${styles.fieldWide}`}>Default password: abc123. User will be warned to change it after first login.</div>
+              <div className={`${styles.notice} ${styles.fieldWide}`} style={{ marginTop: '16px' }}>Default password: abc123. User will be warned to change it after first login.</div>
               <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Create User Access</button>
             </form>
           </div>
@@ -1083,7 +1067,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
           {sidebarCollapsed ? (
             <span style={{ fontSize: "1.45rem", fontWeight: 900, color: "var(--text-brand)" }}>B</span>
           ) : (
-            <Image src="/logo.png" alt="BlueVolt Logo" width={110} height={52} style={{ height: 52, width: "auto", objectFit: "contain" }} />
+            <Image src="/logo.png" alt="BLUEVOLT Logo" width={110} height={52} style={{ height: 52, width: "auto", objectFit: "contain" }} />
           )}
         </div>
         <div className={styles.sidebarProfile}>
@@ -1535,7 +1519,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
             <div className={`${styles.card} ${styles.span12} ${styles.dashboardHero}`}>
               <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
                 <div style={{ flexShrink: 0, width: 86, height: 78, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-shell)", padding: 12, borderRadius: "18px", border: "1px solid var(--border-color)", boxShadow: "var(--shadow-sm)" }}>
-                  <Image src="/logo.png" alt="BlueVolt Logo" width={86} height={78} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                  <Image src="/logo.png" alt="BLUEVOLT Logo" width={86} height={78} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
                 </div>
                 <div>
                   <span className={styles.eyebrow}>{normalizedRole.includes("sales") ? "Sales Workspace" : normalizedRole.includes("content") ? "Content Workspace" : "My Workspace"}</span>
@@ -1718,6 +1702,11 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   <span className={entry.logoutAt ? styles.pill : `${styles.pill} ${styles.pillSuccess}`}>{entry.logoutAt ? `${entry.totalHours.toFixed(2)} hrs` : "Live"}</span>
                 </div>
               ))}</div>
+              {data.attendance.length > visibleDashboardAttendance && (
+                <button className={styles.ghostButton} type="button" onClick={() => setVisibleDashboardAttendance(v => v + 5)} style={{ width: '100%', marginTop: '16px' }}>
+                  Show More (5)
+                </button>
+              )}
             </div>
           </section>
         )}
@@ -1727,7 +1716,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
             <div className={`${styles.card} ${styles.span12} ${styles.dashboardHero}`}>
               <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
                 <div style={{ flexShrink: 0, width: 96, height: 86, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-shell)", padding: 12, borderRadius: "18px", border: "1px solid var(--border-color)", boxShadow: "var(--shadow-sm)" }}>
-                  <Image src="/logo.png" alt="BlueVolt Logo" width={96} height={86} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                  <Image src="/logo.png" alt="BLUEVOLT Logo" width={96} height={86} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
                 </div>
                 <div>
                   <span className={styles.eyebrow}>Today Command Center</span>
@@ -2169,16 +2158,33 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 </div>
                 <span className={styles.pill}>{data.attendance.length} records</span>
               </div>
-              <div className={styles.list}>{data.attendance.length === 0 ? <div className={styles.emptyState}>No attendance records yet.</div> : data.attendance.map((entry) => (
-                <div className={styles.row} key={entry.id}>
-                  <div className={styles.rowHeader}><strong>{entry.employeeName}</strong><span className={entry.logoutAt ? styles.pill : `${styles.pill} ${styles.pillSuccess}`}>{entry.logoutAt ? entry.status : "Working now"}</span></div>
-                  <p className={styles.muted}>
-                    {formatPortalDate(entry.workDate)} - In: {formatPortalDateTime(entry.loginAt)} - Out: {entry.logoutAt ? formatPortalDateTime(entry.logoutAt) : "Still working"} - {entry.totalHours.toFixed(2)} hours
-                  </p>
-                  {entry.notes && <p>{entry.notes}</p>}
-                  {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "attendance", id: entry.id.toString() }))}>Delete</button>}
+              <div className={styles.list}>{data.attendance.length === 0 ? <div className={styles.emptyState}>No attendance records yet.</div> : data.attendance.slice(0, visibleOpsAttendance).map((entry) => (
+                <div className={styles.row} key={entry.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'center', padding: '16px', borderRadius: '12px', background: 'var(--card-bg)' }}>
+                  <div>
+                    <div className={styles.rowHeader} style={{ marginBottom: '4px' }}>
+                      <strong style={{ fontSize: '1.05rem' }}>{entry.employeeName}</strong>
+                      <span className={entry.logoutAt ? styles.pill : `${styles.pill} ${styles.pillSuccess}`}>{entry.logoutAt ? entry.status : "Working now"}</span>
+                    </div>
+                    <p className={styles.muted} style={{ fontSize: '0.9rem', marginBottom: entry.notes ? '8px' : '0' }}>
+                      <CalendarDays size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'text-bottom' }} /> {formatPortalDate(entry.workDate)} &nbsp;|&nbsp; 
+                      <strong>In:</strong> {formatPortalTime(entry.loginAt)} &nbsp;|&nbsp; 
+                      <strong>Out:</strong> {entry.logoutAt ? formatPortalTime(entry.logoutAt) : "Live"} &nbsp;|&nbsp; 
+                      <span style={{ color: 'var(--text-color)', fontWeight: 500 }}>{entry.totalHours.toFixed(2)} hrs</span>
+                    </p>
+                    {entry.notes && <p style={{ fontSize: '0.85rem', padding: '8px', background: 'var(--bg-shell)', borderRadius: '6px', margin: 0 }}>{entry.notes}</p>}
+                  </div>
+                  {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && (
+                    <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "attendance", id: entry.id.toString() }))}>
+                      Delete
+                    </button>
+                  )}
                 </div>
               ))}</div>
+              {data.attendance.length > visibleOpsAttendance && (
+                <button className={styles.ghostButton} type="button" onClick={() => setVisibleOpsAttendance(v => v + 5)} style={{ width: '100%', marginTop: '16px' }}>
+                  Show More (5)
+                </button>
+              )}
             </div>
 
             <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveLeaveRequest)}>
@@ -2199,20 +2205,33 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 </div>
                 <span className={styles.pill}>{data.leaveRequests.length} requests</span>
               </div>
-              <div className={styles.list}>{data.leaveRequests.length === 0 ? <div className={styles.emptyState}>No leave requests yet.</div> : data.leaveRequests.map((leave) => (
-                <div className={styles.row} key={leave.id}>
-                  <div className={styles.rowHeader}><strong>{leave.employeeName}</strong><span className={leave.status === "Approved" ? `${styles.pill} ${styles.pillSuccess}` : leave.status === "Rejected" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{leave.status}</span></div>
-                  <p className={styles.muted}>{leave.leaveType} - {formatPortalDate(leave.startsAt)} to {formatPortalDate(leave.endsAt)}</p>
-                  {leave.reason && <p>{leave.reason}</p>}
+              <div className={styles.list}>{data.leaveRequests.length === 0 ? <div className={styles.emptyState}>No leave requests yet.</div> : data.leaveRequests.slice(0, visibleOpsLeave).map((leave) => (
+                <div className={styles.row} key={leave.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'center', padding: '16px', borderRadius: '12px', background: 'var(--card-bg)' }}>
+                  <div>
+                    <div className={styles.rowHeader} style={{ marginBottom: '4px' }}>
+                      <strong style={{ fontSize: '1.05rem' }}>{leave.employeeName}</strong>
+                      <span className={leave.status === "Approved" ? `${styles.pill} ${styles.pillSuccess}` : leave.status === "Rejected" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{leave.status}</span>
+                    </div>
+                    <p className={styles.muted} style={{ fontSize: '0.9rem', marginBottom: leave.reason ? '8px' : '0' }}>
+                      <CalendarDays size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'text-bottom' }} /> {leave.leaveType} &nbsp;|&nbsp; 
+                      {formatPortalDate(leave.startsAt)} to {formatPortalDate(leave.endsAt)}
+                    </p>
+                    {leave.reason && <p style={{ fontSize: '0.85rem', padding: '8px', background: 'var(--bg-shell)', borderRadius: '6px', margin: 0 }}>{leave.reason}</p>}
+                  </div>
                   {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && (
-                    <div className={styles.toolbar}>
-                      <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "leave", id: leave.id.toString(), status: "Approved" }))}>Approve</button>
-                      <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "leave", id: leave.id.toString(), status: "Rejected" }))}>Reject</button>
-                      <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "leave", id: leave.id.toString() }))}>Delete</button>
+                    <div className={styles.toolbar} style={{ flexDirection: 'column', gap: '8px' }}>
+                      <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "leave", id: leave.id.toString(), status: "Approved" }))} style={{ padding: '6px 12px' }}>Approve</button>
+                      <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "leave", id: leave.id.toString(), status: "Rejected" }))} style={{ padding: '6px 12px' }}>Reject</button>
+                      <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "leave", id: leave.id.toString() }))} style={{ padding: '6px 12px' }}>Delete</button>
                     </div>
                   )}
                 </div>
               ))}</div>
+              {data.leaveRequests.length > visibleOpsLeave && (
+                <button className={styles.ghostButton} type="button" onClick={() => setVisibleOpsLeave(v => v + 5)} style={{ width: '100%', marginTop: '16px' }}>
+                  Show More (5)
+                </button>
+              )}
             </div>
 
             {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveTask)}>
@@ -2861,7 +2880,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
             <div className={`${styles.card} ${styles.span12} ${styles.dashboardHero}`}>
               <div>
                 <span className={styles.eyebrow}>Internal Group Chat</span>
-                <h2 className={styles.heroTitle} style={{ margin: "4px 0" }}>BlueVolt team room</h2>
+                <h2 className={styles.heroTitle} style={{ margin: "4px 0" }}>BLUEVOLT team room</h2>
                 <p className={styles.muted} style={{ margin: 0 }}>Company-wide chat for quick coordination across sales, content, operations, admins, and directors.</p>
               </div>
               <div className={styles.heroActions}>

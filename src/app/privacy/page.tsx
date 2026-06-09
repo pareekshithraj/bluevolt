@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import styles from "../legal/page.module.css";
 
-const title = "Privacy Policy | BlueVolt";
+const title = "Privacy Policy | BLUEVOLT";
 const description =
-  "Privacy Policy for BlueVolt Groups Private Limited products and services, including schools24.in.";
+  "Privacy Policy for BLUEVOLT Groups Private Limited products and services, including schools24.in.";
 const url = "https://bluevolt.group/privacy";
 const image = "https://bluevolt.group/icon.png";
 
@@ -17,14 +17,14 @@ export const metadata: Metadata = {
     title,
     description,
     url,
-    siteName: "BlueVolt",
+    siteName: "BLUEVOLT",
     type: "article",
     images: [
       {
         url: image,
         width: 1200,
         height: 630,
-        alt: "BlueVolt Privacy Policy",
+        alt: "BLUEVOLT Privacy Policy",
       },
     ],
   },
@@ -43,7 +43,7 @@ export default function PrivacyPage() {
         <p className={styles.eyebrow}>Legal</p>
         <h1 className={styles.title}>Privacy Policy</h1>
         <p className={styles.subtitle}>
-          This policy explains how BlueVolt Groups Private Limited collects, uses,
+          This policy explains how BLUEVOLT Groups Private Limited collects, uses,
           stores, and protects personal data across our websites and products,
           including Schools24.
         </p>

@@ -133,9 +133,9 @@ export default function LoginClient() {
     <main className={`${styles.login} ${theme === "light" ? styles.themeLight : styles.themeDark}`}>
       <div className={styles.loginCard} style={{ maxWidth: "440px", padding: "3rem" }}>
         <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-          <Image src="/logo.png" alt="BlueVolt Logo" width={80} height={40} style={{ margin: "0 auto 1.5rem" }} />
+          <Image src="/logo.png" alt="BLUEVOLT Logo" width={80} height={40} style={{ margin: "0 auto 1.5rem" }} />
           <h1 style={{ fontSize: "1.5rem", fontWeight: "600", color: "var(--text-primary)", marginBottom: "0.5rem" }}>
-            Sign in to BlueVolt
+            Sign in to BLUEVOLT
           </h1>
           <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
             Employee workspace and portal access

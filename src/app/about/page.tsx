@@ -20,7 +20,7 @@ export default function AboutPage() {
                     </Reveal>
                     <Reveal delay={0.3}>
                         <p style={{ fontSize: '1.25rem', color: 'var(--text-secondary)', maxWidth: '700px', margin: '0 auto', lineHeight: 1.6 }}>
-                            BlueVolt Groups Private Limited engineers the critical digital infrastructure required to run global educational ecosystems at scale.
+                            BLUEVOLT Groups Private Limited engineers the critical digital infrastructure required to run global educational ecosystems at scale.
                         </p>
                     </Reveal>
                 </div>
@@ -73,7 +73,7 @@ export default function AboutPage() {
                                 </div>
                                 <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>Pareekshith Raj</h3>
                                 <p style={{ color: 'var(--accent)', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.5rem' }}>Founder and CEO</p>
-                                <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>Driving BlueVolt&apos;s vision to revolutionize digital infrastructure, blending strategic leadership with a passion for transformative educational technology.</p>
+                                <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>Driving BLUEVOLT&apos;s vision to revolutionize digital infrastructure, blending strategic leadership with a passion for transformative educational technology.</p>
                                 <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginTop: '1.2rem' }}>
                                     <a href="https://www.linkedin.com/in/pareekshith-raj/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-secondary)', transition: 'color 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}>
                                         <Linkedin size={20} />
@@ -99,7 +99,7 @@ export default function AboutPage() {
                                 </div>
                                 <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>Swathi K N</h3>
                                 <p style={{ color: 'var(--accent)', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.5rem' }}>Director</p>
-                                <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>Spearheading operational excellence and strategic growth initiatives, ensuring robust scaling of BlueVolt&apos;s enterprise solutions globally.</p>
+                                <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>Spearheading operational excellence and strategic growth initiatives, ensuring robust scaling of BLUEVOLT&apos;s enterprise solutions globally.</p>
                                 <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginTop: '1.2rem' }}>
                                     <a href="https://www.linkedin.com/in/swathi-raj-08a7873b3/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-secondary)', transition: 'color 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}>
                                         <Linkedin size={20} />

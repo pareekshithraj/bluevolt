@@ -71,8 +71,8 @@ export default function Footer() {
                     <div>
                         <h4>CORPORATE</h4>
                         <ul>
-                            <li><Link href="/about">About BlueVolt</Link></li>
-                            <li><Link href="/studio">BlueVolt Studio</Link></li>
+                            <li><Link href="/about">About BLUEVOLT</Link></li>
+                            <li><Link href="/studio">BLUEVOLT Studio</Link></li>
                             <li><Link href="/careers">Careers</Link></li>
                             <li><Link href="/contact">Inquire</Link></li>
                             <li><a href="mailto:Pareekshithraj@schools24.in" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Mail size={12} /> pareekshithraj@schools24.in</a></li>

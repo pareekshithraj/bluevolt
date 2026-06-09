@@ -494,7 +494,7 @@ export async function GET(request: NextRequest) {
     <img class="watermark" src="/logo.png" alt="" />
     <section class="content">
       <header class="header">
-        <img class="logo" src="/logo.png" alt="BlueVolt Groups" />
+        <img class="logo" src="/logo.png" alt="BLUEVOLT Groups" />
         <div class="contact" aria-label="Company contact details">
           <div class="contact-row"><span class="contact-icon">${contactIcon("phone")}</span><span class="contact-value">${escapeHtml(companyPhone)}</span></div>
           <div class="contact-row"><span class="contact-icon">${contactIcon("mail")}</span><span class="contact-value">${escapeHtml(companyEmail)}</span></div>

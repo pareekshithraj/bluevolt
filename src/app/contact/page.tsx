@@ -125,7 +125,7 @@ export default function ContactPage() {
                   marginBottom: "2rem",
                 }}
               >
-                Connect with our global sales team to discover how BlueVolt can
+                Connect with our global sales team to discover how BLUEVOLT can
                 synchronize your institution&apos;s digital infrastructure.
               </p>
 

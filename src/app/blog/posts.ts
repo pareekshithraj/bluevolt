@@ -204,23 +204,23 @@ const rawBlogPosts: BlogPost[] = [
   {
     slug: "introducing-bluevolt-groups",
     title:
-      "Introducing Bluevolt Groups: Building Integrated Digital Infrastructure",
+      "Introducing BLUEVOLT Groups: Building Integrated Digital Infrastructure",
     subtitle:
       "Building the digital backbone for education, enterprise workflows, and connected institutional growth in India.",
     description:
-      "Bluevolt Groups Private Limited is an Indian technology company building an integrated software ecosystem across education, enterprise tools, and digital infrastructure.",
+      "BLUEVOLT Groups Private Limited is an Indian technology company building an integrated software ecosystem across education, enterprise tools, and digital infrastructure.",
     publishedAt: "2026-03-11",
     readingTime: "6 min read",
     sections: [
       {
         id: "about-bluevolt-groups",
-        title: "About Bluevolt Groups",
+        title: "About BLUEVOLT Groups",
         paragraphs: [
-          "Bluevolt Groups Private Limited is an Indian technology company focused on solving infrastructure fragmentation across modern institutions. We design, build, and operate digital systems that connect core operations, improve reliability, and reduce complexity for leadership teams.",
+          "BLUEVOLT Groups Private Limited is an Indian technology company focused on solving infrastructure fragmentation across modern institutions. We design, build, and operate digital systems that connect core operations, improve reliability, and reduce complexity for leadership teams.",
           "Our operating model combines product engineering, platform integration, and long-term deployment thinking. This approach allows organizations to scale with confidence while preserving performance, governance, and user trust at every layer.",
         ],
         links: [
-          { label: "About Bluevolt", href: "/about" },
+          { label: "About BLUEVOLT", href: "/about" },
           {
             label: "Explore Schools24",
             href: "https://schools24.in",
@@ -232,7 +232,7 @@ const rawBlogPosts: BlogPost[] = [
         id: "ecosystem-vision",
         title: "Ecosystem Vision",
         paragraphs: [
-          "Bluevolt's long-term vision is to build integrated software ecosystems, not disconnected applications. We focus on a unified architecture where identity, workflows, analytics, and automation operate as one system.",
+          "BLUEVOLT's long-term vision is to build integrated software ecosystems, not disconnected applications. We focus on a unified architecture where identity, workflows, analytics, and automation operate as one system.",
           "By connecting products through shared infrastructure, institutions can move faster, lower operational overhead, and make decisions with consistent real-time data. The outcome is a resilient digital foundation that supports both immediate execution and future expansion.",
         ],
       },
@@ -249,8 +249,8 @@ const rawBlogPosts: BlogPost[] = [
         id: "future-direction",
         title: "Future Direction",
         paragraphs: [
-          "Bluevolt will continue investing in platform interoperability, intelligent automation, and enterprise-grade reliability to strengthen every product in the ecosystem.",
-          "As India accelerates its digital transformation, Bluevolt Groups Private Limited is positioned to build the infrastructure layer that bridges education, enterprise tools, and long-term digital growth.",
+          "BLUEVOLT will continue investing in platform interoperability, intelligent automation, and enterprise-grade reliability to strengthen every product in the ecosystem.",
+          "As India accelerates its digital transformation, BLUEVOLT Groups Private Limited is positioned to build the infrastructure layer that bridges education, enterprise tools, and long-term digital growth.",
         ],
       },
     ],
@@ -278,7 +278,7 @@ const rawBlogPosts: BlogPost[] = [
         title: "Architecture for Scale",
         paragraphs: [
           "Global growth requires a platform architecture with shared identity, unified workflows, and consistent data contracts. This model reduces operational risk and accelerates feature delivery across markets.",
-          "Bluevolt's approach emphasizes integration by design, so products can evolve independently while still behaving as one ecosystem.",
+          "BLUEVOLT's approach emphasizes integration by design, so products can evolve independently while still behaving as one ecosystem.",
         ],
       },
       {
@@ -365,7 +365,7 @@ const rawBlogPosts: BlogPost[] = [
         id: "platform-strategy",
         title: "A Platform Strategy Across Schools24, Events24, and Stores24",
         paragraphs: [
-          "Bluevolt products are designed to support distinct use cases while sharing common platform capabilities. This creates a stronger user journey and more consistent operational intelligence.",
+          "BLUEVOLT products are designed to support distinct use cases while sharing common platform capabilities. This creates a stronger user journey and more consistent operational intelligence.",
           "The result is better continuity between education workflows, event operations, and commerce infrastructure.",
         ],
         links: [
@@ -433,7 +433,7 @@ const rawBlogPosts: BlogPost[] = [
         title: "The Next Decade Roadmap",
         paragraphs: [
           "The next phase of growth belongs to companies that can combine deep local execution with platform consistency at global scale.",
-          "Bluevolt's roadmap is centered on this exact thesis: build durable infrastructure in India, then extend that capability worldwide.",
+          "BLUEVOLT's roadmap is centered on this exact thesis: build durable infrastructure in India, then extend that capability worldwide.",
         ],
       },
     ],

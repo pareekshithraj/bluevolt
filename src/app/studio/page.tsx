@@ -96,7 +96,7 @@ export default function StudioPage() {
           <div className={styles.statusIndicator}>
             <span>Admin Gateway</span>
           </div>
-          <h1 className={styles.title}>BlueVolt Studio</h1>
+          <h1 className={styles.title}>BLUEVOLT Studio</h1>
           <p className={styles.subtitle}>
             Access and manage client workspaces. Authenticate below using your project password.
           </p>

@@ -4,7 +4,7 @@ export const metadata: Metadata = {
     title: "Events24",
     description: "Transform chaotic campus events into flawless, data-driven experiences with Events24. From ticketing to real-time analytics.",
     openGraph: {
-        title: "Events24 | BlueVolt",
+        title: "Events24 | BLUEVOLT",
         description: "Transform chaotic campus events into flawless, data-driven experiences with Events24. From ticketing to real-time analytics.",
         url: "https://bluevolt.group/products/events24",
     },

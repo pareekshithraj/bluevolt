@@ -57,7 +57,7 @@ export async function registerUser(data: { name: string; username: string; passw
       return { success: false, error: "Username or Email is already registered." };
     }
 
-    const workspaceBase = data.name.trim() || data.username.split("@")[0] || "BlueVolt";
+    const workspaceBase = data.name.trim() || data.username.split("@")[0] || "BLUEVOLT";
     const workspaceSlug = workspaceBase.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 32) || `bluevolt-${Date.now()}`;
     const created = await prisma.$transaction(async (tx) => {
       const organization = await tx.organization.create({
@@ -156,7 +156,7 @@ export async function loginUser(data: { username: string; password: string }) {
     });
 
     if (!primaryAssignment) {
-      const workspaceBase = user.name.trim() || user.username.split("@")[0] || "BlueVolt";
+      const workspaceBase = user.name.trim() || user.username.split("@")[0] || "BLUEVOLT";
       const workspaceSlug = workspaceBase.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 32) || `bluevolt-${Date.now()}`;
 
       await prisma.$transaction(async (tx) => {

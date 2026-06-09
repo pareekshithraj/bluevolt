@@ -367,11 +367,11 @@ export default function CrmTab({
           <div className={styles.fullSheetApp}>
             <div className={styles.sheetAppHeader}>
               <button className={styles.sheetLogoButton} type="button" onClick={() => setActiveCrmSheetId(null)} aria-label="Back to CRM sheets">
-                <Image src="/logo.png" alt="BlueVolt Logo" width={70} height={36} className={styles.bluevoltSheetLogo} />
+                <Image src="/logo.png" alt="BLUEVOLT Logo" width={70} height={36} className={styles.bluevoltSheetLogo} />
               </button>
               <div className={styles.sheetTitleBlock}>
                 <div className={styles.sheetDocumentName}>{activeCrmSheet.title || "Untitled spreadsheet"} <span>*</span></div>
-                <div className={styles.sheetSubTitle}>{activeCrmSheet.sourceName || "BlueVolt CRM source"} - {doneRows}/{totalRows} done</div>
+                <div className={styles.sheetSubTitle}>{activeCrmSheet.sourceName || "BLUEVOLT CRM source"} - {doneRows}/{totalRows} done</div>
               </div>
               <div className={styles.sheetHeaderActions}>
                 <span className={activeCrmSheet.status === "Approved" ? `${styles.sheetStatusPill} ${styles.sheetStatusApproved}` : styles.sheetStatusPill}>{activeCrmSheet.status}{activeCrmSheet.locked ? " / Locked" : ""}</span>

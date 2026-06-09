@@ -1,8 +1,8 @@
 import { Metadata } from "next";
 
-const pageTitle = "Contact | BlueVolt";
+const pageTitle = "Contact | BLUEVOLT";
 const pageDescription =
-  "Connect with BlueVolt's global sales team to discover how we can synchronize your institution's digital infrastructure.";
+  "Connect with BLUEVOLT's global sales team to discover how we can synchronize your institution's digital infrastructure.";
 const pageUrl = "https://bluevolt.group/contact";
 const ogImage = "https://bluevolt.group/icon.png";
 
@@ -16,14 +16,14 @@ export const metadata: Metadata = {
     title: pageTitle,
     description: pageDescription,
     url: pageUrl,
-    siteName: "BlueVolt",
+    siteName: "BLUEVOLT",
     type: "website",
     images: [
       {
         url: ogImage,
         width: 1200,
         height: 630,
-        alt: "BlueVolt",
+        alt: "BLUEVOLT",
       },
     ],
   },

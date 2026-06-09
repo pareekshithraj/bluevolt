@@ -254,7 +254,7 @@ export async function GET(request: NextRequest) {
   <article class="card">
     <section class="top">
       <div class="brand">
-        <img class="logo" src="/Assets/Logos/BLUEVOLT.png" alt="BlueVolt" />
+        <img class="logo" src="/Assets/Logos/BLUEVOLT.png" alt="BLUEVOLT" />
         <span>Employee ID</span>
       </div>
       <div class="avatar">${escapeHtml(initials(employee.name))}</div>
@@ -272,7 +272,7 @@ export async function GET(request: NextRequest) {
         <div class="line"><span>Hours</span><span>${escapeHtml(employee.workStartTime || "Not set")} to ${escapeHtml(employee.workEndTime || "Not set")}</span></div>
       </div>
       <div class="footer">
-        This ID card is valid only while the employee status is active in the BlueVolt employee portal.
+        This ID card is valid only while the employee status is active in the BLUEVOLT employee portal.
       </div>
     </section>
   </article>

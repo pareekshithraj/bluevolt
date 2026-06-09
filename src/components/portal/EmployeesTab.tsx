@@ -148,7 +148,7 @@ export default function EmployeesTab({
   );
 
   const mailtoFor = (user: EmployeeListItem) => {
-    const subject = encodeURIComponent("Your BlueVolt Offer Letter");
+    const subject = encodeURIComponent("Your BLUEVOLT Offer Letter");
     const body = encodeURIComponent(
       `Hello ${user.name},\n\nPlease find your official appointment details and job responsibilities letter at the link below:\n${window.location.origin}${letterUrlFor(user)}\n\nBest regards,\nBlueVolt Group HR`
     );

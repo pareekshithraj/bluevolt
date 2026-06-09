@@ -36,7 +36,7 @@ export default function CareersPage() {
                         </Reveal>
                         <Reveal delay={0.3}>
                             <p style={{ fontSize: '1.25rem', color: 'var(--text-secondary)', maxWidth: '700px', margin: '0 auto', lineHeight: 1.6, marginBottom: '3rem' }}>
-                                At BlueVolt, we are engineering the digital infrastructure that empowers schools and institutions globally. Help us shape the next generation of learning environments.
+                                At BLUEVOLT, we are engineering the digital infrastructure that empowers schools and institutions globally. Help us shape the next generation of learning environments.
                             </p>
                         </Reveal>
                         <Reveal delay={0.4}>
@@ -52,7 +52,7 @@ export default function CareersPage() {
                     <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
                         <Reveal delay={0.2}>
                             <div style={{ textAlign: 'center', marginBottom: '4rem' }}>
-                                <h2 style={{ fontSize: '2.5rem', fontWeight: 800, marginBottom: '1rem', color: 'var(--text-primary)' }}>Why BlueVolt?</h2>
+                                <h2 style={{ fontSize: '2.5rem', fontWeight: 800, marginBottom: '1rem', color: 'var(--text-primary)' }}>Why BLUEVOLT?</h2>
                                 <p style={{ fontSize: '1.1rem', color: 'var(--text-secondary)', maxWidth: '600px', margin: '0 auto' }}>We tackle complex, global-scale problems in an environment that values deep work, autonomy, and cross-border collaboration.</p>
                             </div>
                         </Reveal>

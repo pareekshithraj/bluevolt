@@ -11,7 +11,7 @@ export default async function Home() {
   const host = (await headers()).get("host")?.toLowerCase() ?? "";
   const stores24External = "https://stores24.bluevolt.group";
 
-  // Ensure stores24 subdomain root never renders the main BlueVolt landing page.
+  // Ensure stores24 subdomain root never renders the main BLUEVOLT landing page.
   if (host.startsWith("stores24.")) {
     redirect(stores24External);
   }
@@ -82,7 +82,7 @@ export default async function Home() {
                     backdropFilter: "blur(10px)",
                     WebkitBackdropFilter: "blur(10px)"
                   }}>
-                    <span style={{ color: "#f59e0b" }}>✨</span> Introducing BlueVolt Studio
+                    <span style={{ color: "#f59e0b" }}>✨</span> Introducing BLUEVOLT Studio
                   </span>
                 </div>
               </Reveal>
@@ -108,7 +108,7 @@ export default async function Home() {
                   color: "#475569",
                   fontWeight: 400
                 }}>
-                  BlueVolt Studio orchestrates education, e-commerce, healthcare diagnostics, events, and modern SaaS networks in a single unified platform. Built to automate complex workflows and accelerate growth.
+                  BLUEVOLT Studio orchestrates education, e-commerce, healthcare diagnostics, events, and modern SaaS networks in a single unified platform. Built to automate complex workflows and accelerate growth.
                 </p>
               </Reveal>
 
@@ -126,7 +126,7 @@ export default async function Home() {
                     fontWeight: 600,
                     borderRadius: "9999px"
                   }}>
-                    Open BlueVolt Studio <ArrowRight size={16} />
+                    Open BLUEVOLT Studio <ArrowRight size={16} />
                   </Link>
                   <Link href="/contact" className="firebase-btn-secondary btn-pill" style={{
                     borderColor: "rgba(99, 91, 255, 0.25)",
@@ -258,12 +258,12 @@ export default async function Home() {
 
         <div className="logo-strip-row">
           
-          {/* BlueVolt */}
+          {/* BLUEVOLT */}
           <Reveal delay={0.1}>
             <a href="/about" className="logo-strip-item">
               <Image 
                 src="/Assets/Logos/BLUEVOLT.png" 
-                alt="BlueVolt Logo" 
+                alt="BLUEVOLT Logo" 
                 width={200} 
                 height={55} 
                 style={{ objectFit: 'contain', width: 'auto', height: '72px' }} 

@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import styles from "./page.module.css";
 import Link from "next/link";
 
-const title = "Legal Disclosure & Corporate Information | BlueVolt";
+const title = "Legal Disclosure & Corporate Information | BLUEVOLT";
 const description =
-  "Official legal disclosure and corporate information for BlueVolt Groups Private Limited.";
+  "Official legal disclosure and corporate information for BLUEVOLT Groups Private Limited.";
 const url = "https://bluevolt.group/legal";
 const image = "https://bluevolt.group/icon.png";
 
@@ -18,14 +18,14 @@ export const metadata: Metadata = {
     title,
     description,
     url,
-    siteName: "BlueVolt",
+    siteName: "BLUEVOLT",
     type: "article",
     images: [
       {
         url: image,
         width: 1200,
         height: 630,
-        alt: "BlueVolt Legal Disclosure",
+        alt: "BLUEVOLT Legal Disclosure",
       },
     ],
   },
@@ -44,14 +44,14 @@ export default function LegalPage() {
         <p className={styles.eyebrow}>Governance</p>
         <h1 className={styles.title}>Legal Disclosure</h1>
         <p className={styles.subtitle}>
-          Corporate information and statutory disclosures for BlueVolt Groups Private Limited.
+          Corporate information and statutory disclosures for BLUEVOLT Groups Private Limited.
         </p>
         <p className={styles.meta}>Last updated: April 26, 2026</p>
 
         <section className={styles.section}>
           <h2>1. Corporate Identity</h2>
           <ul>
-            <li><strong>Company Name:</strong> BlueVolt Groups Private Limited</li>
+            <li><strong>Company Name:</strong> BLUEVOLT Groups Private Limited</li>
             <li><strong>Registered Under:</strong> The Companies Act, 2013</li>
             <li><strong>Incorporation Sub-category:</strong> Company limited by shares</li>
           </ul>
@@ -90,7 +90,7 @@ export default function LegalPage() {
         <section className={styles.section}>
           <h2>5. Dispute Resolution & Jurisdiction</h2>
           <p>
-            The BlueVolt platform, services, and associated legal matters are subject to the laws of India. Any disputes arising out of the use of our services or related to our corporate entity are subject to the exclusive jurisdiction of the courts in Karnataka, India.
+            The BLUEVOLT platform, services, and associated legal matters are subject to the laws of India. Any disputes arising out of the use of our services or related to our corporate entity are subject to the exclusive jurisdiction of the courts in Karnataka, India.
           </p>
         </section>
 

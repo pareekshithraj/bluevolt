@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import styles from "../legal/page.module.css";
 
-const title = "Terms of Service | BlueVolt";
+const title = "Terms of Service | BLUEVOLT";
 const description =
-  "Terms of Service for BlueVolt Groups Private Limited products and services.";
+  "Terms of Service for BLUEVOLT Groups Private Limited products and services.";
 const url = "https://bluevolt.group/terms";
 const image = "https://bluevolt.group/icon.png";
 
@@ -17,14 +17,14 @@ export const metadata: Metadata = {
     title,
     description,
     url,
-    siteName: "BlueVolt",
+    siteName: "BLUEVOLT",
     type: "article",
     images: [
       {
         url: image,
         width: 1200,
         height: 630,
-        alt: "BlueVolt Terms of Service",
+        alt: "BLUEVOLT Terms of Service",
       },
     ],
   },
@@ -43,7 +43,7 @@ export default function TermsPage() {
         <p className={styles.eyebrow}>Legal</p>
         <h1 className={styles.title}>Terms of Service</h1>
         <p className={styles.subtitle}>
-          These terms govern use of BlueVolt websites, products, APIs, and
+          These terms govern use of BLUEVOLT websites, products, APIs, and
           related services. By using our services, you agree to these terms.
         </p>
         <p className={styles.meta}>Last updated: March 11, 2026</p>
@@ -69,7 +69,7 @@ export default function TermsPage() {
         <section className={styles.section}>
           <h2>3. Intellectual Property</h2>
           <p>
-            BlueVolt and its licensors retain all rights in the platform,
+            BLUEVOLT and its licensors retain all rights in the platform,
             software, branding, and content. No rights are transferred except as
             expressly granted under these terms.
           </p>
@@ -87,7 +87,7 @@ export default function TermsPage() {
         <section className={styles.section}>
           <h2>5. Limitation of Liability</h2>
           <p>
-            To the maximum extent permitted by law, BlueVolt is not liable for
+            To the maximum extent permitted by law, BLUEVOLT is not liable for
             indirect, incidental, special, or consequential damages resulting
             from use of the services.
           </p>

@@ -329,6 +329,10 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const [isCreatingRole, setIsCreatingRole] = useState<boolean>(false);
   const [passwordAlertDismissed, setPasswordAlertDismissed] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [visibleDashboardAttendance, setVisibleDashboardAttendance] = useState(5);
+  const [visibleOpsAttendance, setVisibleOpsAttendance] = useState(5);
+  const [visibleOpsLeave, setVisibleOpsLeave] = useState(5);
+  const [visibleOpsTasks, setVisibleOpsTasks] = useState(5);
 
   const [theme, setTheme] = useState<"dark" | "light">("light");
   const [now, setNow] = useState(new Date());

@@ -34,14 +34,14 @@
   --button-ghost-text: #e2e8f0;
 
   /* Custom overrides for redesign */
-  --card-bg: linear-gradient(145deg, rgba(16, 22, 34, 0.65), rgba(12, 16, 26, 0.85));
-  --card-shadow: 0 16px 40px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  --dashboard-hero-bg: linear-gradient(135deg, rgba(56, 189, 248, 0.12), rgba(245, 158, 11, 0.05)), rgba(12, 16, 26, 0.7);
-  --dashboard-hero-border: rgba(56, 189, 248, 0.2);
-  --dashboard-hero-shadow: 0 16px 40px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 30px rgba(56, 189, 248, 0.1);
+  --card-bg: var(--bg-card);
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --dashboard-hero-bg: #090e1a;
+  --dashboard-hero-border: var(--border-color);
+  --dashboard-hero-shadow: none;
   --nav-active-color: #38bdf8;
-  --nav-active-bg: linear-gradient(90deg, rgba(56, 189, 248, 0.15), transparent);
-  --nav-active-border: rgba(56, 189, 248, 0.3);
+  --nav-active-bg: rgba(56, 189, 248, 0.08);
+  --nav-active-border: rgba(56, 189, 248, 0.2);
   --nav-active-shadow: inset 2px 0 0 #38bdf8;
   --card-title-color: #e2e8f0;
   --metric-value-color: linear-gradient(to right, #ffffff, #cbd5e1);
@@ -113,13 +113,13 @@
   --button-ghost-text: #0f172a;
 
   /* Custom overrides for redesign */
-  --card-bg: linear-gradient(145deg, #ffffff, #f8fafc);
-  --card-shadow: 0 10px 30px rgba(15, 23, 42, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  --dashboard-hero-bg: linear-gradient(135deg, rgba(99, 91, 255, 0.08), rgba(245, 158, 11, 0.03)), rgba(255, 255, 255, 0.9);
-  --dashboard-hero-border: rgba(99, 91, 255, 0.15);
-  --dashboard-hero-shadow: 0 16px 40px rgba(99, 91, 255, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 30px rgba(99, 91, 255, 0.05);
+  --card-bg: var(--bg-card);
+  --card-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  --dashboard-hero-bg: #f8fafc;
+  --dashboard-hero-border: var(--border-color);
+  --dashboard-hero-shadow: none;
   --nav-active-color: #635bff;
-  --nav-active-bg: linear-gradient(90deg, rgba(99, 91, 255, 0.08), transparent);
+  --nav-active-bg: rgba(99, 91, 255, 0.08);
   --nav-active-border: rgba(99, 91, 255, 0.2);
   --nav-active-shadow: inset 2px 0 0 #635bff;
   --card-title-color: var(--text-primary);
@@ -3563,38 +3563,39 @@
 }
 
 /* --- COLLAPSIBLE SIDEBAR STATE --- */
-.shellCollapsed {
-  grid-template-columns: 84px minmax(0, 1fr) !important;
-}
+@media (min-width: 961px) {
+  .shellCollapsed {
+    grid-template-columns: 84px minmax(0, 1fr) !important;
+  }
 
-.sidebarCollapsed {
-  padding: 28px 12px !important;
-  align-items: center !important;
-}
+  .sidebarCollapsed {
+    padding: 28px 12px !important;
+    align-items: center !important;
+  }
 
-.sidebarCollapsed .sidebarProfile {
-  padding: 8px !important;
-  justify-content: center !important;
-  width: 100% !important;
-}
+  .sidebarCollapsed .sidebarProfile {
+    padding: 8px !important;
+    justify-content: center !important;
+    width: 100% !important;
+  }
 
-.sidebarCollapsed .nav {
-  align-items: center !important;
-  width: 100% !important;
-}
+  .sidebarCollapsed .nav {
+    align-items: center !important;
+    width: 100% !important;
+  }
 
-.sidebarCollapsed .navButton {
-  justify-content: center !important;
-  padding: 10px !important;
-  width: 42px !important;
-  height: 42px !important;
-}
+  .sidebarCollapsed .navButton {
+    justify-content: center !important;
+    padding: 10px !important;
+    width: 42px !important;
+    height: 42px !important;
+  }
 
-.sidebarCollapsed .logoutButton {
-  justify-content: center !important;
-  padding: 10px !important;
-  width: 42px !important;
-  height: 42px !important;
-  border-top: none !important;
+  .sidebarCollapsed .logoutButton {
+    justify-content: center !important;
+    padding: 10px !important;
+    width: 42px !important;
+    height: 42px !important;
+    border-top: none !important;
+  }
 }
-

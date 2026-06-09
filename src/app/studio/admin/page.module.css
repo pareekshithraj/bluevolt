@@ -1,46 +1,11 @@
 .adminWrapper {
   min-height: 100vh;
-  background-color: #050505;
-  color: #ffffff;
+  background-color: #fafafa;
+  color: #111827;
   position: relative;
   overflow: hidden;
-  padding: 10rem 4rem;
+  padding: 6rem 4rem;
   font-family: var(--font-sans);
-}
-
-.structuralGrid {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image: linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-                    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-  background-size: 60px 60px;
-  opacity: 0.6;
-  z-index: 1;
-}
-
-.glowLeft {
-  position: absolute;
-  width: 900px;
-  height: 800px;
-  bottom: -200px;
-  left: -200px;
-  background: radial-gradient(circle, rgba(249, 115, 22, 0.28) 0%, rgba(239, 68, 68, 0.08) 50%, transparent 100%);
-  filter: blur(120px);
-  z-index: 0;
-  pointer-events: none;
-}
-
-.glowRight {
-  position: absolute;
-  width: 900px;
-  height: 800px;
-  top: -200px;
-  right: -200px;
-  background: radial-gradient(circle, rgba(168, 85, 247, 0.25) 0%, rgba(217, 70, 239, 0.06) 50%, transparent 100%);
-  filter: blur(120px);
-  z-index: 0;
-  pointer-events: none;
 }
 
 .content {
@@ -59,21 +24,19 @@
 }
 
 .loginCard {
-  background: rgba(10, 10, 12, 0.72);
-  backdrop-filter: blur(28px);
-  -webkit-backdrop-filter: blur(28px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
   padding: 3rem;
   width: 100%;
   max-width: 440px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 35px rgba(0, 210, 255, 0.03);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
 }
 
 .loginTitle {
-  font-size: 1.8rem;
+  font-size: 1.6rem;
   font-weight: 600;
-  color: #ffffff;
+  color: #111827;
   margin-bottom: 0.5rem;
   display: flex;
   align-items: center;
@@ -81,67 +44,74 @@
 }
 
 .loginSubtitle {
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
+  font-size: 0.9rem;
+  color: #6b7280;
   margin-bottom: 2.5rem;
-  letter-spacing: 0.08em;
 }
 
 /* Forms styling */
 .formGroup {
-  margin-bottom: 1.8rem;
+  margin-bottom: 1.5rem;
 }
 
 .formLabel {
   display: block;
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  margin-bottom: 0.6rem;
-  letter-spacing: 0.05em;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 0.5rem;
 }
 
 .formInput {
   width: 100%;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 1rem 1.2rem;
-  font-family: var(--font-sans);
-  color: #ffffff;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  padding: 0.75rem 1rem;
+  color: #111827;
   font-size: 0.95rem;
-  border-radius: 8px;
+  border-radius: 6px;
   outline: none;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
 }
 
 .formInput:focus {
-  border-color: var(--neon-blue);
-  background: rgba(255, 255, 255, 0.04);
-  box-shadow: 0 0 15px rgba(0, 210, 255, 0.1);
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
 .btnBlock {
   width: 100%;
-  background: #f59e0b; /* Firebase Orange */
+  background: #2563eb;
   border: none;
-  color: #000000;
-  padding: 1rem;
-  border-radius: 8px;
+  color: #ffffff;
+  padding: 0.8rem;
+  border-radius: 6px;
   cursor: pointer;
   font-size: 0.95rem;
-  font-weight: 600;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(245, 158, 11, 0.2);
+  font-weight: 500;
+  transition: all 0.2s ease;
   margin-top: 1rem;
 }
 
 .btnBlock:hover {
-  background: #d97706;
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.3);
+  background: #1d4ed8;
+}
+
+.btnCancel {
+  width: 100%;
+  background: transparent;
+  border: 1px solid #d1d5db;
+  color: #374151;
+  padding: 0.8rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.btnCancel:hover {
+  background: #f3f4f6;
 }
 
 /* Dashboard Header */
@@ -149,41 +119,38 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid #e5e7eb;
   padding-bottom: 2.5rem;
   margin-bottom: 4rem;
 }
 
 .dashTitleArea h1 {
-  font-family: var(--font-serif);
-  font-size: 3rem;
+  font-size: 2.2rem;
   font-weight: 700;
+  color: #111827;
   margin-bottom: 0.5rem;
 }
 
 .dashTitleArea p {
-  color: var(--text-secondary);
+  color: #6b7280;
   font-size: 1.1rem;
-  font-weight: 300;
 }
 
 .btnLogout {
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: var(--text-secondary);
-  padding: 0.7rem 1.4rem;
-  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  color: #374151;
+  padding: 0.6rem 1.2rem;
+  border-radius: 6px;
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.05em;
-  transition: all 0.25s ease;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
 
 .btnLogout:hover {
-  border-color: #ef4444;
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.03);
+  background: #f3f4f6;
+  color: #111827;
 }
 
 /* Grid Layout: Form on Left, List on Right */
@@ -201,18 +168,20 @@
 }
 
 .panelTitle {
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   font-weight: 600;
-  margin-bottom: 2rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: #111827;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
   padding-bottom: 0.8rem;
 }
 
 .formCard {
-  background: rgba(10, 10, 12, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  padding: 2.5rem;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  padding: 2rem;
   border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
 .listPanel {
@@ -222,67 +191,95 @@
 }
 
 .nodeItem {
-  background: rgba(10, 10, 12, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
   border-radius: 12px;
-  padding: 1.8rem;
+  padding: 1.5rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
   transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
 .nodeItem:hover {
-  border-color: rgba(255, 255, 255, 0.1);
-  background: rgba(15, 15, 18, 0.6);
+  border-color: #d1d5db;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
 }
 
 .nodeInfo h3 {
-  font-size: 1.2rem;
-  font-weight: 500;
-  color: #ffffff;
-  margin-bottom: 0.25rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 0.4rem;
 }
 
 .nodeMeta {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  color: var(--text-muted);
+  gap: 0.8rem;
+  font-size: 0.85rem;
+  color: #6b7280;
 }
 
 .nodeMeta span:first-child {
-  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.btnAction {
+  background: transparent;
+  border: 1px solid #d1d5db;
+  color: #374151;
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.btnAction:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
 }
 
 .btnDelete {
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: var(--text-muted);
-  padding: 0.5rem 1rem;
+  border: 1px solid #fca5a5;
+  color: #dc2626;
+  padding: 0.4rem 0.8rem;
   border-radius: 6px;
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
+  font-size: 0.85rem;
+  font-weight: 500;
   transition: all 0.2s ease;
 }
 
 .btnDelete:hover {
+  background: #fef2f2;
   border-color: #ef4444;
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.02);
 }
 
 .errorBanner {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.03);
-  border: 1px solid rgba(239, 68, 68, 0.15);
+  font-size: 0.85rem;
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
   padding: 0.8rem 1.2rem;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.successBanner {
+  font-size: 0.85rem;
+  color: #059669;
+  background: #ecfdf5;
+  border: 1px solid #d1fae5;
+  padding: 0.8rem 1.2rem;
+  margin-bottom: 1.5rem;
   border-radius: 6px;
   display: flex;
   align-items: center;

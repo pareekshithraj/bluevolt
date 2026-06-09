@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useState } from "react";
-import { Users } from "lucide-react";
+import { Users, X } from "lucide-react";
 import {
   updateEmployeeRecordStatus,
   deleteEmployeeEntity,
   saveApplicant,
   getEmployeePortalData,
+  appointApplicantAsEmployee,
 } from "@/app/actions/employee-portal";
 import styles from "@/app/employee/portal.module.css";
 
@@ -79,6 +80,7 @@ export default function ApplicantsTab({
   downloadCsv,
 }: ApplicantsTabProps) {
   const [searchTerm, setSearchTerm] = useState("");
+  const [appointingApplicant, setAppointingApplicant] = useState<PortalData["applicants"][number] | null>(null);
 
   const pendingApplicants = data.applicants.filter((applicant) => !["Offer", "Appointed", "Rejected"].includes(applicant.stage));
   const approvedApplicants = data.applicants.filter((applicant) => ["Offer", "Appointed"].includes(applicant.stage));
@@ -170,8 +172,18 @@ export default function ApplicantsTab({
               <span className={styles.muted}>{formatPortalDateTime(applicant.createdAt)}</span>
               <span className={applicant.stage === "Offer" ? `${styles.pill} ${styles.pillSuccess}` : applicant.stage === "Rejected" ? `${styles.pill} ${styles.pillMuted}` : `${styles.pill} ${styles.pillWarn}`}>{applicant.stage}</span>
               <span className={styles.actionStack}>
-                {applicant.stage !== "Offer" && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "applicant", id: applicant.id.toString(), status: "Offer" }))}>Accept</button>}
-                {applicant.stage !== "Rejected" && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "applicant", id: applicant.id.toString(), status: "Rejected" }))}>Reject</button>}
+                {applicant.stage !== "Offer" && applicant.stage !== "Appointed" && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "applicant", id: applicant.id.toString(), status: "Offer" }))}>Accept</button>}
+                {applicant.stage === "Offer" && (
+                  <button 
+                    className={styles.button} 
+                    type="button" 
+                    onClick={() => setAppointingApplicant(applicant)}
+                    style={{ background: "var(--accent-color)", color: "white" }}
+                  >
+                    Appoint as Employee
+                  </button>
+                )}
+                {applicant.stage !== "Rejected" && applicant.stage !== "Appointed" && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "applicant", id: applicant.id.toString(), status: "Rejected" }))}>Reject</button>}
                 <details className={styles.editPanel}>
                   <summary>Edit</summary>
                   <form className={styles.formGrid} onSubmit={submit(saveApplicant)}>
@@ -222,6 +234,36 @@ export default function ApplicantsTab({
           <textarea className={styles.textarea} value={`<iframe src="${applicationLink}?embed=1" width="100%" height="980" style="border:0;" loading="lazy"></iframe>`} readOnly />
         </div>
       </div>
+      {appointingApplicant && (
+        <div className={styles.modalOverlay} role="dialog" aria-modal="true" aria-label="Appoint as Employee">
+          <div className={styles.modalPanel} style={{ maxWidth: 500 }}>
+            <div className={styles.modalHeader}>
+              <div>
+                <h2 className={styles.cardTitle}>Appoint as Employee</h2>
+                <p className={styles.muted}>Onboard {appointingApplicant.name} to the active employee list. Default password is abc123.</p>
+              </div>
+              <button className={styles.refreshIconButton} type="button" onClick={() => setAppointingApplicant(null)} aria-label="Close"><X size={18} /></button>
+            </div>
+            <form className={styles.formGrid} onSubmit={submit((values) => appointApplicantAsEmployee({
+              applicantId: appointingApplicant.id.toString(),
+              departmentId: values.departmentId,
+              title: values.title,
+              workStartTime: values.workStartTime,
+              workEndTime: values.workEndTime,
+            }), () => setAppointingApplicant(null))}>
+              <Field label="Title" name="title" defaultValue={appointingApplicant.roleApplied || "Team Member"} required />
+              <Field 
+                label="Department" 
+                name="departmentId" 
+                options={[{ label: "No department", value: "" }, ...data.departments.map((d) => ({ label: d.name, value: d.id.toString() }))]} 
+              />
+              <Field label="Work Starts" name="workStartTime" type="time" defaultValue="09:00" required />
+              <Field label="Work Ends" name="workEndTime" type="time" defaultValue="18:00" required />
+              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Approve & Appoint</button>
+            </form>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

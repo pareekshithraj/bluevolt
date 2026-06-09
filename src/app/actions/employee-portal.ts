@@ -374,7 +374,7 @@ function localUserFromInput(input: {
   email: string;
   password?: string;
   role: string;
-  department: string;
+  department?: string;
   departmentId?: string;
   managerId?: string;
   title: string;
@@ -393,8 +393,8 @@ function localUserFromInput(input: {
     email: input.email.trim().toLowerCase(),
     password: input.password?.trim() ? hashPassword(input.password) : existing?.password || hashPassword(defaultEmployeePassword),
     role: normalizeRole(input.role),
-    department: input.department.trim() || "General",
-    departmentId: input.departmentId ? Number(input.departmentId) : null,
+    department: input.department?.trim() || existing?.department || "General",
+    departmentId: input.departmentId ? Number(input.departmentId) : (existing?.departmentId || null),
     managerId: input.managerId ? Number(input.managerId) : null,
     title: input.title.trim() || "Team Member",
     employeeType: input.employeeType?.trim() || "Full-time",
@@ -997,6 +997,35 @@ export async function loginEmployee(input: { email: string; password: string }) 
 }
 
 export async function logoutEmployee() {
+  // Auto-close any open attendance session before logging out
+  // This prevents dangling "working" entries when the user forgets to check out
+  try {
+    const session = await getEmployeeSession();
+    if (session) {
+      const now = new Date();
+      const openSession = await prisma.employeeAttendance.findFirst({
+        where: {
+          employeeId: Number(session.userId),
+          loginAt: { not: null },
+          logoutAt: null,
+        },
+        orderBy: { loginAt: "desc" },
+      });
+      if (openSession?.loginAt) {
+        const totalHours = Math.max(0, (now.getTime() - openSession.loginAt.getTime()) / (1000 * 60 * 60));
+        await prisma.employeeAttendance.update({
+          where: { id: openSession.id },
+          data: {
+            logoutAt: now,
+            totalHours: Number(totalHours.toFixed(2)),
+            notes: `Auto-closed on logout. Worked ${totalHours.toFixed(2)} hrs.`,
+          },
+        });
+      }
+    }
+  } catch {
+    // Best-effort: don't block logout if attendance cleanup fails
+  }
   await clearEmployeeSession();
   return { success: true };
 }
@@ -1469,7 +1498,7 @@ export async function saveEmployeeUser(input: {
   email: string;
   password?: string;
   role: string;
-  department: string;
+  department?: string;
   departmentId?: string;
   managerId?: string;
   title: string;
@@ -1498,12 +1527,22 @@ export async function saveEmployeeUser(input: {
     return { success: false, error: "Another employee already uses this email." };
   }
   const existing = existingById || existingByEmail;
+  const departmentId = input.departmentId ? Number(input.departmentId) : null;
+  let departmentName = "General";
+  if (departmentId) {
+    const dept = await prisma.employeeDepartment.findUnique({ where: { id: departmentId } });
+    if (dept) {
+      departmentName = dept.name;
+    }
+  } else if (input.department && input.department.trim()) {
+    departmentName = input.department.trim();
+  }
   const data = {
     name: input.name.trim(),
     email,
     role: normalizeRole(input.role),
-    department: input.department.trim() || "General",
-    departmentId: input.departmentId ? Number(input.departmentId) : null,
+    department: departmentName,
+    departmentId,
     managerId: input.managerId ? Number(input.managerId) : null,
     title: input.title.trim() || "Team Member",
     employeeType: input.employeeType?.trim() || "Full-time",
@@ -1905,6 +1944,7 @@ export async function submitEmployeeApplication(input: {
 export async function appointApplicantAsEmployee(input: {
   applicantId: string;
   department?: string;
+  departmentId?: string;
   title?: string;
   workStartTime?: string;
   workEndTime?: string;
@@ -1923,6 +1963,13 @@ export async function appointApplicantAsEmployee(input: {
     const existing = await prisma.employeeUser.findUnique({ where: { email: applicant.email.toLowerCase() } });
     if (existing) return { success: false, error: "An employee already exists with this email." };
 
+    const departmentId = input.departmentId ? Number(input.departmentId) : null;
+    let departmentName = input.department?.trim() || "General";
+    if (departmentId) {
+      const dept = await prisma.employeeDepartment.findUnique({ where: { id: departmentId } });
+      if (dept) departmentName = dept.name;
+    }
+
     const employeeType = applicantEmployeeType(applicant.notes);
     const created = await prisma.employeeUser.create({
       data: {
@@ -1930,7 +1977,8 @@ export async function appointApplicantAsEmployee(input: {
         email: applicant.email.toLowerCase(),
         password: hashPassword(defaultEmployeePassword),
         role,
-        department: input.department?.trim() || "General",
+        department: departmentName,
+        departmentId,
         title: input.title?.trim() || applicant.roleApplied || "Team Member",
         employeeType,
         compensationStatus: applicantCompensationStatus(applicant.notes),
@@ -2105,13 +2153,18 @@ export async function saveAttendance(input: {
     return { success: false, error: "Only HR/admin roles can manage attendance." };
   }
   const employeeId = Number(input.employeeId);
+  const loginAt = optionalDateTime(input.loginAt);
+  const logoutAt = optionalDateTime(input.logoutAt);
+  if (loginAt && logoutAt && logoutAt < loginAt) {
+    return { success: false, error: "Logout time cannot precede login time." };
+  }
   await prisma.employeeAttendance.create({
     data: {
       employeeId,
       employeeName: await employeeNameForId(employeeId),
       workDate: optionalDate(input.workDate) || new Date(),
-      loginAt: optionalDateTime(input.loginAt),
-      logoutAt: optionalDateTime(input.logoutAt),
+      loginAt,
+      logoutAt,
       totalHours: numberValue(input.totalHours),
       status: input.status || "Present",
       notes: input.notes,
@@ -2128,26 +2181,35 @@ export async function saveAttendance(input: {
   return { success: true };
 }
 
-export async function clockInEmployee() {
+export async function clockInEmployee(): Promise<{ success: boolean; error?: string }> {
   const { session, user } = await requireEmployee();
   const now = new Date();
-  const startOfDay = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(startOfDay);
-  endOfDay.setHours(23, 59, 59, 999);
+  const istOffsetMs = (5 * 60 + 30) * 60 * 1000;
+  const istNow = new Date(now.getTime() + istOffsetMs);
+  const startOfDay = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate()) - istOffsetMs);
 
   const openSession = await prisma.employeeAttendance.findFirst({
     where: {
       employeeId: user.id,
-      workDate: { gte: startOfDay, lte: endOfDay },
       loginAt: { not: null },
       logoutAt: null,
     },
     orderBy: { loginAt: "desc" },
   });
 
-  if (openSession) {
-    return { success: false, error: "You are already checked in. Check out before starting another session." };
+  if (openSession?.loginAt) {
+    const totalHours = Math.max(0, (now.getTime() - openSession.loginAt.getTime()) / (1000 * 60 * 60));
+    const expectedHours = scheduledWorkHours(user.workStartTime, user.workEndTime);
+    const staleStatus = expectedHours > 0 && totalHours >= expectedHours / 2 ? "Present" : "Half-day";
+    await prisma.employeeAttendance.update({
+      where: { id: openSession.id },
+      data: {
+        logoutAt: now,
+        totalHours: Number(totalHours.toFixed(2)),
+        status: staleStatus,
+        notes: `Auto-closed stale session. Worked ${totalHours.toFixed(2)} of ${expectedHours.toFixed(2)} scheduled hours.`,
+      },
+    });
   }
 
   const created = await prisma.employeeAttendance.create({
@@ -2170,15 +2232,10 @@ export async function clockInEmployee() {
 export async function clockOutEmployee() {
   const { session, user } = await requireEmployee();
   const now = new Date();
-  const startOfDay = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(startOfDay);
-  endOfDay.setHours(23, 59, 59, 999);
 
   const openSession = await prisma.employeeAttendance.findFirst({
     where: {
       employeeId: user.id,
-      workDate: { gte: startOfDay, lte: endOfDay },
       loginAt: { not: null },
       logoutAt: null,
     },
@@ -2219,18 +2276,33 @@ export async function saveLeaveRequest(input: {
   const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
   const canManage = capabilitiesForRole(session.role, roleDefinitions).canManageOps;
   const employeeId = canManage && input.employeeId ? Number(input.employeeId) : user.id;
+  const startsAt = optionalDate(input.startsAt) || new Date();
+  const endsAt = optionalDate(input.endsAt) || new Date();
+  if (endsAt < startsAt) {
+    return { success: false, error: "Leave end date cannot precede start date." };
+  }
   await prisma.employeeLeaveRequest.create({
     data: {
       employeeId,
       employeeName: await employeeNameForId(employeeId),
       leaveType: input.leaveType || "Casual",
-      startsAt: optionalDate(input.startsAt) || new Date(),
-      endsAt: optionalDate(input.endsAt) || new Date(),
+      startsAt,
+      endsAt,
       status: canManage ? input.status || "Pending" : "Pending",
       reason: input.reason,
       reviewedBy: canManage ? Number(session.userId) : null,
     },
   });
+  if (!canManage) {
+    await prisma.employeeNotification.create({
+      data: {
+        targetRoles: "admin,hr",
+        title: "New leave request submitted",
+        body: `${user.name} has requested leave for ${startsAt.toLocaleDateString()} to ${endsAt.toLocaleDateString()}. Reason: ${input.reason || "None"}.`,
+        createdBy: user.id,
+      }
+    });
+  }
   await logEmployeeAudit({
     actorId: Number(session.userId),
     actorName: session.name,
@@ -2271,8 +2343,21 @@ export async function saveTask(input: {
     description: input.description,
     createdBy: Number(session.userId),
   };
-  if (input.id) await prisma.employeeTask.update({ where: { id: Number(input.id) }, data });
-  else await prisma.employeeTask.create({ data });
+  if (input.id) {
+    await prisma.employeeTask.update({ where: { id: Number(input.id) }, data });
+  } else {
+    await prisma.employeeTask.create({ data });
+  }
+  if (assignedTo) {
+    await prisma.employeeNotification.create({
+      data: {
+        employeeId: assignedTo,
+        title: input.id ? "Task assignment updated" : "New task assigned",
+        body: `You have been assigned the task: "${input.title}". Priority: ${data.priority}, Due: ${input.dueAt ? new Date(input.dueAt).toLocaleDateString() : "No due date"}.`,
+        createdBy: Number(session.userId),
+      }
+    });
+  }
   await logEmployeeAudit({ actorId: Number(session.userId), actorName: session.name, action: "task.create", entityType: "task", metadata: { title: input.title } });
   revalidatePath("/employee/portal");
   return { success: true };
@@ -2506,6 +2591,16 @@ export async function saveExpenseClaim(input: {
   };
   if (input.id) await prisma.employeeExpenseClaim.update({ where: { id: Number(input.id) }, data });
   else await prisma.employeeExpenseClaim.create({ data });
+  if (!input.id && !canManageClaims) {
+    await prisma.employeeNotification.create({
+      data: {
+        targetRoles: "admin,hr",
+        title: "New expense claim submitted",
+        body: `${user.name} submitted an expense claim of ${data.amount} for "${data.category}".`,
+        createdBy: user.id,
+      }
+    });
+  }
   await logEmployeeAudit({ actorId: Number(session.userId), actorName: session.name, action: "expense.create", entityType: "expense", metadata: { employeeId, amount: input.amount } });
   revalidatePath("/employee/portal");
   return { success: true };
@@ -2580,8 +2675,28 @@ export async function updateEmployeeRecordStatus(input: {
     }
     const id = Number(input.id);
     const data = { status: input.status };
-    if (input.entityType === "leave") await prisma.employeeLeaveRequest.update({ where: { id }, data: { ...data, reviewedBy: Number(session.userId) } });
-    else if (input.entityType === "expense") await prisma.employeeExpenseClaim.update({ where: { id }, data: { ...data, reviewerId: Number(session.userId) } });
+    if (input.entityType === "leave") {
+      const leave = await prisma.employeeLeaveRequest.update({ where: { id }, data: { ...data, reviewedBy: Number(session.userId) } });
+      await prisma.employeeNotification.create({
+        data: {
+          employeeId: leave.employeeId,
+          title: `Leave request ${input.status.toLowerCase()}`,
+          body: `Your leave request for ${leave.startsAt.toLocaleDateString()} to ${leave.endsAt.toLocaleDateString()} has been ${input.status.toLowerCase()}${input.status === "Approved" ? " ✅" : " ❌"}.`,
+          createdBy: Number(session.userId),
+        }
+      });
+    }
+    else if (input.entityType === "expense") {
+      const expense = await prisma.employeeExpenseClaim.update({ where: { id }, data: { ...data, reviewerId: Number(session.userId) } });
+      await prisma.employeeNotification.create({
+        data: {
+          employeeId: expense.employeeId,
+          title: `Expense claim ${input.status.toLowerCase()}`,
+          body: `Your expense claim of ${expense.amount} for "${expense.category}" has been ${input.status.toLowerCase()}${input.status === "Approved" || input.status === "Paid" ? " ✅" : " ❌"}.`,
+          createdBy: Number(session.userId),
+        }
+      });
+    }
     else if (input.entityType === "payroll") await prisma.employeePayrollInput.update({ where: { id }, data });
     else if (input.entityType === "task") {
       const task = await prisma.employeeTask.findUnique({ where: { id } });

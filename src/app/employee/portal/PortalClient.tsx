@@ -390,7 +390,9 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && activeCrmSheetId) {
-        setActiveCrmSheetId(null);
+        if (window.confirm("Are you sure you want to close this sheet? Unsaved work will be lost.")) {
+          setActiveCrmSheetId(null);
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -473,6 +475,10 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     .filter((role) => role.status !== "Inactive")
     .map((role) => ({ label: `${role.label} (${role.key})`, value: role.key }));
   const roleOptions = activeRoleOptions.length ? activeRoleOptions : [{ label: "Employee (employee)", value: "employee" }];
+  const departmentOptions = [
+    { label: "No department", value: "" },
+    ...data.departments.map((dept) => ({ label: dept.name, value: dept.id.toString() }))
+  ];
   const ownerRoleOptions = [{ label: "All roles", value: "all" }, ...roleOptions];
   const roleNameByKey = new Map(roleDefinitions.map((role) => [role.key, role.label]));
   const displayRole = (role: string) => roleNameByKey.get(role) || role.replace(/_/g, " ");
@@ -1039,15 +1045,22 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               <Field label="Email" name="email" type="email" required />
               <input type="hidden" name="password" value="abc123" />
               <Field label="Role" name="role" options={roleOptions} defaultValue={roleOptions.some((role) => role.value === "employee") ? "employee" : roleOptions[0]?.value} />
-              <Field label="Department" name="department" defaultValue="General" />
-              <Field label="Title" name="title" defaultValue="Team Member" />
-              <Field label="Employee Type" name="employeeType" options={["Full-time", "Part-time", "Intern", "Contractor", "Consultant"]} />
-              <Field label="Paid Status" name="compensationStatus" options={["Paid", "Unpaid"]} />
-              <Field label="Employment Start" name="employmentStart" type="date" />
-              <Field label="Employment End" name="employmentEnd" type="date" />
-              <Field label="Work Starts" name="workStartTime" type="time" defaultValue="09:00" />
-              <Field label="Work Ends" name="workEndTime" type="time" defaultValue="18:00" />
-              <Field label="Status" name="status" options={["Active", "Inactive"]} />
+              
+              <details className={styles.fieldWide} style={{ cursor: "pointer", padding: "10px 0", borderTop: "1px solid var(--border-color)", marginTop: "10px" }}>
+                <summary style={{ fontWeight: 600, color: "var(--text-primary)" }}>Advanced Options (Department, Title, Hours)</summary>
+                <div className={styles.formGrid} style={{ marginTop: "16px" }}>
+                  <Field label="Department" name="departmentId" options={departmentOptions} />
+                  <Field label="Title" name="title" defaultValue="Team Member" />
+                  <Field label="Employee Type" name="employeeType" options={["Full-time", "Part-time", "Intern", "Contractor", "Consultant"]} />
+                  <Field label="Paid Status" name="compensationStatus" options={["Paid", "Unpaid"]} />
+                  <Field label="Employment Start" name="employmentStart" type="date" />
+                  <Field label="Employment End" name="employmentEnd" type="date" />
+                  <Field label="Work Starts" name="workStartTime" type="time" defaultValue="09:00" />
+                  <Field label="Work Ends" name="workEndTime" type="time" defaultValue="18:00" />
+                  <Field label="Status" name="status" options={["Active", "Inactive"]} />
+                </div>
+              </details>
+              
               <div className={`${styles.notice} ${styles.fieldWide}`}>Default password: abc123. User will be warned to change it after first login.</div>
               <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Create User Access</button>
             </form>

@@ -2,29 +2,28 @@ import Link from "next/link";
 
 export default function NotFound() {
   return (
-    <main className="premium-dark-mode" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", backgroundColor: "#050505" }}>
-      <div className="glow-blob glow-blob-sunset" style={{ position: "absolute", borderRadius: "50%", width: "600px", height: "600px", top: "20%", left: "20%", opacity: 0.15, filter: "blur(120px)", pointerEvents: "none" }} />
-      <div className="glow-blob glow-blob-neonblue" style={{ position: "absolute", borderRadius: "50%", width: "500px", height: "500px", bottom: "10%", right: "10%", opacity: 0.15, filter: "blur(120px)", pointerEvents: "none" }} />
-
-      <div style={{ position: "relative", zIndex: 10, textAlign: "center", padding: "2rem" }}>
-        <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem", color: "#00ff66", letterSpacing: "0.15em", marginBottom: "1.5rem" }}>
-          ERRORCODE: 404_PAGE_NOT_FOUND
+    <main style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#fafafa" }}>
+      <div style={{ textAlign: "center", padding: "2rem" }}>
+        <div style={{ fontSize: "5rem", fontWeight: 800, color: "#e5e7eb", lineHeight: 1, marginBottom: "1rem" }}>
+          404
         </div>
         
-        <h1 className="editorial-h1" style={{ fontSize: "clamp(3rem, 10vw, 7rem)", fontWeight: 800, margin: "0 0 1.5rem 0", lineHeight: 0.9 }}>
-          <span className="text-fluid-gradient">Lost in space.</span>
+        <h1 style={{ fontSize: "1.5rem", fontWeight: 600, color: "#111827", margin: "0 0 0.75rem 0" }}>
+          Page not found
         </h1>
         
-        <p className="editorial-p" style={{ margin: "0 auto 3rem auto", maxWidth: "500px", fontSize: "1.1rem" }}>
-          The requested system node or coordinate does not exist. It may have been relocated or archived.
+        <p style={{ margin: "0 auto 2rem auto", maxWidth: "400px", fontSize: "1rem", color: "#6b7280" }}>
+          The page you&apos;re looking for doesn&apos;t exist or has been moved.
         </p>
 
-        <div>
-          <Link href="/" className="firebase-btn-primary">
-            Return to Core
-          </Link>
-        </div>
+        <Link 
+          href="/" 
+          style={{ display: "inline-block", padding: "0.75rem 1.5rem", backgroundColor: "#2563eb", color: "#ffffff", borderRadius: "6px", textDecoration: "none", fontWeight: 500, fontSize: "0.95rem" }}
+        >
+          Go Home
+        </Link>
       </div>
     </main>
   );
 }
+

@@ -75,7 +75,7 @@ export default function StudioPage() {
     if (!selectedProject) return;
 
     if (passwordInput === selectedProject.passwordHash) {
-      setSuccessMsg("ACCESS GRANTED. INITIATING REDIRECT NODE...");
+      setSuccessMsg("Access granted. Redirecting...");
       setErrorMsg("");
       
       // Smoothly redirect client to their demo site after 1.5 seconds of tech animation
@@ -83,28 +83,22 @@ export default function StudioPage() {
         window.location.href = selectedProject.url;
       }, 1500);
     } else {
-      setErrorMsg("ACCESS DENIED. INVALID CRYPTOGRAPHIC KEY.");
+      setErrorMsg("Invalid password.");
       setSuccessMsg("");
     }
   };
 
   return (
     <main className={styles.studioWrapper}>
-      {/* Background Cyber Grid & Glowing Backlights */}
-      <div className={styles.structuralGrid} />
-      <div className={styles.glowLeft} />
-      <div className={styles.glowRight} />
-
       <div className={styles.content}>
         {/* Header Node */}
         <header className={styles.header}>
           <div className={styles.statusIndicator}>
-            <span className={styles.pulseDot}></span>
-            <span>BLUEVOLT STUDIO // SECURE CLOUD REDIRECT GATEWAY</span>
+            <span>Admin Gateway</span>
           </div>
           <h1 className={styles.title}>BlueVolt Studio</h1>
           <p className={styles.subtitle}>
-            Enter secure, sandboxed client workspaces. Authenticate below using your institutional node key to initialize deployment redirects.
+            Access and manage client workspaces. Authenticate below using your project password.
           </p>
         </header>
 
@@ -130,7 +124,7 @@ export default function StudioPage() {
                   <span className={styles.actionText}>
                     {project.status === "ACTIVE" ? (
                       <>
-                        Connect Node <ArrowRight size={14} />
+                        Connect <ArrowRight size={14} />
                       </>
                     ) : (
                       <>
@@ -141,8 +135,8 @@ export default function StudioPage() {
                 </div>
 
                 <div className={styles.cardFooter}>
-                  <span className={styles.latency}>NODE LATENCY: {project.latency}</span>
-                  <Play size={14} style={{ color: "var(--neon-blue)", opacity: project.status === "PENDING" ? 0.2 : 0.8 }} />
+                  <span className={styles.latency}>Latency: {project.latency}</span>
+                  <Play size={14} style={{ color: "#2563eb", opacity: project.status === "PENDING" ? 0.2 : 0.8 }} />
                 </div>
               </div>
             ))
@@ -162,7 +156,7 @@ export default function StudioPage() {
                   <h3 className={styles.projectName}>{project.name}</h3>
                 </div>
                 <div className={styles.cardFooter}>
-                  <span className={styles.latency}>NODE LATENCY: {project.latency}</span>
+                  <span className={styles.latency}>Latency: {project.latency}</span>
                 </div>
               </div>
             ))
@@ -187,20 +181,20 @@ export default function StudioPage() {
               </button>
 
               <div style={{ display: "flex", alignItems: "center", gap: "0.8rem", marginBottom: "1rem" }}>
-                <Lock size={20} style={{ color: "var(--neon-blue)" }} />
-                <h2 className={styles.modalTitle}>Node Key Authentication</h2>
+                <Lock size={20} style={{ color: "var(--text-primary)" }} />
+                <h2 className={styles.modalTitle}>Authenticate</h2>
               </div>
               <p className={styles.modalSubtitle}>PROJECT: {selectedProject.name}</p>
 
               <form onSubmit={handleVerifyPassword}>
                 <div className={styles.inputGroup}>
                   <label htmlFor="password-field" className={styles.inputLabel}>
-                    Cryptographic Key Identifier
+                    Password
                   </label>
                   <input
                     id="password-field"
                     type="password"
-                    placeholder="Enter security key..."
+                    placeholder="Enter password..."
                     className={styles.inputField}
                     value={passwordInput}
                     onChange={(e) => setPasswordInput(e.target.value)}
@@ -226,10 +220,10 @@ export default function StudioPage() {
 
                 <div className={styles.modalButtons}>
                   <button type="button" className={styles.btnCancel} onClick={handleCloseModal}>
-                    Abort Connection
+                    Cancel
                   </button>
                   <button type="submit" className={styles.btnSubmit} disabled={!!successMsg}>
-                    Initialize Connection
+                    Login
                   </button>
                 </div>
               </form>

@@ -282,8 +282,7 @@ export default function EmployeesTab({
                 <Field label="Email" name="email" type="email" defaultValue={user.email} required />
                 <Field label="New Password" name="password" type="password" />
                 <Field label="Role" name="role" options={roleOptionsForValue(user.role)} defaultValue={user.role} />
-                <Field label="Department" name="department" defaultValue={user.department} />
-                <Field label="Department Record" name="departmentId" options={[{ label: "No department record", value: "" }, ...data.departments.map((dept) => ({ label: dept.name, value: dept.id.toString() }))]} defaultValue={user.departmentId?.toString() || ""} />
+                <Field label="Department" name="departmentId" options={[{ label: "No department", value: "" }, ...data.departments.map((dept) => ({ label: dept.name, value: dept.id.toString() }))]} defaultValue={user.departmentId?.toString() || ""} />
                 <Field label="Manager" name="managerId" options={[{ label: "No manager", value: "" }, ...employeeOptions]} defaultValue={user.managerId?.toString() || ""} />
                 <Field label="Title" name="title" defaultValue={user.title} />
                 <Field label="Employee Type" name="employeeType" options={["Full-time", "Part-time", "Intern", "Contractor", "Consultant"]} defaultValue={user.employeeType} />
@@ -314,8 +313,7 @@ export default function EmployeesTab({
           <Field label="Email" name="email" type="email" required />
           <Field label="Password" name="password" type="password" />
           <Field label="Role" name="role" options={roleOptions} defaultValue={roleOptions.some((role) => role.value === "employee") ? "employee" : roleOptions[0]?.value} />
-          <Field label="Department" name="department" defaultValue="General" />
-          <Field label="Department Record" name="departmentId" options={[{ label: "No department record", value: "" }, ...data.departments.map((dept) => ({ label: dept.name, value: dept.id.toString() }))]} />
+          <Field label="Department" name="departmentId" options={[{ label: "No department", value: "" }, ...data.departments.map((dept) => ({ label: dept.name, value: dept.id.toString() }))]} />
           <Field label="Manager" name="managerId" options={[{ label: "No manager", value: "" }, ...employeeOptions]} />
           <Field label="Title" name="title" defaultValue="Team Member" />
           <Field label="Employee Type" name="employeeType" options={["Full-time", "Part-time", "Intern", "Contractor", "Consultant"]} />

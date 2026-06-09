@@ -116,7 +116,7 @@ export default function AdminPage() {
       setLoginEmail("");
       setLoginPassword("");
     } else {
-      setLoginError(result.message || "ACCESS DENIED. INVALID SECURITY SIGNATURE NODE.");
+      setLoginError(result.message || "Invalid email or password.");
     }
   };
 
@@ -161,7 +161,7 @@ export default function AdminPage() {
     
     const result = await deleteStudioProject(id);
     if (result.success) {
-      setFormSuccess("WORKSPACE NODE DECOMMISSIONED SUCCESSFULLY FROM CLOUD DATABASE.");
+      setFormSuccess("Project deleted successfully.");
       refreshProjects();
       if (editingProject?.id === id) {
         clearForm();
@@ -175,10 +175,10 @@ export default function AdminPage() {
     setFormError("");
     setFormSuccess("");
     
-    if (confirm("Are you sure you want to reset all workspace nodes in the database to the original defaults? This will erase all custom configurations!")) {
+    if (confirm("Are you sure you want to reset all projects to the original defaults? This will erase all custom configurations!")) {
       const result = await seedStudioProjects();
       if (result.success) {
-        setFormSuccess("DEFAULT WORKSPACE NODES SUCCESSFULLY RESTORED IN NEON DATABASE.");
+        setFormSuccess("Default projects restored successfully.");
         refreshProjects();
       } else {
         setFormError(result.message);
@@ -192,7 +192,7 @@ export default function AdminPage() {
     setFormSuccess("");
 
     if (!client.trim() || !name.trim() || !url.trim() || !passwordHash.trim()) {
-      setFormError("All workspace node fields are mandatory.");
+      setFormError("All project fields are required.");
       return;
     }
 
@@ -221,8 +221,8 @@ export default function AdminPage() {
     const result = await saveStudioProject(payload);
     if (result.success) {
       setFormSuccess(editingProject 
-        ? `WORKSPACE NODE "${name}" UPDATED SUCCESSFULLY IN CLOUD DATABASE.` 
-        : `WORKSPACE NODE "${name}" DEPLOYED SUCCESSFULLY TO NEON POSTGRESQL.`
+        ? `Project "${name}" updated successfully.` 
+        : `Project "${name}" created successfully.`
       );
       clearForm();
       refreshProjects();
@@ -241,10 +241,9 @@ export default function AdminPage() {
   if (!mounted) {
     return (
       <main className={styles.adminWrapper}>
-        <div className={styles.structuralGrid} />
         <div className={styles.content} style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "50vh" }}>
-          <div style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)", fontSize: "0.85rem" }}>
-            INITIALIZING SECURE CLOUD SHELL CONNECTOR...
+          <div style={{ color: "#6b7280", fontSize: "0.85rem" }}>
+            Loading dashboard...
           </div>
         </div>
       </main>
@@ -253,11 +252,6 @@ export default function AdminPage() {
 
   return (
     <main className={styles.adminWrapper}>
-      {/* Background Tech Grids & Neon Backlights */}
-      <div className={styles.structuralGrid} />
-      <div className={styles.glowLeft} />
-      <div className={styles.glowRight} />
-
       <div className={styles.content}>
         
         {/* SECURE LOGIN CARD */}
@@ -265,10 +259,10 @@ export default function AdminPage() {
           <div className={styles.loginContainer}>
             <div className={styles.loginCard}>
               <div className={styles.loginTitle}>
-                <Lock size={22} style={{ color: "#f59e0b" }} />
-                <span>Admin Gateway</span>
+                <Lock size={22} style={{ color: "#2563eb" }} />
+                <span>Admin Login</span>
               </div>
-              <p className={styles.loginSubtitle}>SYS SECURITY CLOUD ACCESS</p>
+              <p className={styles.loginSubtitle}>Access the studio dashboard</p>
 
               {loginError && (
                 <div className={styles.errorBanner}>
@@ -279,12 +273,12 @@ export default function AdminPage() {
 
               <form onSubmit={handleLogin}>
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel} htmlFor="email">Security Token (Email)</label>
+                  <label className={styles.formLabel} htmlFor="email">Email</label>
                   <input
                     id="email"
                     type="email"
                     required
-                    placeholder="name@schools24.in"
+                    placeholder="admin@bluevolt.group"
                     className={styles.formInput}
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
@@ -292,7 +286,7 @@ export default function AdminPage() {
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel} htmlFor="password">Institutional Signature Key</label>
+                  <label className={styles.formLabel} htmlFor="password">Password</label>
                   <input
                     id="password"
                     type="password"
@@ -305,12 +299,12 @@ export default function AdminPage() {
                 </div>
 
                 <button type="submit" className={styles.btnBlock}>
-                  Authorize Admin Node
+                  Login
                 </button>
                 
                 <div style={{ textAlign: "center", marginTop: "1.5rem" }}>
-                  <Link href="/studio" style={{ fontSize: "0.68rem", fontFamily: "var(--font-mono)", color: "var(--text-muted)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
-                    <ArrowLeft size={10} /> ABORT TO STUDIO
+                  <Link href="/studio" style={{ fontSize: "0.85rem", color: "#6b7280", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+                    <ArrowLeft size={14} /> Back to Studio
                   </Link>
                 </div>
               </form>
@@ -322,35 +316,22 @@ export default function AdminPage() {
           <div>
             <header className={styles.dashHeader}>
               <div className={styles.dashTitleArea}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", fontFamily: "var(--font-mono)", fontSize: "0.68rem", color: "#00ff66", marginBottom: "0.8rem" }}>
-                  <span style={{ display: "inline-block", width: "6px", height: "6px", backgroundColor: "#00ff66", borderRadius: "50%", boxShadow: "0 0 8px #00ff66" }} />
-                  <span>SYS CORE LEVEL: SECURE CLOUD CONNECTION OPERATIONAL</span>
-                </div>
                 <h1>Studio Control Panel</h1>
-                <p>Manage and deploy client sandboxes in live cloud database.</p>
+                <p>Manage and deploy client projects.</p>
               </div>
               
               <div style={{ display: "flex", gap: "1rem" }}>
                 <button 
                   className={styles.btnLogout} 
                   onClick={handleRestoreDefaults}
-                  style={{ borderColor: "rgba(0, 210, 255, 0.25)", color: "var(--neon-blue)" }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "rgba(0, 210, 255, 0.03)";
-                    e.currentTarget.style.borderColor = "var(--neon-blue)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = "transparent";
-                    e.currentTarget.style.borderColor = "rgba(0, 210, 255, 0.25)";
-                  }}
                 >
                   <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
-                    <RotateCcw size={12} /> RESTORE DEFAULTS
+                    <RotateCcw size={14} /> Restore Defaults
                   </span>
                 </button>
                 <button className={styles.btnLogout} onClick={handleLogout}>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
-                    <LogOut size={12} /> TERMINATE SESSION
+                    <LogOut size={14} /> Logout
                   </span>
                 </button>
               </div>
@@ -362,12 +343,12 @@ export default function AdminPage() {
               {/* LEFT COLUMN: CRUD FORM */}
               <div>
                 <h2 className={styles.panelTitle}>
-                  {editingProject ? `Edit Workspace Node` : "Deploy Workspace Node"}
+                  {editingProject ? `Edit Project` : "New Project"}
                 </h2>
                 
                 <div className={styles.formCard}>
                   {formSuccess && (
-                    <div style={{ color: "#00ff66", border: "1px solid rgba(0,255,102,0.15)", background: "rgba(0,255,102,0.02)", padding: "0.8rem 1.2rem", borderRadius: "6px", fontSize: "0.72rem", fontFamily: "var(--font-mono)", marginBottom: "1.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <div className={styles.successBanner}>
                       <ShieldCheck size={14} />
                       <span>{formSuccess}</span>
                     </div>
@@ -382,7 +363,7 @@ export default function AdminPage() {
 
                   <form onSubmit={handleSaveNode}>
                     <div className={styles.formGroup}>
-                      <label className={styles.formLabel}>Client Enterprise Name</label>
+                      <label className={styles.formLabel}>Client Name</label>
                       <input
                         type="text"
                         required
@@ -394,7 +375,7 @@ export default function AdminPage() {
                     </div>
 
                     <div className={styles.formGroup}>
-                      <label className={styles.formLabel}>Project System Name</label>
+                      <label className={styles.formLabel}>Project Name</label>
                       <input
                         type="text"
                         required
@@ -406,7 +387,7 @@ export default function AdminPage() {
                     </div>
 
                     <div className={styles.formGroup}>
-                      <label className={styles.formLabel}>Redirect Node Destination (URL)</label>
+                      <label className={styles.formLabel}>URL</label>
                       <input
                         type="url"
                         required
@@ -418,11 +399,11 @@ export default function AdminPage() {
                     </div>
 
                     <div className={styles.formGroup}>
-                      <label className={styles.formLabel}>Cryptographic Access Key (Password)</label>
+                      <label className={styles.formLabel}>Password</label>
                       <input
                         type="text"
                         required
-                        placeholder="Set password for redirect gateway..."
+                        placeholder="Set password for project..."
                         className={styles.formInput}
                         value={passwordHash}
                         onChange={(e) => setPasswordHash(e.target.value)}
@@ -430,21 +411,21 @@ export default function AdminPage() {
                     </div>
 
                     <div className={styles.formGroup}>
-                      <label className={styles.formLabel}>Deployment Node Status</label>
+                      <label className={styles.formLabel}>Status</label>
                       <select 
                         className={styles.formInput}
                         style={{ appearance: "none", WebkitAppearance: "none", cursor: "pointer" }}
                         value={status}
                         onChange={(e) => setStatus(e.target.value as "ACTIVE" | "PENDING")}
                       >
-                        <option value="ACTIVE" style={{ background: "#050505" }}>ACTIVE / OPERATIONAL</option>
-                        <option value="PENDING" style={{ background: "#050505" }}>PENDING / STAGED</option>
+                        <option value="ACTIVE">ACTIVE</option>
+                        <option value="PENDING">PENDING</option>
                       </select>
                     </div>
 
                     {status === "ACTIVE" && (
                       <div className={styles.formGroup}>
-                        <label className={styles.formLabel}>Workspace Node Latency</label>
+                        <label className={styles.formLabel}>Latency Simulation</label>
                         <input
                           type="text"
                           required
@@ -461,22 +442,10 @@ export default function AdminPage() {
                         <button 
                           type="button" 
                           onClick={handleAbortEdit}
-                          style={{
-                            flex: 1,
-                            background: "transparent",
-                            border: "1px solid rgba(255, 255, 255, 0.12)",
-                            color: "var(--text-secondary)",
-                            padding: "0.8rem",
-                            borderRadius: "8px",
-                            cursor: "pointer",
-                            fontWeight: "500",
-                            fontSize: "0.9rem",
-                            transition: "all 0.2s"
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.borderColor = "#ef4444"}
-                          onMouseLeave={(e) => e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.12)"}
+                          className={styles.btnCancel}
+                          style={{ flex: 1 }}
                         >
-                          Abort Edit
+                          Cancel
                         </button>
                       )}
                       
@@ -485,7 +454,7 @@ export default function AdminPage() {
                         className={styles.btnBlock} 
                         style={{ flex: 2, margin: 0 }}
                       >
-                        {editingProject ? "Update Node Configuration" : "Deploy Workspace Node"}
+                        {editingProject ? "Update Project" : "Create Project"}
                       </button>
                     </div>
                   </form>
@@ -494,13 +463,13 @@ export default function AdminPage() {
 
               {/* RIGHT COLUMN: ACTIVE LIST */}
               <div>
-                <h2 className={styles.panelTitle}>Active Workspace Nodes</h2>
+                <h2 className={styles.panelTitle}>Active Projects</h2>
                 
                 <div className={styles.listPanel}>
                   {projects.length === 0 ? (
-                    <div style={{ padding: "4rem 2rem", textAlign: "center", border: "1px dashed rgba(255, 255, 255, 0.06)", borderRadius: "12px" }}>
-                      <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)", fontSize: "0.75rem" }}>
-                        NO ACTIVE WORKSPACES DEPLOYED.
+                    <div style={{ padding: "4rem 2rem", textAlign: "center", border: "1px dashed #e5e7eb", borderRadius: "12px" }}>
+                      <span style={{ color: "#6b7280", fontSize: "0.85rem" }}>
+                        No projects available.
                       </span>
                     </div>
                   ) : (
@@ -509,43 +478,46 @@ export default function AdminPage() {
                         key={project.id} 
                         className={styles.nodeItem}
                         style={{
-                          borderColor: editingProject?.id === project.id ? "var(--neon-blue)" : "rgba(255, 255, 255, 0.05)",
-                          boxShadow: editingProject?.id === project.id ? "0 0 15px rgba(0, 210, 255, 0.04)" : "none"
+                          borderColor: editingProject?.id === project.id ? "#2563eb" : "#e5e7eb",
+                          boxShadow: editingProject?.id === project.id ? "0 0 0 2px rgba(37,99,235,0.1)" : "none"
                         }}
                       >
                         <div className={styles.nodeInfo}>
                           <h3>{project.name}</h3>
                           <div className={styles.nodeMeta}>
-                            <span>CLIENT: {project.client}</span>
-                            <span>/</span>
-                            <span style={{ color: project.status === "ACTIVE" ? "#00ff66" : "#f59e0b" }}>
+                            <span>{project.client}</span>
+                            <span>•</span>
+                            <span style={{ color: project.status === "ACTIVE" ? "#059669" : "#d97706" }}>
                               {project.status}
                             </span>
-                            <span>/</span>
-                            <span>LATENCY: {project.latency}</span>
+                            {project.status === "ACTIVE" && (
+                              <>
+                                <span>•</span>
+                                <span>Latency: {project.latency}</span>
+                              </>
+                            )}
                           </div>
                           
-                          {/* Secure redirect URL & password showcase */}
                           <div style={{ marginTop: "1rem", display: "flex", flexWrap: "wrap", gap: "1rem", alignItems: "center" }}>
-                            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>
-                              <Globe size={11} style={{ color: "var(--neon-blue)" }} />
-                              <a href={project.url} target="_blank" rel="noopener noreferrer" style={{ color: "inherit", textDecoration: "none" }} onMouseEnter={(e) => e.currentTarget.style.color = "#ffffff"} onMouseLeave={(e) => e.currentTarget.style.color = "var(--text-secondary)"}>
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", fontSize: "0.85rem", color: "#4b5563" }}>
+                              <Globe size={14} style={{ color: "#2563eb" }} />
+                              <a href={project.url} target="_blank" rel="noopener noreferrer" style={{ color: "inherit", textDecoration: "none" }} onMouseEnter={(e) => e.currentTarget.style.color = "#111827"} onMouseLeave={(e) => e.currentTarget.style.color = "#4b5563"}>
                                 {project.url}
                               </a>
                             </span>
 
-                            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", background: "rgba(255,255,255,0.02)", padding: "0.15rem 0.5rem", borderRadius: "4px", border: "1px solid rgba(255,255,255,0.04)" }}>
-                              <Lock size={10} style={{ color: "#f59e0b" }} />
-                              <span>KEY:</span>
-                              <span style={{ color: "#ffffff", letterSpacing: visiblePasswords[project.id] ? "0" : "0.15em" }}>
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.85rem", color: "#4b5563", background: "#f9fafb", padding: "0.2rem 0.6rem", borderRadius: "6px", border: "1px solid #e5e7eb" }}>
+                              <Lock size={12} style={{ color: "#4b5563" }} />
+                              <span>Key:</span>
+                              <span style={{ color: "#111827", letterSpacing: visiblePasswords[project.id] ? "0" : "0.15em" }}>
                                 {visiblePasswords[project.id] ? project.passwordHash : "••••••••"}
                               </span>
                               <button 
                                 type="button" 
                                 onClick={() => togglePasswordVisibility(project.id)}
-                                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "0.1rem", display: "inline-flex" }}
+                                style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", padding: "0.1rem", display: "inline-flex" }}
                               >
-                                {visiblePasswords[project.id] ? <EyeOff size={11} /> : <Eye size={11} />}
+                                {visiblePasswords[project.id] ? <EyeOff size={14} /> : <Eye size={14} />}
                               </button>
                             </span>
                           </div>
@@ -554,32 +526,16 @@ export default function AdminPage() {
                         {/* Controls */}
                         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginLeft: "1.5rem" }}>
                           <button 
-                            className={styles.btnDelete}
+                            className={styles.btnAction}
                             onClick={() => handleStartEdit(project)}
-                            style={{
-                              borderColor: editingProject?.id === project.id ? "var(--neon-blue)" : "rgba(255, 255, 255, 0.08)",
-                              color: editingProject?.id === project.id ? "var(--neon-blue)" : "var(--text-muted)"
-                            }}
-                            onMouseEnter={(e) => {
-                              if (editingProject?.id !== project.id) {
-                                e.currentTarget.style.borderColor = "var(--neon-blue)";
-                                e.currentTarget.style.color = "var(--neon-blue)";
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              if (editingProject?.id !== project.id) {
-                                e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)";
-                                e.currentTarget.style.color = "var(--text-muted)";
-                              }
-                            }}
                           >
-                            EDIT NODE
+                            Edit
                           </button>
                           <button 
                             className={styles.btnDelete}
                             onClick={() => handleDelete(project.id)}
                           >
-                            DECOMMISSION
+                            Delete
                           </button>
                         </div>
                       </div>

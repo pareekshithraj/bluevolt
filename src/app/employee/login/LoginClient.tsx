@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { BarChart3, CheckCircle2, Eye, EyeOff, Lock, Mail, ShieldCheck, TrendingUp } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail, ShieldCheck } from "lucide-react";
 import styles from "../portal.module.css";
 
 function simpleLoginError(message?: string) {
@@ -130,76 +130,83 @@ export default function LoginClient() {
   };
 
   return (
-    <main className={`${styles.salesaiLogin} ${theme === "light" ? styles.themeLight : styles.themeDark}`}>
-      <section className={styles.salesaiVisual} aria-hidden="true">
-        <div className={styles.salesaiBrand}>
-          <Image src="/logo.png" alt="BlueVolt Logo" width={118} height={50} />
-          <span>BLUEVOLT</span>
+    <main className={`${styles.login} ${theme === "light" ? styles.themeLight : styles.themeDark}`}>
+      <div className={styles.loginCard} style={{ maxWidth: "440px", padding: "3rem" }}>
+        <div style={{ textAlign: "center", marginBottom: "2rem" }}>
+          <Image src="/logo.png" alt="BlueVolt Logo" width={80} height={40} style={{ margin: "0 auto 1.5rem" }} />
+          <h1 style={{ fontSize: "1.5rem", fontWeight: "600", color: "var(--text-primary)", marginBottom: "0.5rem" }}>
+            Sign in to BlueVolt
+          </h1>
+          <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
+            Employee workspace and portal access
+          </p>
         </div>
-        <div className={`${styles.floatPanel} ${styles.floatPanelOne}`}>
-          <div className={styles.panelMenu}>...</div>
-          <span className={styles.panelKicker}>Workspace pulse</span>
-          <strong>Work</strong>
-          <p>tasks, attendance, and daily queues</p>
-          <div className={styles.miniHeatmap}>
-            {Array.from({ length: 12 }).map((_, index) => <i key={index} />)}
+
+        {error && (
+          <div style={{ backgroundColor: "var(--error-bg)", color: "var(--error-text)", border: "1px solid var(--error-border)", padding: "1rem", borderRadius: "8px", marginBottom: "1.5rem", fontSize: "0.85rem" }}>
+            {error}
           </div>
-        </div>
-        <div className={`${styles.floatPanel} ${styles.floatPanelTwo}`}>
-          <span className={styles.panelIcon}><TrendingUp size={20} /></span>
-          <span className={styles.panelKicker}>CRM progress</span>
-          <strong>CRM</strong>
-          <p>assigned sheets and callbacks</p>
-          <em>role based</em>
-        </div>
-        <div className={`${styles.floatPanel} ${styles.floatPanelThree}`}>
-          <span className={styles.panelIcon}><BarChart3 size={20} /></span>
-          <span className={styles.panelKicker}>Team hours</span>
-          <strong>Hours</strong>
-          <p>check-in and check-out history</p>
-        </div>
-        <div className={`${styles.floatPanel} ${styles.floatPanelFour}`}>
-          <span className={styles.panelIcon}><CheckCircle2 size={20} /></span>
-          <strong>Docs</strong>
-          <p>signed employee records</p>
-        </div>
-        <div className={styles.loginCenterLogo}>
-          <Image src="/logo.png" alt="" width={128} height={72} />
-        </div>
-      </section>
-      <section className={styles.salesaiFormPane}>
-        <div className={styles.salesaiFormShell}>
-          <div className={styles.salesaiMobileLogo}>
-            <Image src="/logo.png" alt="BlueVolt Logo" width={120} height={58} />
+        )}
+
+        <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+          <div>
+            <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "500", color: "var(--text-primary)", marginBottom: "0.5rem" }}>Email</label>
+            <div style={{ position: "relative" }}>
+              <div style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}>
+                <Mail size={16} />
+              </div>
+              <input 
+                type="email" 
+                value={email} 
+                onChange={(event) => setEmail(event.target.value)} 
+                required 
+                disabled={isLockedOut} 
+                placeholder="name@bluevolt.group" 
+                style={{ width: "100%", padding: "0.75rem 1rem 0.75rem 2.5rem", background: "var(--bg-input)", border: "1px solid var(--border-color)", borderRadius: "6px", color: "var(--text-primary)", fontSize: "0.95rem" }}
+              />
+            </div>
           </div>
-          <h1>Sign in to BlueVolt</h1>
-          <p>Employee workspace, CRM, resources, meetings, and attendance.</p>
-          {error && <div className={styles.loginErrorCompact}><span>{error}</span></div>}
-          <form onSubmit={submit} className={styles.salesaiForm}>
-            <label>
-              <span>Email</span>
-              <Mail size={17} />
-              <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={isLockedOut} placeholder="Email" />
-            </label>
-            <label>
-              <span>Password</span>
-              <Lock size={17} />
-              <input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} required disabled={isLockedOut} placeholder="Password" />
-              <button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? "Hide password" : "Show password"}>
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+          
+          <div>
+            <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "500", color: "var(--text-primary)", marginBottom: "0.5rem" }}>Password</label>
+            <div style={{ position: "relative" }}>
+              <div style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}>
+                <Lock size={16} />
+              </div>
+              <input 
+                type={showPassword ? "text" : "password"} 
+                value={password} 
+                onChange={(event) => setPassword(event.target.value)} 
+                required 
+                disabled={isLockedOut} 
+                placeholder="Password" 
+                style={{ width: "100%", padding: "0.75rem 2.5rem", background: "var(--bg-input)", border: "1px solid var(--border-color)", borderRadius: "6px", color: "var(--text-primary)", fontSize: "0.95rem" }}
+              />
+              <button 
+                type="button" 
+                onClick={() => setShowPassword(!showPassword)} 
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                style={{ position: "absolute", right: "1rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
-            </label>
-            <button className={styles.salesaiSubmit} type="submit" disabled={pending || isLockedOut}>
-              {pending ? "Signing in..." : "Sign in"}
-            </button>
-          </form>
-          <div className={styles.loginDivider}><span>Private access</span></div>
-          <div className={styles.loginSecurityLine}>
-            <ShieldCheck size={18} />
-            <span>New users sign in with the default password and reset it from Profile.</span>
+            </div>
           </div>
+
+          <button 
+            type="submit" 
+            disabled={pending || isLockedOut}
+            style={{ width: "100%", padding: "0.85rem", marginTop: "0.5rem", background: "#2563eb", color: "#ffffff", border: "none", borderRadius: "6px", fontWeight: "500", fontSize: "0.95rem", cursor: (pending || isLockedOut) ? "wait" : "pointer", opacity: (pending || isLockedOut) ? 0.7 : 1 }}
+          >
+            {pending ? "Signing in..." : "Sign in"}
+          </button>
+        </form>
+
+        <div style={{ marginTop: "2rem", paddingTop: "1.5rem", borderTop: "1px solid var(--border-color)", display: "flex", alignItems: "flex-start", gap: "0.75rem", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+          <ShieldCheck size={16} style={{ flexShrink: 0, marginTop: "0.1rem" }} />
+          <span>New users sign in with the default password and reset it from Profile.</span>
         </div>
-      </section>
+      </div>
     </main>
   );
 }

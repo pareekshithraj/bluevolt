@@ -14,7 +14,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 
 object NetworkClient {
-    private const val BASE_URL = "https://bluevolt.group"
+    const val BASE_URL = "https://bluevolt.group"
     private const val PREFS_NAME = "bluevolt_prefs"
     private const val KEY_TOKEN = "auth_token"
     private const val KEY_USER_NAME = "user_name"
@@ -368,6 +368,83 @@ object NetworkClient {
     fun saveCachedPortalData(context: Context, tab: String, dataStr: String) {
         getPrefs(context).edit().putString(KEY_PORTAL_CACHE_PREFIX + tab, dataStr).apply()
     }
+
+    suspend fun markNotificationRead(context: Context, notificationId: String): Result<Boolean> =
+        withContext(Dispatchers.IO) {
+            try {
+                val token = getToken(context) ?: return@withContext Result.failure(Exception("No auth token"))
+                val jsonBody = """{"entityType":"notification","id":"$notificationId","status":"read"}"""
+                val request = Request.Builder()
+                    .url("$BASE_URL/api/employee/update-status")
+                    .header("Authorization", "Bearer $token")
+                    .post(jsonBody.toRequestBody("application/json".toMediaType()))
+                    .build()
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) Result.success(true)
+                    else Result.failure(Exception("Failed: ${response.code}"))
+                }
+            } catch (e: IOException) {
+                Result.failure(getFriendlyError(e))
+            }
+        }
+
+    suspend fun markAllNotificationsRead(context: Context): Result<Boolean> =
+        withContext(Dispatchers.IO) {
+            try {
+                val token = getToken(context) ?: return@withContext Result.failure(Exception("No auth token"))
+                val jsonBody = """{"entityType":"allNotifications","id":"","status":"read"}"""
+                val request = Request.Builder()
+                    .url("$BASE_URL/api/employee/update-status")
+                    .header("Authorization", "Bearer $token")
+                    .post(jsonBody.toRequestBody("application/json".toMediaType()))
+                    .build()
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) Result.success(true)
+                    else Result.failure(Exception("Failed: ${response.code}"))
+                }
+            } catch (e: IOException) {
+                Result.failure(getFriendlyError(e))
+            }
+        }
+
+    suspend fun fetchLetterHtml(context: Context, employeeId: String, letterType: String): Result<String> =
+        withContext(Dispatchers.IO) {
+            try {
+                val token = getToken(context) ?: return@withContext Result.failure(Exception("No auth token"))
+                val encodedType = java.net.URLEncoder.encode(letterType, "UTF-8")
+                val request = Request.Builder()
+                    .url("$BASE_URL/api/employee/letter?employeeId=$employeeId&type=$encodedType")
+                    .header("Authorization", "Bearer $token")
+                    .get()
+                    .build()
+                client.newCall(request).execute().use { response ->
+                    val bodyStr = response.body?.string() ?: ""
+                    if (response.isSuccessful) Result.success(bodyStr)
+                    else Result.failure(Exception(bodyStr.take(200).ifBlank { "Failed: ${response.code}" }))
+                }
+            } catch (e: IOException) {
+                Result.failure(getFriendlyError(e))
+            }
+        }
+
+    suspend fun fetchIdCardHtml(context: Context, employeeId: String): Result<String> =
+        withContext(Dispatchers.IO) {
+            try {
+                val token = getToken(context) ?: return@withContext Result.failure(Exception("No auth token"))
+                val request = Request.Builder()
+                    .url("$BASE_URL/api/employee/id-card?employeeId=$employeeId")
+                    .header("Authorization", "Bearer $token")
+                    .get()
+                    .build()
+                client.newCall(request).execute().use { response ->
+                    val bodyStr = response.body?.string() ?: ""
+                    if (response.isSuccessful) Result.success(bodyStr)
+                    else Result.failure(Exception(bodyStr.take(200).ifBlank { "Failed: ${response.code}" }))
+                }
+            } catch (e: IOException) {
+                Result.failure(getFriendlyError(e))
+            }
+        }
 
     suspend fun saveMeeting(
         context: Context,
@@ -1031,6 +1108,51 @@ object NetworkClient {
                         "Failed to save department: ${response.code}"
                     }
                     Result.failure(Exception(errorMsg))
+                }
+            }
+        } catch (e: IOException) {
+            Result.failure(getFriendlyError(e))
+        }
+    }
+
+    suspend fun fetchLetter(context: Context, employeeId: String, type: String): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val token = getToken(context) ?: return@withContext Result.failure(Exception("No auth token"))
+            val encodedType = java.net.URLEncoder.encode(type, "UTF-8")
+            val request = Request.Builder()
+                .url("$BASE_URL/api/employee/letter?employeeId=$employeeId&type=$encodedType")
+                .header("Authorization", "Bearer $token")
+                .get()
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string() ?: ""
+                if (response.isSuccessful) {
+                    Result.success(bodyStr)
+                } else {
+                    Result.failure(Exception("Failed to fetch letter: ${response.code}"))
+                }
+            }
+        } catch (e: IOException) {
+            Result.failure(getFriendlyError(e))
+        }
+    }
+
+    suspend fun fetchIdCard(context: Context, employeeId: String): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val token = getToken(context) ?: return@withContext Result.failure(Exception("No auth token"))
+            val request = Request.Builder()
+                .url("$BASE_URL/api/employee/id-card?employeeId=$employeeId")
+                .header("Authorization", "Bearer $token")
+                .get()
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string() ?: ""
+                if (response.isSuccessful) {
+                    Result.success(bodyStr)
+                } else {
+                    Result.failure(Exception("Failed to fetch ID card: ${response.code}"))
                 }
             }
         } catch (e: IOException) {

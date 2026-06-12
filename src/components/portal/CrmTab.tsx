@@ -273,7 +273,10 @@ export default function CrmTab({
               </div>
             </div>
           )}
-          <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Create Sheet</button>
+          <div className={`${styles.fieldWide}`} style={{ display: "flex", gap: 12 }}>
+            <button className={styles.button} type="submit" style={{ flex: 1 }}>Create Sheet</button>
+            <button className={styles.ghostButton} type="button" onClick={() => setCrmPanel("none")} style={{ flex: 1 }}>Cancel</button>
+          </div>
         </form>
       )}
 

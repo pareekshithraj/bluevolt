@@ -334,7 +334,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const [visibleDashboardAttendance, setVisibleDashboardAttendance] = useState(5);
   const [visibleOpsAttendance, setVisibleOpsAttendance] = useState(5);
   const [visibleOpsLeave, setVisibleOpsLeave] = useState(5);
-  const [visibleOpsTasks, setVisibleOpsTasks] = useState(5);
+
 
   const [theme, setTheme] = useState<"dark" | "light">("light");
   const [now, setNow] = useState(new Date());
@@ -424,7 +424,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
       try {
         const newData = await getEmployeePortalData(sortResources, "chat");
         setData(prev => mergePortalData(prev, newData, "chat"));
-      } catch (e) {
+      } catch {
         // Ignore silent update errors
       }
     }, 4000);
@@ -502,10 +502,6 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     .filter((role) => role.status !== "Inactive")
     .map((role) => ({ label: `${role.label} (${role.key})`, value: role.key }));
   const roleOptions = activeRoleOptions.length ? activeRoleOptions : [{ label: "Employee (employee)", value: "employee" }];
-  const departmentOptions = [
-    { label: "No department", value: "" },
-    ...data.departments.map((dept) => ({ label: dept.name, value: dept.id.toString() }))
-  ];
   const ownerRoleOptions = [{ label: "All roles", value: "all" }, ...roleOptions];
   const roleNameByKey = new Map(roleDefinitions.map((role) => [role.key, role.label]));
   const displayRole = (role: string) => roleNameByKey.get(role) || role.replace(/_/g, " ");
@@ -3030,7 +3026,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                         </div>
                         <div
                           className={`${styles.chatBubbleNew} ${isMine ? styles.chatBubbleNewMine : ""} ${
-                            (message as any).sending ? styles.chatBubbleSending : ""
+                            (message as { sending?: boolean }).sending ? styles.chatBubbleSending : ""
                           }`}
                         >
                           <p style={{ margin: 0 }}>{message.body}</p>

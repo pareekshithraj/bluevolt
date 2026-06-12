@@ -122,14 +122,19 @@ data class UserCapabilities(
     val canManageApplicants: Boolean = false,
     val canManageOps: Boolean = false,
     val canManagePayroll: Boolean = false,
-    val canReviewPerformance: Boolean = false,
     val canViewDocuments: Boolean = true,
     val canManageDocuments: Boolean = false,
     val canSignDocuments: Boolean = false,
     val canManageExpenses: Boolean = false,
     val canUseChat: Boolean = true,
     val canViewEmployees: Boolean = false,
-    val canRequestCrmSource: Boolean = false
+    val canRequestCrmSource: Boolean = false,
+    val canScheduleMeetings: Boolean = false,
+    val canManageResources: Boolean = false,
+    val canPublishAnnouncements: Boolean = false,
+    val canViewAnnouncements: Boolean = true,
+    val canViewMeetings: Boolean = true,
+    val canViewResources: Boolean = true
 )
 
 data class QuickActionDef(
@@ -206,46 +211,48 @@ fun PortalScreen(
         val canManageOps = capObj?.get("canManageOps")?.jsonPrimitive?.booleanOrNull ?: false
         val canUseSuperiorDashboard = capObj?.get("canUseSuperiorDashboard")?.jsonPrimitive?.booleanOrNull ?: false
         val isSuperior = canManage || canManageOps || canUseSuperiorDashboard
-        
-        if (isSuperior) {
-            UserCapabilities(
-                isSuperiorDashboard = true,
-                canManage = true,
-                canManageAccess = true,
-                canUseCrm = true,
-                canManageCrmSheets = true,
-                canManageApplicants = true,
-                canManageOps = true,
-                canManagePayroll = true,
-                canReviewPerformance = true,
-                canViewDocuments = true,
-                canManageDocuments = true,
-                canSignDocuments = true,
-                canManageExpenses = true,
-                canUseChat = true,
-                canViewEmployees = true,
-                canRequestCrmSource = true
-            )
-        } else {
-            UserCapabilities(
-                isSuperiorDashboard = false,
-                canManage = canManage,
-                canManageAccess = capObj?.get("canManageAccess")?.jsonPrimitive?.booleanOrNull ?: false,
-                canUseCrm = capObj?.get("canUseCrm")?.jsonPrimitive?.booleanOrNull ?: false,
-                canManageCrmSheets = capObj?.get("canManageCrmSheets")?.jsonPrimitive?.booleanOrNull ?: false,
-                canManageApplicants = capObj?.get("canManageApplicants")?.jsonPrimitive?.booleanOrNull ?: false,
-                canManageOps = canManageOps,
-                canManagePayroll = capObj?.get("canManagePayroll")?.jsonPrimitive?.booleanOrNull ?: false,
-                canReviewPerformance = capObj?.get("canReviewPerformance")?.jsonPrimitive?.booleanOrNull ?: false,
-                canViewDocuments = capObj?.get("canViewDocuments")?.jsonPrimitive?.booleanOrNull ?: true,
-                canManageDocuments = capObj?.get("canManageDocuments")?.jsonPrimitive?.booleanOrNull ?: false,
-                canSignDocuments = capObj?.get("canSignDocuments")?.jsonPrimitive?.booleanOrNull ?: false,
-                canManageExpenses = capObj?.get("canManageExpenses")?.jsonPrimitive?.booleanOrNull ?: false,
-                canUseChat = capObj?.get("canUseChat")?.jsonPrimitive?.booleanOrNull ?: true,
-                canViewEmployees = capObj?.get("canViewEmployees")?.jsonPrimitive?.booleanOrNull ?: false,
-                canRequestCrmSource = capObj?.get("canRequestCrmSource")?.jsonPrimitive?.booleanOrNull ?: false
-            )
-        }
+        // Always read granular flags from JSON so that web privilege settings are respected
+        val canManageAccess = capObj?.get("canManageAccess")?.jsonPrimitive?.booleanOrNull ?: false
+        val canUseCrm = capObj?.get("canUseCrm")?.jsonPrimitive?.booleanOrNull ?: false
+        val canManageCrmSheets = capObj?.get("canManageCrmSheets")?.jsonPrimitive?.booleanOrNull ?: false
+        val canManageApplicants = capObj?.get("canManageApplicants")?.jsonPrimitive?.booleanOrNull ?: false
+        val canManagePayroll = capObj?.get("canManagePayroll")?.jsonPrimitive?.booleanOrNull ?: false
+        val canViewDocuments = capObj?.get("canViewDocuments")?.jsonPrimitive?.booleanOrNull ?: true
+        val canManageDocuments = capObj?.get("canManageDocuments")?.jsonPrimitive?.booleanOrNull ?: false
+        val canSignDocuments = capObj?.get("canSignDocuments")?.jsonPrimitive?.booleanOrNull ?: false
+        val canManageExpenses = capObj?.get("canManageExpenses")?.jsonPrimitive?.booleanOrNull ?: false
+        val canUseChat = capObj?.get("canUseChat")?.jsonPrimitive?.booleanOrNull ?: true
+        val canViewEmployees = capObj?.get("canViewEmployees")?.jsonPrimitive?.booleanOrNull ?: false
+        val canRequestCrmSource = capObj?.get("canRequestCrmSource")?.jsonPrimitive?.booleanOrNull ?: false
+        val canScheduleMeetings = capObj?.get("canScheduleMeetings")?.jsonPrimitive?.booleanOrNull ?: false
+        val canManageResources = capObj?.get("canManageResources")?.jsonPrimitive?.booleanOrNull ?: false
+        val canPublishAnnouncements = capObj?.get("canPublishAnnouncements")?.jsonPrimitive?.booleanOrNull ?: false
+        val canViewAnnouncements = capObj?.get("canViewAnnouncements")?.jsonPrimitive?.booleanOrNull ?: true
+        val canViewMeetings = capObj?.get("canViewMeetings")?.jsonPrimitive?.booleanOrNull ?: true
+        val canViewResources = capObj?.get("canViewResources")?.jsonPrimitive?.booleanOrNull ?: true
+        UserCapabilities(
+            isSuperiorDashboard = isSuperior,
+            canManage = canManage,
+            canManageAccess = canManageAccess,
+            canUseCrm = canUseCrm,
+            canManageCrmSheets = canManageCrmSheets,
+            canManageApplicants = canManageApplicants,
+            canManageOps = canManageOps,
+            canManagePayroll = canManagePayroll,
+            canViewDocuments = canViewDocuments,
+            canManageDocuments = canManageDocuments,
+            canSignDocuments = canSignDocuments,
+            canManageExpenses = canManageExpenses,
+            canUseChat = canUseChat,
+            canViewEmployees = canViewEmployees,
+            canRequestCrmSource = canRequestCrmSource,
+            canScheduleMeetings = canScheduleMeetings,
+            canManageResources = canManageResources,
+            canPublishAnnouncements = canPublishAnnouncements,
+            canViewAnnouncements = canViewAnnouncements,
+            canViewMeetings = canViewMeetings,
+            canViewResources = canViewResources
+        )
     }
 
     val attendanceList = remember(dataObj) {
@@ -1052,7 +1059,7 @@ fun PortalScreen(
         ) {
             AnnouncementsOverlayScreen(
                 data = dataObj,
-                canBroadcast = capabilities.isSuperiorDashboard,
+                canBroadcast = capabilities.canPublishAnnouncements,
                 onClose = { showAnnouncementsOverlay = false },
                 onSubmitAnnouncement = { title, body, audienceRoles, priority ->
                     isLoading = true
@@ -1076,7 +1083,7 @@ fun PortalScreen(
         ) {
             MeetingsOverlayScreen(
                 data = dataObj,
-                canScheduleMeetings = capabilities.isSuperiorDashboard,
+                canScheduleMeetings = capabilities.canScheduleMeetings,
                 onClose = { showMeetingsOverlay = false },
                 onSubmitMeeting = { title, start, end, url, roles, users, notes ->
                     isLoading = true
@@ -1098,7 +1105,7 @@ fun PortalScreen(
         ) {
             ResourcesOverlayScreen(
                 data = dataObj,
-                canManageResources = capabilities.isSuperiorDashboard,
+                canManageResources = capabilities.canManageResources,
                 onClose = { showResourcesOverlay = false },
                 onSubmitResource = { title, resType, url, desc, roles, users, tags ->
                     isLoading = true
@@ -1554,14 +1561,20 @@ fun HomeScreen(
                 list.add(QuickActionDef("Reports", Icons.Default.List, Color(0xFFF5F3FF), SassSecondary, "reports"))
             }
 
-            // 16. Announcements
-            list.add(QuickActionDef("Announcements", Icons.Default.Notifications, Color(0xFFFFF1F2), Color(0xFFF43F5E), "announcements"))
+            // 16. Announcements (visible if role can view OR publish)
+            if (caps.canViewAnnouncements || caps.canPublishAnnouncements) {
+                list.add(QuickActionDef("Announcements", Icons.Default.Notifications, Color(0xFFFFF1F2), Color(0xFFF43F5E), "announcements"))
+            }
 
-            // 17. Meetings
-            list.add(QuickActionDef("Meetings", Icons.Default.Call, Color(0xFFE0F2FE), SassAccent, "meetings"))
+            // 17. Meetings (visible if role can view OR schedule)
+            if (caps.canViewMeetings || caps.canScheduleMeetings) {
+                list.add(QuickActionDef("Meetings", Icons.Default.Call, Color(0xFFE0F2FE), SassAccent, "meetings"))
+            }
 
-            // 18. Resources
-            list.add(QuickActionDef("Resources", Icons.Default.Info, Color(0xFFEEF2F6), SassSecondary, "resources"))
+            // 18. Resources (visible if role can view OR manage)
+            if (caps.canViewResources || caps.canManageResources) {
+                list.add(QuickActionDef("Resources", Icons.Default.Info, Color(0xFFEEF2F6), SassSecondary, "resources"))
+            }
 
             // 19. Privileges
             if (caps.canManageAccess) {
@@ -1584,8 +1597,16 @@ fun HomeScreen(
     ) {
         // Hero Section
         item {
+            val timeGreeting = remember {
+                val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+                when {
+                    hour < 12 -> "Good Morning,"
+                    hour < 17 -> "Good Afternoon,"
+                    else -> "Good Evening,"
+                }
+            }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(text = "Good Morning,", color = SassTextSecondary, style = SassBodyLarge)
+                Text(text = timeGreeting, color = SassTextSecondary, style = SassBodyLarge)
                 Text(text = firstName, color = SassTextPrimary, style = SassPageTitle, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
@@ -2280,7 +2301,7 @@ fun AiAssistantScreen(data: JsonObject?) {
                 }
                 else -> {
                     chatMessages.add(
-                        "ai" to "I processed your request, but I'm in offline mock mode for custom text queries. Try clicking one of the template chips below for a richer interactive result!"
+                        "ai" to "I can help you with CRM sheets, scheduled meetings, proposals, email drafts, and activity reports. Try one of the template chips below or ask about your meetings or CRM data!"
                     )
                 }
             }

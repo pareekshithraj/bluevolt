@@ -427,7 +427,13 @@ export default function CrmTab({
 
             <div className={styles.sheetAccessStrip}>
               <span><strong>Access</strong> {activeCrmSheet.audienceRoles === "all" ? "All roles" : activeCrmSheet.audienceRoles || "Role restricted"}</span>
-              <span><strong>People</strong> {activeCrmSheet.audienceUsers && activeCrmSheet.audienceUsers !== "," ? activeCrmSheet.audienceUsers.split(",").filter(Boolean).length : 0} selected</span>
+              <span><strong>People</strong> {(() => {
+                const ids = (activeCrmSheet.audienceUsers || "").split(",").filter(Boolean);
+                if (ids.length === 0) return "Everyone";
+                const names = ids.map((id) => data.users.find((u) => u.id.toString() === id.trim())?.name ?? `#${id}`);
+                if (names.length <= 2) return names.join(", ");
+                return `${names.slice(0, 2).join(", ")} +${names.length - 2} more`;
+              })()}</span>
               <span><strong>Editors</strong> {activeCrmSheet.editorRoles === "all" ? "All roles" : activeCrmSheet.editorRoles || "Owner role"}</span>
               <span><strong>Requested by</strong> {activeCrmSheet.requestedByName || "Unknown"}</span>
             </div>

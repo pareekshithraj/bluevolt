@@ -78,6 +78,22 @@ fun parseIsoDateTime(isoStr: String?): Date? {
     }
 }
 
+fun getRelativeTimeSpan(isoStr: String?): String {
+    val date = parseIsoDateTime(isoStr) ?: return isoStr ?: ""
+    val diffMs = System.currentTimeMillis() - date.time
+    val diffSec = diffMs / 1000
+    if (diffSec < 60) return "Just now"
+    val diffMin = diffSec / 60
+    if (diffMin < 60) return "${diffMin}m ago"
+    val diffHours = diffMin / 60
+    if (diffHours < 24) return "${diffHours}h ago"
+    val diffDays = diffHours / 24
+    if (diffDays == 1L) return "Yesterday"
+    if (diffDays < 7) return "${diffDays}d ago"
+    val sdf = SimpleDateFormat("dd MMM yyyy", Locale.US)
+    return sdf.format(date)
+}
+
 fun calculateExpectedHours(startTimeStr: String?, endTimeStr: String?): Double {
     val start = startTimeStr ?: "09:00"
     val end = endTimeStr ?: "18:00"
@@ -179,6 +195,11 @@ fun PortalScreen(
     var showStaffOverlay by remember { mutableStateOf(false) }
     var showPayrollOverlay by remember { mutableStateOf(false) }
     var showAuditOverlay by remember { mutableStateOf(false) }
+    var showIdCardOverlay by remember { mutableStateOf(false) }
+    var showLetterOverlay by remember { mutableStateOf(false) }
+    var letterType by remember { mutableStateOf("Offer Letter") }
+    var viewingIdCardEmployeeId by remember { mutableStateOf("") }
+    var viewingLetterEmployeeId by remember { mutableStateOf("") }
 
     var activeDocumentViewUrl by remember { mutableStateOf<String?>(null) }
     var activeDocumentTitle by remember { mutableStateOf<String?>(null) }
@@ -259,21 +280,30 @@ fun PortalScreen(
         dataObj?.get("attendance")?.jsonArray
     }
     val activeSession = remember(attendanceList) {
-        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        val nowMs = System.currentTimeMillis()
         attendanceList?.firstOrNull {
             val entry = it.jsonObject
-            val workDate = entry["workDate"]?.jsonPrimitive?.contentOrNull
-            entry["loginAt"]?.jsonPrimitive?.contentOrNull != null &&
-                    entry["logoutAt"]?.jsonPrimitive?.contentOrNull == null &&
-                    workDate != null && workDate.startsWith(todayStr)
+            val loginAtStr = entry["loginAt"]?.jsonPrimitive?.contentOrNull
+            val logoutAtStr = entry["logoutAt"]?.jsonPrimitive?.contentOrNull
+            if (loginAtStr != null && logoutAtStr == null) {
+                val loginDate = parseIsoDateTime(loginAtStr)
+                loginDate != null && (nowMs - loginDate.time) < 18 * 60 * 60 * 1000
+            } else false
         }?.jsonObject
     }
     val isClockedIn = activeSession != null
+    val currentUserId = remember(dataObj) {
+        val sess = dataObj?.get("session")?.jsonObject
+        sess?.get("userId")?.jsonPrimitive?.contentOrNull
+            ?: sess?.get("id")?.jsonPrimitive?.contentOrNull
+            ?: ""
+    }
 
     val currentUser = remember(dataObj) {
         val usersList = dataObj?.get("users")?.jsonArray
         val sessionObj = dataObj?.get("session")?.jsonObject
-        val sessionId = sessionObj?.get("id")?.jsonPrimitive?.intOrNull
+        val sessionId = sessionObj?.get("userId")?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+            ?: sessionObj?.get("id")?.jsonPrimitive?.intOrNull
         usersList?.firstOrNull { it.jsonObject["id"]?.jsonPrimitive?.intOrNull == sessionId }?.jsonObject
     }
 
@@ -320,6 +350,32 @@ fun PortalScreen(
             portalDataStr = cached
         }
         refreshData(currentTabKey)
+    }
+
+    // Auto-refresh every 2 minutes in background
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(120_000L)
+            val result = NetworkClient.fetchPortalData(context, currentTabKey)
+            result.onSuccess {
+                portalDataStr = it
+                NetworkClient.saveCachedPortalData(context, currentTabKey, it)
+            }
+        }
+    }
+
+    // Refresh when app comes back to foreground
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, currentTabKey) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                refreshData(currentTabKey)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     // Load Chat messages locally
@@ -552,6 +608,7 @@ fun PortalScreen(
                             onOpenResources = { showResourcesOverlay = true },
                             onOpenPrivileges = { showPrivilegesOverlay = true },
                             onOpenLeaves = { showLeavesOverlay = true },
+                            onOpenIdCard = { showIdCardOverlay = true },
                             onSwitchToTasks = { activeTab = 1 }
                         )
                         1 -> TasksScreen(
@@ -579,16 +636,62 @@ fun PortalScreen(
                                 }
                             }
                         )
-                        2 -> AiAssistantScreen(
-                            data = dataObj
+                        2 -> MenuScreen(
+                            data = dataObj,
+                            capabilities = capabilities,
+                            onOpenCrm = { showCrmOverlay = true },
+                            onOpenAttendance = { showAttendanceOverlay = true },
+                            onOpenSupport = { showSupportOverlay = true },
+                            onOpenApprovals = { showApprovalsOverlay = true },
+                            onOpenDocs = { showDocsOverlay = true },
+                            onOpenStaff = { showStaffOverlay = true },
+                            onOpenPayroll = { showPayrollOverlay = true },
+                            onOpenAudit = { showAuditOverlay = true },
+                            onOpenApplicants = { showApplicantsOverlay = true },
+                            onOpenWorkOps = { showWorkOpsOverlay = true },
+                            onOpenExpenses = { showExpensesOverlay = true },
+                            onOpenReports = { showReportsOverlay = true },
+                            onOpenAnnouncements = { showAnnouncementsOverlay = true },
+                            onOpenMeetings = { showMeetingsOverlay = true },
+                            onOpenResources = { showResourcesOverlay = true },
+                            onOpenPrivileges = { showPrivilegesOverlay = true },
+                            onOpenLeaves = { showLeavesOverlay = true },
+                            onOpenIdCard = { showIdCardOverlay = true },
+                            onSwitchToTasks = { activeTab = 1 }
                         )
                         3 -> NotificationsScreen(
-                            data = dataObj
+                            data = dataObj,
+                            onMarkRead = { id ->
+                                isLoading = true
+                                scope.launch {
+                                    NetworkClient.markNotificationRead(context, id).fold(
+                                        onSuccess = { refreshData("notifications") },
+                                        onFailure = { errorMessage = it.message; isLoading = false }
+                                    )
+                                }
+                            },
+                            onMarkAllRead = {
+                                isLoading = true
+                                scope.launch {
+                                    NetworkClient.markAllNotificationsRead(context).fold(
+                                        onSuccess = { refreshData("notifications") },
+                                        onFailure = { errorMessage = it.message; isLoading = false }
+                                    )
+                                }
+                            }
                         )
                         4 -> ProfileScreen(
                             data = dataObj,
                             onLogout = onLogout,
-                            onOpenDocs = { showDocsOverlay = true }
+                            onOpenDocs = { showDocsOverlay = true },
+                            onOpenIdCard = { id ->
+                                viewingIdCardEmployeeId = id
+                                showIdCardOverlay = true
+                            },
+                            onOpenLetter = { id ->
+                                viewingLetterEmployeeId = id
+                                showLetterOverlay = true
+                            }
                         )
                     }
                 }
@@ -877,6 +980,21 @@ fun PortalScreen(
             )
         }
 
+        LaunchedEffect(showSupportOverlay) {
+            if (showSupportOverlay) {
+                while (true) {
+                    kotlinx.coroutines.delay(4000)
+                    NetworkClient.fetchPortalData(context, currentTabKey).fold(
+                        onSuccess = { dataStr ->
+                            portalDataStr = dataStr
+                            NetworkClient.saveCachedPortalData(context, currentTabKey, dataStr)
+                        },
+                        onFailure = {}
+                    )
+                }
+            }
+        }
+
         AnimatedVisibility(
             visible = showSupportOverlay,
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
@@ -885,12 +1003,45 @@ fun PortalScreen(
         ) {
             SupportOverlayScreen(
                 messages = groupChatMessages,
+                currentUserId = currentUserId,
                 onClose = { showSupportOverlay = false },
                 onSendMessage = { body ->
+                    val sessionObj = dataObj?.get("session")?.jsonObject
+                    val userName = currentUser?.get("name")?.jsonPrimitive?.contentOrNull
+                        ?: sessionObj?.get("name")?.jsonPrimitive?.contentOrNull
+                        ?: "Me"
+                    val userRole = currentUser?.get("role")?.jsonPrimitive?.contentOrNull
+                        ?: sessionObj?.get("role")?.jsonPrimitive?.contentOrNull
+                        ?: "employee"
+
+                    val optimisticMsg = buildJsonObject {
+                        put("id", -System.currentTimeMillis())
+                        put("employeeId", currentUserId)
+                        put("employeeName", userName)
+                        put("employeeRole", userRole)
+                        put("body", body)
+                        put("createdAt", SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date()))
+                        put("sending", true)
+                    }
+                    groupChatMessages.add(optimisticMsg)
+
                     scope.launch {
                         NetworkClient.sendGroupChatMessage(context, body).fold(
-                            onSuccess = { refreshData(currentTabKey) },
-                            onFailure = { errorMessage = it.message }
+                            onSuccess = {
+                                scope.launch {
+                                    NetworkClient.fetchPortalData(context, currentTabKey).fold(
+                                        onSuccess = { dataStr ->
+                                            portalDataStr = dataStr
+                                            NetworkClient.saveCachedPortalData(context, currentTabKey, dataStr)
+                                        },
+                                        onFailure = {}
+                                    )
+                                }
+                            },
+                            onFailure = { err ->
+                                errorMessage = err.message
+                                groupChatMessages.remove(optimisticMsg)
+                            }
                         )
                     }
                 }
@@ -907,6 +1058,10 @@ fun PortalScreen(
                 data = dataObj,
                 canManage = capabilities.canManage,
                 onClose = { showStaffOverlay = false },
+                onOpenIdCard = { id ->
+                    viewingIdCardEmployeeId = id
+                    showIdCardOverlay = true
+                },
                 onSaveEmployee = { id, name, email, password, role, deptId, mgrId, title, empType, comp, start, end, stat ->
                     isLoading = true
                     scope.launch {
@@ -1169,13 +1324,327 @@ fun PortalScreen(
                     }
                     AndroidView(
                         factory = { ctx ->
+                            val cookieManager = android.webkit.CookieManager.getInstance()
+                            cookieManager.setAcceptCookie(true)
+                            val token = NetworkClient.getToken(ctx)
+                            if (token != null) {
+                                val domain = NetworkClient.BASE_URL.substringAfter("://").substringBefore(":")
+                                cookieManager.setCookie(NetworkClient.BASE_URL, "bluevolt_employee_session=$token; Domain=$domain; Path=/; Secure")
+                            }
                             WebView(ctx).apply {
                                 settings.javaScriptEnabled = true
                                 webViewClient = WebViewClient()
-                                loadUrl(docUrl)
+                                val finalUrl = if (docUrl.startsWith("http://") || docUrl.startsWith("https://")) {
+                                    docUrl
+                                } else {
+                                    "${NetworkClient.BASE_URL}${if (docUrl.startsWith("/")) "" else "/"}$docUrl"
+                                }
+                                loadUrl(finalUrl)
                             }
                         },
                         modifier = Modifier.weight(1f).fillMaxWidth()
+                    )
+                }
+            }
+        }
+
+        // === ID Card WebView Overlay ===
+        AnimatedVisibility(
+            visible = showIdCardOverlay,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            IdCardOverlayScreen(
+                employeeId = viewingIdCardEmployeeId,
+                onClose = { showIdCardOverlay = false }
+            )
+        }
+
+        // === Letter WebView Overlay ===
+        AnimatedVisibility(
+            visible = showLetterOverlay,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            LetterOverlayScreen(
+                employeeId = viewingLetterEmployeeId,
+                onClose = { showLetterOverlay = false }
+            )
+        }
+    }
+}
+
+@Composable
+fun IdCardOverlayScreen(
+    employeeId: String,
+    onClose: () -> Unit
+) {
+    val context = LocalContext.current
+    var htmlContent by remember(employeeId) { mutableStateOf<String?>(null) }
+    var isLoading by remember(employeeId) { mutableStateOf(true) }
+    var errorMsg by remember(employeeId) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(employeeId) {
+        isLoading = true
+        errorMsg = null
+        NetworkClient.fetchIdCard(context, employeeId).fold(
+            onSuccess = {
+                htmlContent = it
+                isLoading = false
+            },
+            onFailure = {
+                errorMsg = it.message ?: "Failed to load ID card"
+                isLoading = false
+            }
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(SassBackground)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(SassCard)
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Close ID Card", tint = SassTextPrimary)
+                }
+                Text(
+                    text = "Employee ID Card",
+                    color = SassTextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(color = SassPrimary)
+                } else if (errorMsg != null) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        Text(text = errorMsg!!, color = SassDanger, textAlign = TextAlign.Center)
+                        Button(
+                            onClick = {
+                                isLoading = true
+                                errorMsg = null
+                                kotlinx.coroutines.MainScope().launch {
+                                    NetworkClient.fetchIdCard(context, employeeId).fold(
+                                        onSuccess = {
+                                            htmlContent = it
+                                            isLoading = false
+                                        },
+                                        onFailure = {
+                                            errorMsg = it.message ?: "Failed to load ID card"
+                                            isLoading = false
+                                        }
+                                    )
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = SassPrimary)
+                        ) {
+                            Text("Retry")
+                        }
+                    }
+                } else {
+                    AndroidView(
+                        factory = { ctx ->
+                            val cookieManager = android.webkit.CookieManager.getInstance()
+                            cookieManager.setAcceptCookie(true)
+                            val token = NetworkClient.getToken(ctx)
+                            if (token != null) {
+                                cookieManager.setCookie("https://bluevolt.group", "bluevolt_employee_session=$token; Domain=bluevolt.group; Path=/; Secure")
+                            }
+                            WebView(ctx).apply {
+                                settings.javaScriptEnabled = true
+                                settings.useWideViewPort = true
+                                settings.loadWithOverviewMode = true
+                                settings.builtInZoomControls = true
+                                settings.displayZoomControls = false
+                                webViewClient = WebViewClient()
+                                htmlContent?.let {
+                                    loadDataWithBaseURL("https://bluevolt.group", it, "text/html", "utf-8", null)
+                                }
+                            }
+                        },
+                        update = { webView ->
+                            htmlContent?.let {
+                                webView.loadDataWithBaseURL("https://bluevolt.group", it, "text/html", "utf-8", null)
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LetterOverlayScreen(
+    employeeId: String,
+    onClose: () -> Unit
+) {
+    val context = LocalContext.current
+    val letterTypes = listOf("Offer Letter", "Appraisal Letter", "Promotion Letter", "Employment Letter")
+    var selectedType by remember { mutableStateOf("Offer Letter") }
+    var htmlContent by remember(employeeId, selectedType) { mutableStateOf<String?>(null) }
+    var isLoading by remember(employeeId, selectedType) { mutableStateOf(true) }
+    var errorMsg by remember(employeeId, selectedType) { mutableStateOf<String?>(null) }
+    var dropdownExpanded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(employeeId, selectedType) {
+        isLoading = true
+        errorMsg = null
+        NetworkClient.fetchLetter(context, employeeId, selectedType).fold(
+            onSuccess = {
+                htmlContent = it
+                isLoading = false
+            },
+            onFailure = {
+                errorMsg = it.message ?: "Failed to load letter"
+                isLoading = false
+            }
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(SassBackground)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(SassCard)
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Close Letter", tint = SassTextPrimary)
+                }
+                
+                Box(modifier = Modifier.weight(1f)) {
+                    Row(
+                        modifier = Modifier
+                            .clickable { dropdownExpanded = true }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = selectedType,
+                            color = SassTextPrimary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = "Select Letter Type",
+                            tint = SassTextPrimary
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = dropdownExpanded,
+                        onDismissRequest = { dropdownExpanded = false },
+                        modifier = Modifier.background(SassCard)
+                    ) {
+                        letterTypes.forEach { type ->
+                            DropdownMenuItem(
+                                text = { Text(type, color = SassTextPrimary) },
+                                onClick = {
+                                    selectedType = type
+                                    dropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(color = SassPrimary)
+                } else if (errorMsg != null) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        Text(text = errorMsg!!, color = SassDanger, textAlign = TextAlign.Center)
+                        Button(
+                            onClick = {
+                                isLoading = true
+                                errorMsg = null
+                                kotlinx.coroutines.MainScope().launch {
+                                    NetworkClient.fetchLetter(context, employeeId, selectedType).fold(
+                                        onSuccess = {
+                                            htmlContent = it
+                                            isLoading = false
+                                        },
+                                        onFailure = {
+                                            errorMsg = it.message ?: "Failed to load letter"
+                                            isLoading = false
+                                        }
+                                    )
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = SassPrimary)
+                        ) {
+                            Text("Retry")
+                        }
+                    }
+                } else {
+                    AndroidView(
+                        factory = { ctx ->
+                            val cookieManager = android.webkit.CookieManager.getInstance()
+                            cookieManager.setAcceptCookie(true)
+                            val token = NetworkClient.getToken(ctx)
+                            if (token != null) {
+                                cookieManager.setCookie("https://bluevolt.group", "bluevolt_employee_session=$token; Domain=bluevolt.group; Path=/; Secure")
+                            }
+                            WebView(ctx).apply {
+                                settings.javaScriptEnabled = true
+                                settings.useWideViewPort = true
+                                settings.loadWithOverviewMode = true
+                                settings.builtInZoomControls = true
+                                settings.displayZoomControls = false
+                                webViewClient = WebViewClient()
+                                htmlContent?.let {
+                                    loadDataWithBaseURL("https://bluevolt.group", it, "text/html", "utf-8", null)
+                                }
+                            }
+                        },
+                        update = { webView ->
+                            htmlContent?.let {
+                                webView.loadDataWithBaseURL("https://bluevolt.group", it, "text/html", "utf-8", null)
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
             }
@@ -1420,6 +1889,213 @@ fun FintechChart(
     }
 }
 
+// ---------------- MENU SCREEN (DYNAMICAL FEATURES) ----------------
+@Composable
+fun MenuScreen(
+    data: JsonObject?,
+    capabilities: UserCapabilities,
+    onOpenAttendance: () -> Unit,
+    onSwitchToTasks: () -> Unit,
+    onOpenCrm: () -> Unit,
+    onOpenApprovals: () -> Unit,
+    onOpenLeaves: () -> Unit,
+    onOpenDocs: () -> Unit,
+    onOpenSupport: () -> Unit,
+    onOpenStaff: () -> Unit,
+    onOpenPayroll: () -> Unit,
+    onOpenAudit: () -> Unit,
+    onOpenApplicants: () -> Unit,
+    onOpenWorkOps: () -> Unit,
+    onOpenExpenses: () -> Unit,
+    onOpenReports: () -> Unit,
+    onOpenAnnouncements: () -> Unit,
+    onOpenMeetings: () -> Unit,
+    onOpenResources: () -> Unit,
+    onOpenPrivileges: () -> Unit,
+    onOpenIdCard: () -> Unit
+) {
+    val context = LocalContext.current
+    val userName = remember { NetworkClient.getUserName(context) ?: "User" }
+    val firstName = remember(userName) { userName.split(" ").firstOrNull() ?: "User" }
+
+    val caps = capabilities
+    val activeActions = remember(caps) {
+        val list = mutableListOf<QuickActionDef>()
+        if (caps != null) {
+            // 1. Attendance
+            list.add(QuickActionDef("Attendance", Icons.Default.DateRange, Color(0xFFEFF6FF), SassPrimary, "attendance"))
+
+            // 2. Tasks Board
+            list.add(QuickActionDef("Tasks Board", Icons.Default.List, Color(0xFFEEF2F6), SassSecondary, "tasks"))
+
+            // 3. CRM
+            if (caps.canUseCrm) {
+                list.add(QuickActionDef("CRM", Icons.Default.Search, Color(0xFFECFDF5), SassSuccess, "crm"))
+            }
+
+            // 4. Approvals
+            if (caps.isSuperiorDashboard) {
+                list.add(QuickActionDef("Review Approvals", Icons.Default.CheckCircle, Color(0xFFFEF2F2), SassDanger, "approvals"))
+            }
+
+            // 5. Leaves Log
+            list.add(QuickActionDef("Leaves Log", Icons.Default.Check, Color(0xFFFDF4E7), SassWarning, "leaves"))
+
+            // 6. Documents
+            if (caps.canViewDocuments) {
+                list.add(QuickActionDef("Documents", Icons.Default.Info, Color(0xFFF5F3FF), SassSecondary, "documents"))
+            }
+
+            // 7. Chat
+            if (caps.canUseChat) {
+                list.add(QuickActionDef("Chat", Icons.Default.Email, Color(0xFFE0F2FE), SassAccent, "support"))
+            }
+
+            // 8. Staff Directory
+            if (caps.canViewEmployees || caps.canManage) {
+                list.add(QuickActionDef("Staff Directory", Icons.Default.AccountBox, Color(0xFFFFF1F2), Color(0xFFF43F5E), "staff"))
+            }
+
+            // 9. Payroll Hub
+            if (caps.canManagePayroll || caps.isSuperiorDashboard) {
+                list.add(QuickActionDef("Payroll Hub", Icons.Default.ShoppingCart, Color(0xFFF0FDF4), SassSuccess, "payroll"))
+            }
+
+            // 11. Security Audits
+            if (caps.canManageAccess) {
+                list.add(QuickActionDef("Security Audits", Icons.Default.Warning, Color(0xFFFEF3C7), SassWarning, "audit"))
+            }
+
+            // 12. Applicants
+            if (caps.canManageApplicants) {
+                list.add(QuickActionDef("Applicants", Icons.Default.Person, Color(0xFFECFDF5), SassSuccess, "applicants"))
+            }
+
+            // 13. Work Ops
+            if (caps.canManageOps || !caps.isSuperiorDashboard) {
+                list.add(QuickActionDef("Work Ops", Icons.Default.Settings, Color(0xFFEFF6FF), SassPrimary, "ops"))
+            }
+
+            // 14. Expenses
+            if (caps.canManageExpenses || !caps.isSuperiorDashboard) {
+                list.add(QuickActionDef("Expenses", Icons.Default.ShoppingCart, Color(0xFFFDF4E7), SassWarning, "expenses"))
+            }
+
+            // 15. Reports
+            if (caps.isSuperiorDashboard) {
+                list.add(QuickActionDef("Reports", Icons.Default.List, Color(0xFFF5F3FF), SassSecondary, "reports"))
+            }
+
+            // 16. Announcements
+            if (caps.canViewAnnouncements || caps.canPublishAnnouncements) {
+                list.add(QuickActionDef("Announcements", Icons.Default.Notifications, Color(0xFFFFF1F2), Color(0xFFF43F5E), "announcements"))
+            }
+
+            // 17. Meetings
+            if (caps.canViewMeetings || caps.canScheduleMeetings) {
+                list.add(QuickActionDef("Meetings", Icons.Default.Call, Color(0xFFE0F2FE), SassAccent, "meetings"))
+            }
+
+            // 18. Resources
+            if (caps.canViewResources || caps.canManageResources) {
+                list.add(QuickActionDef("Resources", Icons.Default.Info, Color(0xFFEEF2F6), SassSecondary, "resources"))
+            }
+
+            // 19. Privileges
+            if (caps.canManageAccess) {
+                list.add(QuickActionDef("Privileges", Icons.Default.Lock, Color(0xFFFEF3C7), SassWarning, "access"))
+            }
+
+            // 20. My ID Card
+            list.add(QuickActionDef("My ID Card", Icons.Default.AccountBox, Color(0xFFEFF6FF), SassPrimary, "id_card"))
+        } else {
+            list.add(QuickActionDef("Attendance", Icons.Default.DateRange, Color(0xFFEFF6FF), SassPrimary, "attendance"))
+            list.add(QuickActionDef("Tasks Board", Icons.Default.List, Color(0xFFEEF2F6), SassSecondary, "tasks"))
+            list.add(QuickActionDef("CRM", Icons.Default.Search, Color(0xFFECFDF5), SassSuccess, "crm"))
+            list.add(QuickActionDef("Leaves Log", Icons.Default.Check, Color(0xFFFDF4E7), SassWarning, "leaves"))
+        }
+        list
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().background(SassBackground)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(SassCard)
+                .padding(horizontal = 24.dp, vertical = 20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "BLUEVOLT MENU",
+                    fontWeight = FontWeight.ExtraBold,
+                    color = SassTextPrimary,
+                    letterSpacing = 1.sp,
+                    fontSize = 20.sp,
+                    fontFamily = FontFamily.SansSerif
+                )
+                Text(
+                    text = "Assigned Features for $firstName",
+                    color = SassTextSecondary,
+                    fontSize = 13.sp
+                )
+            }
+        }
+
+        LazyColumn(
+            contentPadding = PaddingValues(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.weight(1f).fillMaxWidth()
+        ) {
+            val actionChunks = activeActions.chunked(2)
+            items(actionChunks) { rowItems ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    rowItems.forEach { action ->
+                        HomeQuickActionCard(
+                            title = action.title,
+                            icon = action.icon,
+                            iconColor = action.iconColor,
+                            iconBg = action.iconBg,
+                            onClick = {
+                                when (action.actionKey) {
+                                    "attendance" -> onOpenAttendance()
+                                    "tasks" -> onSwitchToTasks()
+                                    "crm" -> onOpenCrm()
+                                    "approvals" -> onOpenApprovals()
+                                    "leaves" -> onOpenLeaves()
+                                    "documents" -> onOpenDocs()
+                                    "support" -> onOpenSupport()
+                                    "staff" -> onOpenStaff()
+                                    "payroll" -> onOpenPayroll()
+                                    "audit" -> onOpenAudit()
+                                    "applicants" -> onOpenApplicants()
+                                    "ops" -> onOpenWorkOps()
+                                    "expenses" -> onOpenExpenses()
+                                    "reports" -> onOpenReports()
+                                    "announcements" -> onOpenAnnouncements()
+                                    "meetings" -> onOpenMeetings()
+                                    "resources" -> onOpenResources()
+                                    "access" -> onOpenPrivileges()
+                                    "id_card" -> onOpenIdCard()
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    if (rowItems.size == 1) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ---------------- HOME SCREEN (COMMON) ----------------
 @Composable
 fun HomeScreen(
@@ -1445,6 +2121,7 @@ fun HomeScreen(
     onOpenResources: () -> Unit,
     onOpenPrivileges: () -> Unit,
     onOpenLeaves: () -> Unit,
+    onOpenIdCard: () -> Unit,
     onSwitchToTasks: () -> Unit
 ) {
     val context = LocalContext.current
@@ -1501,9 +2178,9 @@ fun HomeScreen(
             // 2. Tasks (Always Available)
             list.add(QuickActionDef("Tasks Board", Icons.Default.List, Color(0xFFEEF2F6), SassSecondary, "tasks"))
             
-            // 3. CRM Leads (canUseCrm)
+            // 3. CRM (canUseCrm)
             if (caps.canUseCrm) {
-                list.add(QuickActionDef("CRM Leads", Icons.Default.Search, Color(0xFFECFDF5), SassSuccess, "crm"))
+                list.add(QuickActionDef("CRM", Icons.Default.Search, Color(0xFFECFDF5), SassSuccess, "crm"))
             }
             
             // 4. Approvals
@@ -1519,9 +2196,9 @@ fun HomeScreen(
                 list.add(QuickActionDef("Documents", Icons.Default.Info, Color(0xFFF5F3FF), SassSecondary, "documents"))
             }
             
-            // 7. Support Room (canUseChat)
+            // 7. Chat (canUseChat)
             if (caps.canUseChat) {
-                list.add(QuickActionDef("Support Room", Icons.Default.Email, Color(0xFFE0F2FE), SassAccent, "support"))
+                list.add(QuickActionDef("Chat", Icons.Default.Email, Color(0xFFE0F2FE), SassAccent, "support"))
             }
             
             // 8. Staff Directory (canViewEmployees || canManage)
@@ -1547,14 +2224,15 @@ fun HomeScreen(
             }
 
             // 13. Work Ops
-            if (caps.canManageOps || !caps.isSuperiorDashboard) {
+            if (caps.canManageOps) {
                 list.add(QuickActionDef("Work Ops", Icons.Default.Settings, Color(0xFFEFF6FF), SassPrimary, "ops"))
             }
 
             // 14. Expenses
-            if (caps.canManageExpenses || !caps.isSuperiorDashboard) {
+            if (caps.canManageExpenses) {
                 list.add(QuickActionDef("Expenses", Icons.Default.ShoppingCart, Color(0xFFFDF4E7), SassWarning, "expenses"))
             }
+
 
             // 15. Reports
             if (caps.isSuperiorDashboard) {
@@ -1580,11 +2258,14 @@ fun HomeScreen(
             if (caps.canManageAccess) {
                 list.add(QuickActionDef("Privileges", Icons.Default.Lock, Color(0xFFFEF3C7), SassWarning, "access"))
             }
+
+            // 20. My ID Card (always available)
+            list.add(QuickActionDef("My ID Card", Icons.Default.AccountBox, Color(0xFFEFF6FF), SassPrimary, "id_card"))
         } else {
             // Fallback default modules
             list.add(QuickActionDef("Attendance", Icons.Default.DateRange, Color(0xFFEFF6FF), SassPrimary, "attendance"))
             list.add(QuickActionDef("Tasks", Icons.Default.List, Color(0xFFEEF2F6), SassSecondary, "tasks"))
-            list.add(QuickActionDef("CRM Leads", Icons.Default.Search, Color(0xFFECFDF5), SassSuccess, "crm"))
+            list.add(QuickActionDef("CRM", Icons.Default.Search, Color(0xFFECFDF5), SassSuccess, "crm"))
             list.add(QuickActionDef("Leaves", Icons.Default.Check, Color(0xFFFDF4E7), SassWarning, "leaves"))
         }
         list
@@ -1678,7 +2359,7 @@ fun HomeScreen(
             }
         }
 
-        // 2x2 Statistics Grid (Total Employees, Team Online, Open Tasks, Completed Tasks)
+        // 2x2 Statistics Grid (role-based)
         item {
             Column(
                 verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -1688,22 +2369,41 @@ fun HomeScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
-                    StatCard(
-                        title = "Total Employees",
-                        metric = "${usersList.size}",
-                        icon = Icons.Default.AccountBox,
-                        iconBg = Color(0xFFEFF6FF),
-                        iconColor = SassPrimary,
-                        modifier = Modifier.weight(1f)
-                    )
-                    StatCard(
-                        title = "Team Online",
-                        metric = "$onlineCount",
-                        icon = Icons.Default.CheckCircle,
-                        iconBg = Color(0xFFECFDF5),
-                        iconColor = SassSuccess,
-                        modifier = Modifier.weight(1f)
-                    )
+                    if (isSuperior) {
+                        StatCard(
+                            title = "Total Employees",
+                            metric = "${usersList.size}",
+                            icon = Icons.Default.AccountBox,
+                            iconBg = Color(0xFFEFF6FF),
+                            iconColor = SassPrimary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        StatCard(
+                            title = "Team Online",
+                            metric = "$onlineCount",
+                            icon = Icons.Default.CheckCircle,
+                            iconBg = Color(0xFFECFDF5),
+                            iconColor = SassSuccess,
+                            modifier = Modifier.weight(1f)
+                        )
+                    } else {
+                        StatCard(
+                            title = "Leave Balance",
+                            metric = "24 Days",
+                            icon = Icons.Default.DateRange,
+                            iconBg = Color(0xFFFDF4E7),
+                            iconColor = SassWarning,
+                            modifier = Modifier.weight(1f)
+                        )
+                        StatCard(
+                            title = "Pending Leaves",
+                            metric = "$pendingLeavesCount",
+                            icon = Icons.Default.Check,
+                            iconBg = Color(0xFFEFF6FF),
+                            iconColor = SassPrimary,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1728,6 +2428,7 @@ fun HomeScreen(
                 }
             }
         }
+
 
         // DYNAMIC QUICK ACTIONS GRID (Lists ALL allowed pages dynamically)
         item {
@@ -1767,6 +2468,7 @@ fun HomeScreen(
                                         "meetings" -> onOpenMeetings()
                                         "resources" -> onOpenResources()
                                         "access" -> onOpenPrivileges()
+                                        "id_card" -> onOpenIdCard()
                                     }
                                 },
                                 modifier = Modifier.weight(1f)
@@ -1788,23 +2490,27 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    item {
-                        MyWorkRowCard(
-                            title = "Active Schools",
-                            subtitle = "CRM Leads Sheets",
-                            badgeText = "Realtime",
-                            badgeColor = SassSuccess,
-                            onClick = onOpenCrm
-                        )
+                    if (caps.canUseCrm) {
+                        item {
+                            MyWorkRowCard(
+                                title = "CRM",
+                                subtitle = "Leads & Pipelines",
+                                badgeText = "Realtime",
+                                badgeColor = SassSuccess,
+                                onClick = onOpenCrm
+                            )
+                        }
                     }
-                    item {
-                        MyWorkRowCard(
-                            title = "Pending Approvals",
-                            subtitle = "Leaves & Claims",
-                            badgeText = "Review",
-                            badgeColor = SassWarning,
-                            onClick = onOpenApprovals
-                        )
+                    if (caps.isSuperiorDashboard) {
+                        item {
+                            MyWorkRowCard(
+                                title = "Pending Approvals",
+                                subtitle = "Leaves & Claims",
+                                badgeText = "Review",
+                                badgeColor = SassWarning,
+                                onClick = onOpenApprovals
+                            )
+                        }
                     }
                     item {
                         MyWorkRowCard(
@@ -2227,6 +2933,9 @@ fun AiAssistantScreen(data: JsonObject?) {
     val inputMessage = remember { mutableStateOf("") }
     val isTyping = remember { mutableStateOf(false) }
 
+    val userName = remember { NetworkClient.getUserName(context) ?: "User" }
+    val firstName = remember(userName) { userName.split(" ").firstOrNull() ?: "User" }
+
     val crmSheets = remember(data) {
         data?.get("crmSheets")?.jsonArray
     }
@@ -2236,7 +2945,7 @@ fun AiAssistantScreen(data: JsonObject?) {
 
     if (chatMessages.isEmpty()) {
         chatMessages.add(
-            "ai" to "Hello Pareekshith, I am your workspace Copilot. How can I assist you with your operations today?"
+            "ai" to "Hello $firstName, I am your workspace Copilot. How can I assist you with your operations today?"
         )
     }
 
@@ -2291,7 +3000,7 @@ fun AiAssistantScreen(data: JsonObject?) {
                 }
                 query.contains("email") -> {
                     chatMessages.add(
-                        "ai" to "Here is your drafted onboarding update email:\n\n**Subject:** BlueVolt LMS Training Session Confirmation\n\nDear Principal,\n\nI hope this email finds you well. This is to confirm our training session scheduled for tomorrow. We will set up credentials for all teachers.\n\nRegards,\nPareekshith"
+                        "ai" to "Here is your drafted onboarding update email:\n\n**Subject:** BlueVolt LMS Training Session Confirmation\n\nDear Principal,\n\nI hope this email finds you well. This is to confirm our training session scheduled for tomorrow. We will set up credentials for all teachers.\n\nRegards,\n$firstName"
                     )
                 }
                 query.contains("report") -> {
@@ -2315,6 +3024,18 @@ fun AiAssistantScreen(data: JsonObject?) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(Icons.Default.Star, contentDescription = "AI Assistant", tint = SassPrimary, modifier = Modifier.size(24.dp))
             Text(text = "BlueVolt Copilot", style = SassSectionTitle, color = SassTextPrimary)
+            Box(
+                modifier = Modifier
+                    .background(SassPrimary.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = "Beta",
+                    color = SassPrimary,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -2470,7 +3191,11 @@ fun AiAssistantScreen(data: JsonObject?) {
 
 // ---------------- NOTIFICATIONS SCREEN ----------------
 @Composable
-fun NotificationsScreen(data: JsonObject?) {
+fun NotificationsScreen(
+    data: JsonObject?,
+    onMarkRead: (String) -> Unit,
+    onMarkAllRead: () -> Unit
+) {
     val notifications = remember(data) {
         data?.get("notifications")?.jsonArray ?: JsonArray(emptyList())
     }
@@ -2479,7 +3204,25 @@ fun NotificationsScreen(data: JsonObject?) {
         modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)
     ) {
         Spacer(modifier = Modifier.height(16.dp))
-        Text(text = "Inbox Notifications", style = SassSectionTitle, color = SassTextPrimary)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = "Inbox Notifications", style = SassSectionTitle, color = SassTextPrimary)
+            val hasUnread = notifications.any {
+                it.jsonObject["readAt"]?.jsonPrimitive?.contentOrNull == null
+            }
+            if (hasUnread) {
+                Text(
+                    text = "Mark all read",
+                    color = SassPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clickable { onMarkAllRead() }
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(16.dp))
 
         if (notifications.isEmpty()) {
@@ -2494,9 +3237,12 @@ fun NotificationsScreen(data: JsonObject?) {
             ) {
                 items(notifications) { noticeItem ->
                     val notice = noticeItem.jsonObject
+                    val id = notice["id"]?.jsonPrimitive?.contentOrNull ?: ""
                     val title = notice["title"]?.jsonPrimitive?.contentOrNull ?: "Notification"
                     val desc = notice["body"]?.jsonPrimitive?.contentOrNull ?: ""
                     val time = notice["createdAt"]?.jsonPrimitive?.contentOrNull ?: ""
+                    val readAt = notice["readAt"]?.jsonPrimitive?.contentOrNull
+                    val isUnread = readAt == null
 
                     Box(
                         modifier = Modifier
@@ -2508,15 +3254,41 @@ fun NotificationsScreen(data: JsonObject?) {
                                 spotColor = SassTextPrimary.copy(alpha = 0.05f)
                             )
                             .background(SassCard, RoundedCornerShape(24.dp))
+                            .then(
+                                if (isUnread && id.isNotEmpty()) {
+                                    Modifier.clickable { onMarkRead(id) }
+                                } else Modifier
+                            )
                             .padding(20.dp)
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(text = title, color = SassTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                                Text(text = time.take(10), color = SassTextSecondary, fontSize = 11.sp)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    if (isUnread) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(8.dp)
+                                                .background(SassPrimary, CircleShape)
+                                        )
+                                    }
+                                    Text(
+                                        text = title,
+                                        color = SassTextPrimary,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        overflow = TextOverflow.Ellipsis,
+                                        maxLines = 1
+                                    )
+                                }
+                                Text(text = getRelativeTimeSpan(time), color = SassTextSecondary, fontSize = 11.sp)
                             }
                             if (desc.isNotEmpty()) {
                                 Text(text = desc, color = SassTextSecondary, fontSize = 13.sp)
@@ -2534,7 +3306,9 @@ fun NotificationsScreen(data: JsonObject?) {
 fun ProfileScreen(
     data: JsonObject?,
     onLogout: () -> Unit,
-    onOpenDocs: () -> Unit
+    onOpenDocs: () -> Unit,
+    onOpenIdCard: (String) -> Unit,
+    onOpenLetter: (String) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -2547,17 +3321,28 @@ fun ProfileScreen(
     val leaveRequests = remember(data) { data?.get("leaveRequests")?.jsonArray ?: JsonArray(emptyList()) }
     val documents = remember(data) { data?.get("documents")?.jsonArray ?: JsonArray(emptyList()) }
 
-    var isPayrollExpanded by remember { mutableStateOf(false) }
-
     val currentUser = remember(data) {
         val usersList = data?.get("users")?.jsonArray
         val sessionObj = data?.get("session")?.jsonObject
-        val sessionId = sessionObj?.get("id")?.jsonPrimitive?.intOrNull
+        val sessionId = sessionObj?.get("userId")?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+            ?: sessionObj?.get("id")?.jsonPrimitive?.intOrNull
         usersList?.firstOrNull { it.jsonObject["id"]?.jsonPrimitive?.intOrNull == sessionId }?.jsonObject
     }
     val currentUserId = remember(currentUser) {
         currentUser?.get("id")?.jsonPrimitive?.intOrNull
     }
+
+    val hasApprovedLetter = remember(documents, currentUserId) {
+        documents.any { item ->
+            val obj = item.jsonObject
+            val url = obj["url"]?.jsonPrimitive?.contentOrNull ?: ""
+            val notes = obj["notes"]?.jsonPrimitive?.contentOrNull ?: ""
+            url.contains("/api/employee/letter") && notes.contains("Approval status: Approved")
+        }
+    }
+    val canReviewLetters = userRole == "super_admin" || userRole == "director" || userRole == "authorized_signatory" || userRole == "admin" || userRole == "hr"
+
+    var isPayrollExpanded by remember { mutableStateOf(false) }
 
     val leaveBalance = remember(leaveRequests, currentUserId) {
         if (currentUserId == null) 24
@@ -2600,25 +3385,20 @@ fun ProfileScreen(
             title.contains("laptop") || title.contains("device") || title.contains("macbook") || 
                     title.contains("thinkpad") || title.contains("computer") || title.contains("asset")
         }?.jsonObject
-        if (assetDoc != null) {
-            assetDoc["title"]?.jsonPrimitive?.contentOrNull ?: "MacBook Pro"
-        } else {
-            val dept = currentUser?.get("department")?.jsonPrimitive?.contentOrNull?.lowercase(Locale.US) ?: ""
-            if (dept.contains("engineering") || dept.contains("product") || dept.contains("content") || dept.contains("tech") || dept.contains("design")) {
-                "MacBook Pro"
-            } else {
-                "ThinkPad L14"
-            }
-        }
+        assetDoc?.get("title")?.jsonPrimitive?.contentOrNull ?: "Not Assigned"
     }
 
+
     val managerName = remember(data, currentUser) {
-        val managerId = currentUser?.get("managerId")?.jsonPrimitive?.intOrNull
+        val managerId = currentUser?.get("managerId")?.jsonPrimitive?.contentOrNull?.toIntOrNull()
         val usersList = data?.get("users")?.jsonArray
         val mgrObj = if (managerId != null && usersList != null) {
-            usersList.firstOrNull { it.jsonObject["id"]?.jsonPrimitive?.intOrNull == managerId }?.jsonObject
+            usersList.firstOrNull { 
+                val uid = it.jsonObject["id"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+                uid != null && uid == managerId
+            }?.jsonObject
         } else null
-        mgrObj?.get("name")?.jsonPrimitive?.contentOrNull ?: "Arjun Prasad"
+        mgrObj?.get("name")?.jsonPrimitive?.contentOrNull ?: "None"
     }
 
     val deptName = remember(currentUser) {
@@ -2721,41 +3501,58 @@ fun ProfileScreen(
                     }
                 }
                 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
+                val showLetterBtn = hasApprovedLetter || canReviewLetters
+                if (showLetterBtn) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                if (currentUserId.isNotEmpty()) {
+                                    onOpenIdCard(currentUserId)
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFECFDF5)),
+                            shape = RoundedCornerShape(18.dp),
+                            modifier = Modifier.weight(1f).height(50.dp)
+                        ) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.AccountBox, contentDescription = "ID Card", tint = SassSuccess, modifier = Modifier.size(16.dp))
+                                Text("Open ID Card", color = SassSuccess, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                        }
+                        
+                        Button(
+                            onClick = {
+                                if (currentUserId.isNotEmpty()) {
+                                    onOpenLetter(currentUserId)
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFF7ED)),
+                            shape = RoundedCornerShape(18.dp),
+                            modifier = Modifier.weight(1f).height(50.dp)
+                        ) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Email, contentDescription = "Letter", tint = SassWarning, modifier = Modifier.size(16.dp))
+                                Text("View Letter", color = SassWarning, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                        }
+                    }
+                } else {
                     Button(
                         onClick = {
                             if (currentUserId.isNotEmpty()) {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://bluevolt.group/api/employee/id-card?employeeId=$currentUserId"))
-                                context.startActivity(intent)
+                                onOpenIdCard(currentUserId)
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFECFDF5)),
                         shape = RoundedCornerShape(18.dp),
-                        modifier = Modifier.weight(1f).height(50.dp)
+                        modifier = Modifier.fillMaxWidth().height(50.dp)
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.AccountBox, contentDescription = "ID Card", tint = SassSuccess, modifier = Modifier.size(16.dp))
                             Text("Open ID Card", color = SassSuccess, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        }
-                    }
-                    
-                    Button(
-                        onClick = {
-                            if (currentUserId.isNotEmpty()) {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://bluevolt.group/api/employee/letter?employeeId=$currentUserId"))
-                                context.startActivity(intent)
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFF7ED)),
-                        shape = RoundedCornerShape(18.dp),
-                        modifier = Modifier.weight(1f).height(50.dp)
-                    ) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Email, contentDescription = "Letter", tint = SassWarning, modifier = Modifier.size(16.dp))
-                            Text("View Letter", color = SassWarning, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         }
                     }
                 }
@@ -2999,7 +3796,7 @@ fun CrmOverlayScreen(
                 IconButton(onClick = onClose) {
                     Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = SassTextPrimary)
                 }
-                Text(text = "CRM Leads Sheets", color = SassTextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.weight(1f))
+                Text(text = "CRM", color = SassTextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.weight(1f))
                 
                 if (canManageCrmSheets) {
                     IconButton(onClick = { showImportDialog = true }) {
@@ -3756,7 +4553,7 @@ fun LeavesOverlayScreen(
             IconButton(onClick = onClose) {
                 Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = SassTextPrimary)
             }
-            Text(text = "My Leaves & Claims", color = SassTextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text(text = "My Leave Log", color = SassTextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
         }
 
         LazyColumn(
@@ -3765,26 +4562,13 @@ fun LeavesOverlayScreen(
             modifier = Modifier.weight(1f).fillMaxWidth()
         ) {
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                Button(
+                    onClick = { showLeaveForm = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = SassPrimary),
+                    shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier.fillMaxWidth().height(52.dp)
                 ) {
-                    Button(
-                        onClick = { showLeaveForm = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = SassPrimary),
-                        shape = RoundedCornerShape(18.dp),
-                        modifier = Modifier.weight(1f).height(52.dp)
-                    ) {
-                        Text("Apply Leave", fontWeight = FontWeight.Bold, color = Color.White)
-                    }
-                    Button(
-                        onClick = { showExpenseForm = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = SassSecondary),
-                        shape = RoundedCornerShape(18.dp),
-                        modifier = Modifier.weight(1f).height(52.dp)
-                    ) {
-                        Text("Claim Expense", fontWeight = FontWeight.Bold, color = Color.White)
-                    }
+                    Text("Apply Leave", fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
 
@@ -3827,43 +4611,7 @@ fun LeavesOverlayScreen(
                 }
             }
 
-            item {
-                Text(text = "Expense Reimbursement Claims", style = SassSectionTitle, color = SassTextPrimary)
-            }
-
-            if (expenses.isEmpty()) {
-                item {
-                    Text(text = "No expense claims found.", color = SassTextSecondary, fontSize = 14.sp)
-                }
-            } else {
-                items(expenses) { expItem ->
-                    val obj = expItem.jsonObject
-                    val category = obj["category"]?.jsonPrimitive?.contentOrNull ?: "Expense"
-                    val amount = obj["amount"]?.jsonPrimitive?.contentOrNull ?: "0"
-                    val status = obj["status"]?.jsonPrimitive?.contentOrNull ?: "Pending"
-                    
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .shadow(8.dp, RoundedCornerShape(24.dp))
-                            .background(SassCard, RoundedCornerShape(24.dp))
-                            .padding(20.dp)
-                    ) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Column {
-                                Text(text = category, color = SassTextPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                Text(text = "Amount Claimed: ₹$amount", color = SassTextSecondary, fontSize = 13.sp)
-                            }
-                            Text(
-                                text = status,
-                                color = if (status == "Approved") SassSuccess else SassWarning,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                        }
-                    }
-                }
-            }
+            // Expense claims display list removed as there is a separate page for expenses.
         }
     }
 
@@ -3906,44 +4654,7 @@ fun LeavesOverlayScreen(
         )
     }
 
-    if (showExpenseForm) {
-        var category by remember { mutableStateOf("Travel") }
-        var amount by remember { mutableStateOf("") }
-        var date by remember { mutableStateOf("2026-06-12") }
-        var notes by remember { mutableStateOf("") }
-
-        AlertDialog(
-            onDismissRequest = { showExpenseForm = false },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onSubmitExpense(category, amount, date, notes)
-                        showExpenseForm = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = SassSecondary),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Text("Submit Reimbursement", color = Color.White)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showExpenseForm = false }) {
-                    Text("Cancel", color = SassTextSecondary)
-                }
-            },
-            title = { Text("Submit Expense Receipt Claim", style = SassCardTitle) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    PremiumTextField(value = category, onValueChange = { category = it }, label = "Category", placeholder = "Travel / Office / Food")
-                    PremiumTextField(value = amount, onValueChange = { amount = it }, label = "Amount (INR)", placeholder = "₹500", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                    PremiumTextField(value = date, onValueChange = { date = it }, label = "Claim Date", placeholder = "YYYY-MM-DD")
-                    PremiumTextField(value = notes, onValueChange = { notes = it }, label = "Expense notes", placeholder = "Client lunch meeting")
-                }
-            },
-            containerColor = SassCard,
-            shape = RoundedCornerShape(28.dp)
-        )
-    }
+    // Expense submission form removed as there is a separate page for expenses.
 }
 
 // ---------------- DOCUMENTS OVERLAY SCREEN ----------------
@@ -4075,11 +4786,14 @@ fun DocsOverlayScreen(
 @Composable
 fun SupportOverlayScreen(
     messages: List<JsonObject>,
+    currentUserId: String,
     onClose: () -> Unit,
     onSendMessage: (body: String) -> Unit
 ) {
+    val context = LocalContext.current
     val inputMsg = remember { mutableStateOf("") }
     val lazyListState = rememberLazyListState()
+    val clipboardManager = LocalClipboardManager.current
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
@@ -4097,37 +4811,98 @@ fun SupportOverlayScreen(
             IconButton(onClick = onClose) {
                 Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = SassTextPrimary)
             }
-            Text(text = "Support & Team Room", color = SassTextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text(text = "Team Chat", color = SassTextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
         }
 
         LazyColumn(
             state = lazyListState,
             modifier = Modifier.weight(1f).fillMaxWidth(),
-            contentPadding = PaddingValues(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(messages) { msgObj ->
                 val name = msgObj["employeeName"]?.jsonPrimitive?.contentOrNull ?: "Team member"
                 val body = msgObj["body"]?.jsonPrimitive?.contentOrNull ?: ""
                 val role = msgObj["employeeRole"]?.jsonPrimitive?.contentOrNull ?: ""
+                val senderId = msgObj["employeeId"]?.jsonPrimitive?.contentOrNull ?: ""
+                val isSending = msgObj["sending"]?.jsonPrimitive?.booleanOrNull ?: false
+                
+                val isSelf = senderId == currentUserId
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shadow(4.dp, RoundedCornerShape(24.dp))
-                        .background(SassCard, RoundedCornerShape(24.dp))
-                        .padding(16.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = if (isSelf) Arrangement.End else Arrangement.Start,
+                    verticalAlignment = Alignment.Bottom
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                    if (!isSelf) {
+                        val initials = name.split(" ").filter { it.isNotEmpty() }.take(2).map { it[0].uppercase() }.joinToString("")
+                        Box(
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .size(36.dp)
+                                .background(
+                                    brush = Brush.linearGradient(colors = listOf(SassSecondary.copy(alpha = 0.8f), SassPrimary.copy(alpha = 0.8f))),
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(text = name, color = SassPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Text(text = role.replace("_", " ").uppercase(), color = SassTextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text(text = initials, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
-                        Text(text = body, color = SassTextPrimary, fontSize = 14.sp)
+                    }
+
+                    Column(
+                        horizontalAlignment = if (isSelf) Alignment.End else Alignment.Start,
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        if (!isSelf) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text = name, color = SassPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text(
+                                    text = "(${role.replace("_", " ").uppercase()})",
+                                    color = SassTextSecondary,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .widthIn(max = 260.dp)
+                                .graphicsLayer(alpha = if (isSending) 0.6f else 1f)
+                                .shadow(
+                                    elevation = if (isSelf) 4.dp else 2.dp,
+                                    shape = RoundedCornerShape(
+                                        topStart = 16.dp,
+                                        topEnd = 16.dp,
+                                        bottomStart = if (isSelf) 16.dp else 2.dp,
+                                        bottomEnd = if (isSelf) 2.dp else 16.dp
+                                    )
+                                )
+                                .background(
+                                    color = if (isSelf) SassPrimary else SassCard,
+                                    shape = RoundedCornerShape(
+                                        topStart = 16.dp,
+                                        topEnd = 16.dp,
+                                        bottomStart = if (isSelf) 16.dp else 2.dp,
+                                        bottomEnd = if (isSelf) 2.dp else 16.dp
+                                    )
+                                )
+                                .clickable {
+                                    clipboardManager.setText(AnnotatedString(body))
+                                    Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                                }
+                                .padding(horizontal = 14.dp, vertical = 10.dp)
+                        ) {
+                            Text(
+                                text = body,
+                                color = if (isSelf) Color.White else SassTextPrimary,
+                                fontSize = 14.sp
+                            )
+                        }
                     }
                 }
             }
@@ -4193,6 +4968,7 @@ fun StaffOverlayScreen(
     data: JsonObject?,
     canManage: Boolean,
     onClose: () -> Unit,
+    onOpenIdCard: (String) -> Unit,
     onSaveEmployee: (
         id: String?,
         name: String,
@@ -4218,6 +4994,8 @@ fun StaffOverlayScreen(
     val usersList = remember(data) { data?.get("users")?.jsonArray ?: JsonArray(emptyList()) }
     val departments = remember(data) { data?.get("departments")?.jsonArray ?: JsonArray(emptyList()) }
     val currentUserId = remember(data) { data?.get("session")?.jsonObject?.get("id")?.jsonPrimitive?.contentOrNull ?: "" }
+    val currentUserRole = remember(data) { data?.get("session")?.jsonObject?.get("role")?.jsonPrimitive?.contentOrNull ?: "" }
+    val canViewOthersId = currentUserRole == "admin" || currentUserRole == "hr" || currentUserRole == "super_admin" || currentUserRole == "director"
 
     var editingUser by remember { mutableStateOf<JsonObject?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -4366,6 +5144,20 @@ fun StaffOverlayScreen(
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold
                                     )
+                                }
+                                
+                                if (canViewOthersId && userId.isNotEmpty()) {
+                                    IconButton(
+                                        onClick = { onOpenIdCard(userId) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.AccountBox,
+                                            contentDescription = "View ID Card",
+                                            tint = SassPrimary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
                                 }
                                 
                                 if (canManage && userId != currentUserId) {
@@ -5171,6 +5963,7 @@ fun ReportsOverlayScreen(
     val usersList = remember(data) { data?.get("users")?.jsonArray ?: JsonArray(emptyList()) }
     val attendanceList = remember(data) { data?.get("attendance")?.jsonArray ?: JsonArray(emptyList()) }
     val tasks = remember(data) { data?.get("tasks")?.jsonArray ?: JsonArray(emptyList()) }
+    val crmSheets = remember(data) { data?.get("crmSheets")?.jsonArray ?: JsonArray(emptyList()) }
     
     val totalHoursLogged = remember(attendanceList) {
         attendanceList.sumOf { it.jsonObject["totalHours"]?.jsonPrimitive?.doubleOrNull ?: 0.0 }
@@ -5180,6 +5973,29 @@ fun ReportsOverlayScreen(
     }
     val completedTasksCount = remember(tasks) {
         tasks.count { it.jsonObject["status"]?.jsonPrimitive?.contentOrNull == "Done" }
+    }
+
+    val pipelinePoints = remember(crmSheets) {
+        var openCount = 0f
+        var callbackCount = 0f
+        var doneCount = 0f
+        var notInterestedCount = 0f
+        crmSheets.forEach { sheet ->
+            sheet.jsonObject["rows"]?.jsonArray?.forEach { row ->
+                val status = row.jsonObject["status"]?.jsonPrimitive?.contentOrNull ?: "Open"
+                when (status) {
+                    "Done" -> doneCount += 1f
+                    "Callback" -> callbackCount += 1f
+                    "Not Interested", "Invalid" -> notInterestedCount += 1f
+                    else -> openCount += 1f
+                }
+            }
+        }
+        if (openCount == 0f && callbackCount == 0f && doneCount == 0f && notInterestedCount == 0f) {
+            listOf(15f, 25f, 20f, 35f, 30f, 45f, 50f)
+        } else {
+            listOf(openCount, callbackCount, doneCount, notInterestedCount)
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().background(SassBackground)) {
@@ -5255,7 +6071,7 @@ fun ReportsOverlayScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         Text(text = "CRM Leads Status Pipeline", color = SassTextPrimary, style = SassCardTitle)
                         FintechChart(
-                            points = listOf(15f, 25f, 20f, 35f, 30f, 45f, 50f),
+                            points = pipelinePoints,
                             modifier = Modifier.fillMaxWidth().height(160.dp)
                         )
                     }

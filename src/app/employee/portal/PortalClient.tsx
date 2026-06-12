@@ -287,10 +287,10 @@ function mergePortalData(previous: PortalData, incoming: PortalData, activeTab: 
     meetings: ["dashboard", "today", "notifications", "meetings", "reports"].includes(activeTab) ? incoming.meetings : previous.meetings,
     resources: ["dashboard", "today", "notifications", "resources", "reports", "approvals"].includes(activeTab) ? incoming.resources : previous.resources,
     attendance: ["dashboard", "today", "notifications", "ops", "reports", "approvals"].includes(activeTab) ? incoming.attendance : previous.attendance,
-    leaveRequests: ["today", "notifications", "ops", "approvals"].includes(activeTab) ? incoming.leaveRequests : previous.leaveRequests,
+    leaveRequests: ["dashboard", "today", "notifications", "ops", "approvals", "profile"].includes(activeTab) ? incoming.leaveRequests : previous.leaveRequests,
     tasks: ["dashboard", "today", "notifications", "ops"].includes(activeTab) ? incoming.tasks : previous.tasks,
-    payrollInputs: ["payroll", "reports"].includes(activeTab) ? incoming.payrollInputs : previous.payrollInputs,
-    reviews: ["reviews", "reports"].includes(activeTab) ? incoming.reviews : previous.reviews,
+    payrollInputs: ["payroll", "reports", "profile"].includes(activeTab) ? incoming.payrollInputs : previous.payrollInputs,
+    reviews: ["reviews", "reports", "dashboard", "profile"].includes(activeTab) ? incoming.reviews : previous.reviews,
     documents: ["dashboard", "today", "notifications", "documents", "reports", "approvals"].includes(activeTab) ? incoming.documents : previous.documents,
     announcements: ["dashboard", "today", "notifications", "announcements", "reports", "approvals"].includes(activeTab) ? incoming.announcements : previous.announcements,
     comments: activeTab === "ops" ? incoming.comments : previous.comments,
@@ -307,6 +307,8 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const router = useRouter();
   const [data, setData] = useState(initialData);
   const [tab, setTab] = useState<PortalTab>("dashboard");
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const [chatInputText, setChatInputText] = useState("");
   const [loadingTab, setLoadingTab] = useState<PortalTab | "">("");
   const [error, setError] = useState("");
   const [sortResources, setSortResources] = useState("newest");
@@ -408,6 +410,27 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     setMobileSidebarOpen(false);
   }, [tab]);
 
+  // Auto-scroll chat to bottom
+  useEffect(() => {
+    if (tab === "chat") {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [tab, data.chatMessages]);
+
+  // Silent group chat message polling
+  useEffect(() => {
+    if (tab !== "chat") return;
+    const interval = setInterval(async () => {
+      try {
+        const newData = await getEmployeePortalData(sortResources, "chat");
+        setData(prev => mergePortalData(prev, newData, "chat"));
+      } catch (e) {
+        // Ignore silent update errors
+      }
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [tab, sortResources]);
+
   // Close employee actions menu on click outside
   useEffect(() => {
     const handleOutsideClick = () => {
@@ -424,7 +447,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     if (item.id === "approvals") return data.capabilities.canUseSuperiorDashboard || data.capabilities.canManage;
     if (item.id === "crm") return data.capabilities.canRequestCrmSource || data.capabilities.canUseCrm;
     if (item.id === "applicants") return data.capabilities.canManageApplicants;
-    if (item.id === "ops") return data.capabilities.canManageOps || !data.capabilities.canUseSuperiorDashboard;
+    if (item.id === "ops") return data.capabilities.canManageOps;
     if (item.id === "expenses") return data.capabilities.canManageExpenses;
     if (item.id === "payroll") return data.capabilities.canManagePayroll;
     if (item.id === "reports") return data.capabilities.canUseSuperiorDashboard && (data.capabilities.canManage || data.capabilities.canManagePayroll || data.capabilities.canManageApplicants);
@@ -770,6 +793,54 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
         setError(simplePortalError(actionError, "Action failed. Please try again."));
       }
     });
+  };
+
+  const handleSendChatMessage = async (e?: FormEvent) => {
+    if (e) e.preventDefault();
+    const body = chatInputText.trim();
+    if (!body) return;
+
+    setChatInputText("");
+
+    const optimisticId = -Date.now();
+    const optimisticMsg = {
+      id: optimisticId,
+      employeeId: currentUserId,
+      employeeName: data.session.name,
+      employeeRole: data.session.role,
+      body: body,
+      createdAt: new Date(),
+      sending: true,
+    };
+
+    setData(prev => ({
+      ...prev,
+      chatMessages: [...prev.chatMessages, optimisticMsg]
+    }));
+
+    setTimeout(() => {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 50);
+
+    try {
+      const res = await saveGroupChatMessage({ body });
+      if (!res.success) {
+        setError(res.error || "Failed to send message.");
+        setData(prev => ({
+          ...prev,
+          chatMessages: prev.chatMessages.filter(m => m.id !== optimisticId)
+        }));
+        return;
+      }
+      const newData = await getEmployeePortalData(sortResources, "chat");
+      setData(prev => mergePortalData(prev, newData, "chat"));
+    } catch (err) {
+      setError(simplePortalError(err, "Failed to send message."));
+      setData(prev => ({
+        ...prev,
+        chatMessages: prev.chatMessages.filter(m => m.id !== optimisticId)
+      }));
+    }
   };
 
   const uploadFile = async (file?: File) => {
@@ -2908,42 +2979,97 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
         )}
 
         {tab === "chat" && (
-          <section className={styles.grid}>
-            <div className={`${styles.card} ${styles.span12} ${styles.dashboardHero}`}>
+          <section className={styles.chatContainer}>
+            <div className={styles.chatHeader}>
               <div>
-                <span className={styles.eyebrow}>Internal Group Chat</span>
-                <h2 className={styles.heroTitle} style={{ margin: "4px 0" }}>BLUEVOLT team room</h2>
-                <p className={styles.muted} style={{ margin: 0 }}>Company-wide chat for quick coordination across sales, content, operations, admins, and directors.</p>
+                <h3 className={styles.cardTitle} style={{ margin: 0, fontSize: "1.2rem" }}>BLUEVOLT team room</h3>
+                <p className={styles.muted} style={{ margin: "2px 0 0 0", fontSize: "0.85rem" }}>
+                  Internal company chat for quick coordination across departments. Keep sensitive data out of group chat.
+                </p>
               </div>
-              <div className={styles.heroActions}>
-                <button className={styles.ghostButton} type="button" onClick={() => refresh(sortResources, "chat")}>Refresh chat</button>
-              </div>
-            </div>
-            <div className={`${styles.card} ${styles.span8}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Messages</h2>
-                  <p className={styles.muted}>Latest internal messages. Keep sensitive data out of group chat.</p>
-                </div>
+              <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                <button className={styles.ghostButton} style={{ minHeight: "36px", padding: "6px 14px", fontSize: "0.85rem" }} type="button" onClick={() => refresh(sortResources, "chat")}>Refresh</button>
                 <span className={styles.pill}>{data.chatMessages.length} messages</span>
               </div>
-              <div className={styles.chatList}>
-                {data.chatMessages.length === 0 ? <div className={styles.emptyState}>No messages yet.</div> : data.chatMessages.map((message) => (
-                  <div className={`${styles.chatBubble} ${message.employeeId === currentUserId ? styles.chatBubbleMine : ""}`} key={message.id}>
-                    <div className={styles.rowHeader}>
-                      <strong>{message.employeeName}</strong>
-                      <span className={styles.muted}>{displayRole(message.employeeRole)} - {formatPortalTimeAgo(message.createdAt)}</span>
-                    </div>
-                    <p>{message.body}</p>
-                  </div>
-                ))}
-              </div>
             </div>
-            <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveGroupChatMessage)}>
-              <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Send Message</h2>
-              <p className={`${styles.muted} ${styles.fieldWide}`}>Visible to everyone in the employee portal.</p>
-              <Field label="Message" name="body" textarea wide required />
-              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Send to Group</button>
+
+            <div className={styles.chatMessagesArea}>
+              {data.chatMessages.length === 0 ? (
+                <div className={styles.emptyState}>No messages yet. Start the conversation!</div>
+              ) : (
+                data.chatMessages.map((message) => {
+                  const isMine = message.employeeId === currentUserId;
+                  const initials = message.employeeName
+                    ? message.employeeName
+                        .split(" ")
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map((n) => n[0].toUpperCase())
+                        .join("")
+                    : "??";
+
+                  return (
+                    <div
+                      key={message.id}
+                      className={`${styles.chatMessageRow} ${isMine ? styles.chatMessageRowMine : ""}`}
+                    >
+                      {!isMine && (
+                        <div className={styles.chatAvatar} title={message.employeeName}>
+                          {initials}
+                        </div>
+                      )}
+                      <div className={styles.chatBubbleContent}>
+                        <div className={`${styles.chatMeta} ${isMine ? styles.chatMetaMine : ""}`}>
+                          <span className={styles.chatSenderName}>
+                            {isMine ? "You" : message.employeeName}
+                          </span>
+                          <span className={styles.chatSenderRole}>
+                            {displayRole(message.employeeRole)}
+                          </span>
+                          <span>{formatPortalTimeAgo(message.createdAt)}</span>
+                        </div>
+                        <div
+                          className={`${styles.chatBubbleNew} ${isMine ? styles.chatBubbleNewMine : ""} ${
+                            (message as any).sending ? styles.chatBubbleSending : ""
+                          }`}
+                        >
+                          <p style={{ margin: 0 }}>{message.body}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            <form
+              className={styles.chatInputContainer}
+              onSubmit={handleSendChatMessage}
+            >
+              <div className={styles.chatInputWrapper}>
+                <textarea
+                  className={styles.chatTextarea}
+                  value={chatInputText}
+                  onChange={(e) => setChatInputText(e.target.value)}
+                  placeholder="Type a message... (Press Enter to send, Shift+Enter for new line)"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendChatMessage();
+                    }
+                  }}
+                  rows={1}
+                />
+              </div>
+              <button
+                type="submit"
+                className={styles.chatSendButton}
+                disabled={!chatInputText.trim()}
+                title="Send Message"
+              >
+                <MessageCircle size={20} />
+              </button>
             </form>
           </section>
         )}

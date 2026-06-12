@@ -1202,7 +1202,7 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
         ? prisma.employeeAttendance.findMany({ orderBy: [{ workDate: "desc" }, { createdAt: "desc" }], take: 500 })
         : prisma.employeeAttendance.findMany({ where: { employeeId: user.id }, orderBy: [{ workDate: "desc" }, { createdAt: "desc" }], take: 120 }))
       : Promise.resolve([]),
-    ["today", "notifications", "ops", "approvals", "profile"].includes(activeTab)
+    ["dashboard", "today", "notifications", "ops", "approvals", "profile"].includes(activeTab)
       ? (canManage
         ? prisma.employeeLeaveRequest.findMany({ orderBy: [{ updatedAt: "desc" }, { startsAt: "desc" }], take: 80 })
         : prisma.employeeLeaveRequest.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }, { startsAt: "desc" }], take: 40 }))
@@ -1220,12 +1220,12 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
           take: 100,
         })
       : Promise.resolve([]),
-    capabilities.canManagePayroll && ["payroll", "reports"].includes(activeTab)
-      ? (canManagePayroll
+    capabilities.canManagePayroll
+      ? (canManagePayroll && ["payroll", "reports"].includes(activeTab)
         ? prisma.employeePayrollInput.findMany({ orderBy: [{ updatedAt: "desc" }], take: 80 })
         : prisma.employeePayrollInput.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }], take: 24 }))
       : Promise.resolve([]),
-    (capabilities.canReviewPerformance && ["reviews", "reports"].includes(activeTab)) || activeTab === "profile"
+    (capabilities.canReviewPerformance && ["reviews", "reports"].includes(activeTab)) || ["profile", "dashboard"].includes(activeTab)
       ? (canManage
         ? prisma.employeePerformanceReview.findMany({ orderBy: [{ updatedAt: "desc" }], take: 80 })
         : prisma.employeePerformanceReview.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }], take: 24 }))
@@ -1295,11 +1295,27 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
     `
     : [];
 
+  // Ensure the current user's manager is always included in the users list so the
+  // Android profile screen can resolve the managerName even when the employee does
+  // not have canManage/canViewEmployees (which would otherwise only return their own record).
+  let enrichedUsers = users;
+  const managerId = user.managerId;
+  if (managerId && !users.some((u) => u.id === managerId)) {
+    try {
+      const managerRecord = await prisma.employeeUser.findUnique({ where: { id: managerId } });
+      if (managerRecord) {
+        enrichedUsers = [...users, managerRecord];
+      }
+    } catch {
+      // Non-fatal — profile will show "None" if manager can't be fetched
+    }
+  }
+
   return {
     session,
     mustChangePassword: verifyPassword(defaultEmployeePassword, user.password),
     capabilities,
-    users: users.map((userRecord) => {
+    users: enrichedUsers.map((userRecord) => {
       const { password, ...employee } = userRecord;
       void password;
       return {
@@ -1309,6 +1325,7 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
         durationLabel: employeeDurationLabel(employee.employmentStart, employee.employmentEnd),
       };
     }),
+
     crmRecords,
     crmSheets,
     applicants,
@@ -1357,11 +1374,11 @@ export async function saveEmployeeRoleDefinition(input: EmployeeRoleDefinitionIn
 
   try {
     const { session } = await requireEmployee();
-    if (session.role !== "super_admin") {
+    const roles = await getEmployeeRoleDefinitionsFromDatabase();
+    const capabilities = capabilitiesForRole(session.role, roles);
+    if (session.role !== "super_admin" && !capabilities.canManageAccess) {
       return { success: false, error: "Only Super Admin can create roles and map feature access." };
     }
-
-    const roles = await getEmployeeRoleDefinitionsFromDatabase();
     const key = roleKey(typedInput.key || typedInput.label);
     const existingRole = roles.find((role) => role.key === key);
     const label = typedInput.label || existingRole?.label || defaultRoleLabels[key] || "";
@@ -1411,13 +1428,16 @@ export async function saveEmployeeRoleDefinition(input: EmployeeRoleDefinitionIn
   } catch (error) {
     if (!isDatabaseUnavailable(error)) throw error;
     const session = await getEmployeeSession();
-    if (!session || session.role !== "super_admin") {
+    if (!session) {
+      return { success: false, error: "Employee login required." };
+    }
+    const store = await readLocalEmployeeStore();
+    const roles = mergeRoleDefinitions(store.roles);
+    const capabilities = capabilitiesForRole(session.role, roles);
+    if (session.role !== "super_admin" && !capabilities.canManageAccess) {
       return { success: false, error: "Only Super Admin can create roles and map feature access." };
     }
-
-    const store = await readLocalEmployeeStore();
     const now = new Date().toISOString();
-    const roles = mergeRoleDefinitions(store.roles);
     const key = roleKey(typedInput.key || typedInput.label);
     const existingIndex = roles.findIndex((role) => role.key === key);
     const existingRole = existingIndex >= 0 ? roles[existingIndex] : undefined;
@@ -1470,7 +1490,9 @@ export async function deleteEmployeeRoleDefinition(input: { key: string }) {
 
   try {
     const { session } = await requireEmployee();
-    if (session.role !== "super_admin") {
+    const roles = await getEmployeeRoleDefinitionsFromDatabase();
+    const capabilities = capabilitiesForRole(session.role, roles);
+    if (session.role !== "super_admin" && !capabilities.canManageAccess) {
       return { success: false, error: "Only Super Admin can delete custom roles." };
     }
 
@@ -1493,11 +1515,15 @@ export async function deleteEmployeeRoleDefinition(input: { key: string }) {
   } catch (error) {
     if (!isDatabaseUnavailable(error)) throw error;
     const session = await getEmployeeSession();
-    if (!session || session.role !== "super_admin") {
+    if (!session) {
+      return { success: false, error: "Employee login required." };
+    }
+    const store = await readLocalEmployeeStore();
+    const roles = mergeRoleDefinitions(store.roles);
+    const capabilities = capabilitiesForRole(session.role, roles);
+    if (session.role !== "super_admin" && !capabilities.canManageAccess) {
       return { success: false, error: "Only Super Admin can delete custom roles." };
     }
-
-    const store = await readLocalEmployeeStore();
     if (store.users.some((user) => user.role === key)) {
       return { success: false, error: "Reassign employees before deleting this role." };
     }
@@ -2689,6 +2715,8 @@ export async function updateEmployeeRecordStatus(input: {
     const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
     const capabilities = capabilitiesForRole(session.role, roleDefinitions);
     const canManageStatus =
+      input.entityType === "notification" ? true :
+      input.entityType === "allNotifications" ? true :
       input.entityType === "applicant" ? capabilities.canManageApplicants :
       input.entityType === "payroll" ? capabilities.canManagePayroll :
       input.entityType === "expense" ? capabilities.canUseSuperiorDashboard && capabilities.canManageExpenses :
@@ -2731,6 +2759,20 @@ export async function updateEmployeeRecordStatus(input: {
         return { success: false, error: "You can only update tasks assigned to you." };
       }
       await prisma.employeeTask.update({ where: { id }, data });
+    }
+    else if (input.entityType === "notification") {
+      await prisma.employeeNotification.updateMany({
+        where: { id: Number(input.id), OR: [{ employeeId: user.id }, { targetRoles: "all" }, { targetRoles: session.role }] },
+        data: { readAt: new Date() },
+      });
+      await prisma.employeeUser.update({ where: { id: user.id }, data: { lastSeenAt: new Date() } });
+    }
+    else if (input.entityType === "allNotifications") {
+      await prisma.employeeNotification.updateMany({
+        where: { readAt: null, OR: [{ employeeId: user.id }, { targetRoles: "all" }, { targetRoles: session.role }] },
+        data: { readAt: new Date() },
+      });
+      await prisma.employeeUser.update({ where: { id: user.id }, data: { lastSeenAt: new Date() } });
     }
     else if (input.entityType === "applicant") await prisma.employeeApplicant.update({ where: { id }, data: { stage: input.status } });
     else return { success: false, error: "Unsupported record type." };

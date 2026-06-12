@@ -551,6 +551,7 @@ model EmployeeMeeting {
   endsAt         DateTime
   meetUrl        String?
   audienceRoles  String   @default("all")
+  audienceUsers  String   @default("")
   applicantName  String?
   applicantEmail String?
   notes          String?
@@ -560,6 +561,7 @@ model EmployeeMeeting {
 
   @@index([startsAt])
   @@index([audienceRoles])
+  @@index([audienceUsers])
 }
 
 model EmployeeResource {
@@ -569,6 +571,7 @@ model EmployeeResource {
   url           String
   description   String?
   audienceRoles String   @default("all")
+  audienceUsers String   @default("")
   tags          String?
   createdBy     Int?
   createdAt     DateTime @default(now())
@@ -576,5 +579,6 @@ model EmployeeResource {
 
   @@index([resourceType])
   @@index([audienceRoles])
+  @@index([audienceUsers])
   @@index([createdAt])
 }

@@ -1,4 +1,4 @@
-$sourceImage = "C:\Users\paree\.gemini\antigravity-ide\brain\259e0eb7-4a91-4c41-b553-d180237fbbb3\media__1780991644348.png"
+$sourceImage = "c:\Users\paree\OneDrive\Desktop\bluevolt\public\Assets\Logo Icons\BLUEVOLT.png"
 $resFolder = "c:\Users\paree\OneDrive\Desktop\bluevolt\android-app\app\src\main\res"
 
 Add-Type -AssemblyName System.Drawing

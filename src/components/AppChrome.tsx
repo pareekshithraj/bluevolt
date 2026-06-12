@@ -13,14 +13,13 @@ export default function AppChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isStores24 = pathname.startsWith("/stores24");
   const isEmployeePortal = pathname.startsWith("/employee");
-  const isHomePage = pathname === "/";
 
   if (isStores24 || isEmployeePortal) {
     return <>{children}</>;
   }
 
   return (
-    <div className={isHomePage ? "light-theme" : ""} style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       <Navbar />
       <ScrollProgress />
       <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>

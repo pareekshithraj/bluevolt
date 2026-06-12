@@ -436,7 +436,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     if (item.id === "resources") return data.capabilities.canViewResources || data.capabilities.canManageResources;
     if (item.id === "chat") return data.capabilities.canUseChat;
     if (item.id === "access") return data.capabilities.canManageAccess;
-    if (item.id === "admin") return data.capabilities.canManage;
+    if (item.id === "admin") return data.capabilities.canViewEmployees || data.capabilities.canManage;
     return true;
   }), [data.capabilities]);
 
@@ -514,7 +514,8 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const recentResources = data.resources.slice(0, 4);
   const canEditCrmSheet = data.session.role === "super_admin";
   const currentEmployee = employees.find((user) => user.id === currentUserId);
-  const activeAttendance = data.attendance.find((entry) => entry.employeeId === currentUserId && entry.loginAt && !entry.logoutAt);
+  const todayKey = portalDateFormatter.format(now);
+  const activeAttendance = data.attendance.find((entry) => entry.employeeId === currentUserId && entry.loginAt && !entry.logoutAt && portalDateFormatter.format(validDate(entry.workDate) || now) === todayKey);
   const isWorking = clockOverride ? clockOverride === "working" : Boolean(activeAttendance);
   const recentAttendance = data.attendance.slice(0, visibleDashboardAttendance);
   const selectedHoursEmployeeId = Number(workHoursEmployeeId || currentUserId);
@@ -534,7 +535,6 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const pendingApplicants = data.applicants.filter((applicant) => !["Offer", "Appointed", "Rejected"].includes(applicant.stage));
   const pendingLeaveRequests = data.leaveRequests.filter((leave) => leave.status === "Pending");
   const pendingExpenseClaims = data.expenses.filter((expense) => expense.status === "Pending");
-  const todayKey = portalDateFormatter.format(now);
   const hasTodayAttendance = data.attendance.some((entry) => entry.employeeId === currentUserId && portalDateFormatter.format(validDate(entry.workDate) || now) === todayKey);
   const todaysTasks = myOpenTasks.filter((task) => task.dueAt && portalDateFormatter.format(validDate(task.dueAt) || now) === todayKey);
   const todaysMeetings = data.meetings.filter((meeting) => portalDateFormatter.format(validDate(meeting.startsAt) || now) === todayKey);
@@ -2697,6 +2697,13 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 <Field label="Ends At" name="endsAt" type="datetime-local" required />
                 <Field label="Meet URL" name="meetUrl" type="url" wide />
                 <Field label="Audience Roles" name="audienceRoles" options={ownerRoleOptions} defaultValue="all" wide />
+                <label className={`${styles.field} ${styles.fieldWide}`}>
+                  <span className={styles.label}>Visible Employees</span>
+                  <select className={styles.select} name="audienceUsers" multiple size={Math.min(Math.max(employees.length, 3), 6)}>
+                    {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} ({employee.email})</option>)}
+                  </select>
+                  <span className={styles.muted}>Optional. Ctrl/Shift to select multiple. They can view the meeting even if their role is not in Audience Roles.</span>
+                </label>
                 <Field label="Applicant Name" name="applicantName" />
                 <Field label="Applicant Email" name="applicantEmail" type="email" />
                 <Field label="Notes" name="notes" textarea wide />
@@ -2754,6 +2761,13 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                             <Field label="Ends At" name="endsAt" type="datetime-local" defaultValue={inputDateTime(meeting.endsAt)} required />
                             <Field label="Meet URL" name="meetUrl" type="url" defaultValue={meeting.meetUrl || ""} wide />
                             <Field label="Audience Roles" name="audienceRoles" options={audienceOptionsForValue(meeting.audienceRoles)} defaultValue={meeting.audienceRoles} wide />
+                            <label className={`${styles.field} ${styles.fieldWide}`}>
+                              <span className={styles.label}>Visible Employees</span>
+                              <select className={styles.select} name="audienceUsers" multiple size={Math.min(Math.max(employees.length, 3), 6)} defaultValue={(meeting.audienceUsers || "").split(",").filter(Boolean)}>
+                                {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} ({employee.email})</option>)}
+                              </select>
+                              <span className={styles.muted}>Optional. Ctrl/Shift to select multiple. They can view the meeting even if their role is not in Audience Roles.</span>
+                            </label>
                             <Field label="Applicant Name" name="applicantName" defaultValue={meeting.applicantName || ""} />
                             <Field label="Applicant Email" name="applicantEmail" type="email" defaultValue={meeting.applicantEmail || ""} />
                             <Field label="Notes" name="notes" textarea defaultValue={meeting.notes || ""} wide />
@@ -2787,6 +2801,13 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   <Field label="URL" name="url" type="url" required wide />
                 )}
                 <Field label="Audience Roles" name="audienceRoles" options={ownerRoleOptions} defaultValue="all" wide />
+                <label className={`${styles.field} ${styles.fieldWide}`}>
+                  <span className={styles.label}>Visible Employees</span>
+                  <select className={styles.select} name="audienceUsers" multiple size={Math.min(Math.max(employees.length, 3), 6)}>
+                    {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} ({employee.email})</option>)}
+                  </select>
+                  <span className={styles.muted}>Optional. Ctrl/Shift to select multiple. They can view the resource even if their role is not in Audience Roles.</span>
+                </label>
                 <Field label="Tags" name="tags" wide />
                 <Field label="Description" name="description" textarea wide />
                 <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Publish Resource</button>
@@ -2865,6 +2886,13 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                             <Field label="Type" name="resourceType" options={["Link", "PDF", "Excel", "PowerPoint", "Document", "Image", "Video", "Other"]} defaultValue={resource.resourceType} />
                             <Field label="URL" name="url" type="url" defaultValue={resource.url} required wide />
                             <Field label="Audience Roles" name="audienceRoles" options={audienceOptionsForValue(resource.audienceRoles)} defaultValue={resource.audienceRoles} wide />
+                            <label className={`${styles.field} ${styles.fieldWide}`}>
+                              <span className={styles.label}>Visible Employees</span>
+                              <select className={styles.select} name="audienceUsers" multiple size={Math.min(Math.max(employees.length, 3), 6)} defaultValue={(resource.audienceUsers || "").split(",").filter(Boolean)}>
+                                {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} ({employee.email})</option>)}
+                              </select>
+                              <span className={styles.muted}>Optional. Ctrl/Shift to select multiple. They can view the resource even if their role is not in Audience Roles.</span>
+                            </label>
                             <Field label="Tags" name="tags" defaultValue={resource.tags || ""} wide />
                             <Field label="Description" name="description" textarea defaultValue={resource.description || ""} wide />
                             <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Resource</button>

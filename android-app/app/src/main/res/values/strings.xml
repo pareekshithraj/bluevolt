@@ -1,3 +1,12 @@
 <resources>
     <string name="app_name">BLUEVOLT</string>
+    <string name="app_tagline">Operations, approvals, and employee access in one place.</string>
+    <string name="app_status_live">Live</string>
+    <string name="app_reload">Reload</string>
+    <string name="app_open_browser">Open in browser</string>
+    <string name="app_offline_title">Connection issue</string>
+    <string name="app_offline_message">BLUEVOLT could not load right now. Check your network and try again.</string>
+    <string name="app_retry">Try again</string>
+    <string name="app_back">Back</string>
+    <string name="app_forward">Forward</string>
 </resources>

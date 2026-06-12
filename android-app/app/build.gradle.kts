@@ -5,20 +5,30 @@ plugins {
 }
 
 android {
-    namespace = "com.example.bluevolt"
+    namespace = "com.bluevolt.app"
     compileSdk = 36
     defaultConfig {
-        applicationId = "com.example.bluevolt"
+        applicationId = "com.bluevolt.app"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("../release-key.keystore")
+            storePassword = "bluevolt123"
+            keyAlias = "bluevolt"
+            keyPassword = "bluevolt123"
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
@@ -81,4 +91,12 @@ dependencies {
   implementation(libs.androidx.navigation3.ui)
   implementation(libs.androidx.navigation3.runtime)
   implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+
+  // Networking and JSON
+  implementation(libs.okhttp)
+  implementation(libs.kotlinx.serialization.json)
+
+  // Material Icons
+  implementation(libs.androidx.material.icons.core)
+  implementation(libs.androidx.material.icons.extended)
 }

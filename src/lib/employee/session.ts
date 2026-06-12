@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 const EMPLOYEE_SESSION_COOKIE = "bluevolt_employee_session";
 const SESSION_DURATION_MS = 1000 * 60 * 60 * 10;
@@ -82,7 +82,19 @@ export async function readEmployeeSessionToken(token?: string): Promise<Employee
 
 export async function getEmployeeSession(): Promise<EmployeeSession | null> {
   const cookieStore = await cookies();
-  return readEmployeeSessionToken(cookieStore.get(EMPLOYEE_SESSION_COOKIE)?.value);
+  let token = cookieStore.get(EMPLOYEE_SESSION_COOKIE)?.value;
+  if (!token) {
+    try {
+      const headersList = await headers();
+      const authHeader = headersList.get("authorization");
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        token = authHeader.substring(7);
+      }
+    } catch {
+      // In some environments headers() might throw
+    }
+  }
+  return readEmployeeSessionToken(token);
 }
 
 export async function setEmployeeSession(input: Omit<EmployeeSession, "expiresAt">) {

@@ -322,7 +322,7 @@ function capabilitiesForRole(role: string, roles: EmployeeRoleDefinition[]) {
     canUseSuperiorDashboard: isSuperiorRole,
     canManageAccess: roleCanAccessFeature(role, roles, "access"),
     canUseCrm,
-    canRequestCrmSource: canManageCrm,
+    canRequestCrmSource: roleCanAccessFeature(role, roles, "crm") || canManageCrm,
     canUpdateCrmSheetRows: canManageCrm,
     canManageCrmSheets: canManageCrm,
     canManageApplicants: isSuperiorRole && roleCanAccessFeature(role, roles, "applicants"),
@@ -343,6 +343,7 @@ function capabilitiesForRole(role: string, roles: EmployeeRoleDefinition[]) {
     canManageExpenses: roleCanAccessFeature(role, roles, "expenses"),
     canAdminScheduleMeetings: canScheduleMeetings,
     canAdminManageResources: canManageResources,
+    canViewEmployees: roleCanAccessFeature(role, roles, "employees"),
   };
 }
 
@@ -977,7 +978,16 @@ export async function loginEmployee(input: { email: string; password: string }) 
       role: user.role,
     });
 
-    return { success: true, redirectTo: "/employee/portal" };
+    return {
+      success: true,
+      redirectTo: "/employee/portal",
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+    };
   } catch (error) {
     if (isDatabaseUnavailable(error)) {
       const localUser = await loginLocalEmployee(email, input.password);
@@ -988,7 +998,16 @@ export async function loginEmployee(input: { email: string; password: string }) 
           name: localUser.name,
           role: localUser.role,
         });
-        return { success: true, redirectTo: "/employee/portal" };
+        return {
+          success: true,
+          redirectTo: "/employee/portal",
+          user: {
+            id: localUser.id,
+            email: localUser.email,
+            name: localUser.name,
+            role: localUser.role,
+          },
+        };
       }
     }
     console.error("Employee login failed", error);
@@ -1051,7 +1070,7 @@ async function getLocalEmployeePortalData(_sortResources = "newest", activeTab =
   const roleDefinitions = mergeRoleDefinitions(store.roles);
   const capabilities = capabilitiesForRole(normalizedSession.role, roleDefinitions);
   const canManage = capabilities.canManage;
-  const visibleUsers = canManage ? store.users : store.users.filter((employee) => employee.id === activeUser.id);
+  const visibleUsers = (canManage || capabilities.canViewEmployees) ? store.users : store.users.filter((employee) => employee.id === activeUser.id);
   const users = visibleUsers.map((employee) => ({
     ...employee,
     employmentStart: localDate(employee.employmentStart),
@@ -1136,7 +1155,7 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
   });
 
   const [users, crmRecords, crmSheets, applicants, meetings, resources, attendance, leaveRequests, tasks, payrollInputs, reviews, documents, announcements, comments, departments, notifications, expenses, auditEvents] = await Promise.all([
-    canManage && ["dashboard", "today", "notifications", "admin", "ops", "reports", "crm", "approvals"].includes(activeTab)
+    (canManage || capabilities.canViewEmployees) && ["dashboard", "today", "notifications", "admin", "ops", "reports", "crm", "approvals"].includes(activeTab)
       ? prisma.employeeUser.findMany({ orderBy: { createdAt: "desc" } })
       : prisma.employeeUser.findMany({ where: { id: user.id } }),
     canUseCrm && ["dashboard", "today", "notifications", "crm", "reports"].includes(activeTab)
@@ -1183,7 +1202,7 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
         ? prisma.employeeAttendance.findMany({ orderBy: [{ workDate: "desc" }, { createdAt: "desc" }], take: 500 })
         : prisma.employeeAttendance.findMany({ where: { employeeId: user.id }, orderBy: [{ workDate: "desc" }, { createdAt: "desc" }], take: 120 }))
       : Promise.resolve([]),
-    ["today", "notifications", "ops", "approvals"].includes(activeTab)
+    ["today", "notifications", "ops", "approvals", "profile"].includes(activeTab)
       ? (canManage
         ? prisma.employeeLeaveRequest.findMany({ orderBy: [{ updatedAt: "desc" }, { startsAt: "desc" }], take: 80 })
         : prisma.employeeLeaveRequest.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }, { startsAt: "desc" }], take: 40 }))
@@ -1206,14 +1225,14 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
         ? prisma.employeePayrollInput.findMany({ orderBy: [{ updatedAt: "desc" }], take: 80 })
         : prisma.employeePayrollInput.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }], take: 24 }))
       : Promise.resolve([]),
-    capabilities.canReviewPerformance && ["reviews", "reports"].includes(activeTab)
+    (capabilities.canReviewPerformance && ["reviews", "reports"].includes(activeTab)) || activeTab === "profile"
       ? (canManage
         ? prisma.employeePerformanceReview.findMany({ orderBy: [{ updatedAt: "desc" }], take: 80 })
         : prisma.employeePerformanceReview.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }], take: 24 }))
       : Promise.resolve([]),
-    capabilities.canViewDocuments && ["dashboard", "today", "notifications", "documents", "reports", "approvals"].includes(activeTab)
+    capabilities.canViewDocuments && ["dashboard", "today", "notifications", "documents", "reports", "approvals", "profile"].includes(activeTab)
       ? prisma.employeeDocument.findMany({ orderBy: [{ updatedAt: "desc" }], take: 100 })
-      : activeTab === "documents"
+      : (activeTab === "documents" || activeTab === "profile")
         ? prisma.employeeDocument.findMany({ where: { employeeId: user.id }, orderBy: [{ updatedAt: "desc" }], take: 50 })
       : Promise.resolve([]),
     canViewAnnouncements && ["dashboard", "today", "notifications", "announcements", "reports", "approvals"].includes(activeTab)
@@ -1222,7 +1241,7 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
     capabilities.canManageOps && activeTab === "ops"
       ? prisma.employeeComment.findMany({ orderBy: { createdAt: "desc" }, take: 120 })
       : Promise.resolve([]),
-    activeTab === "admin" && canManage ? prisma.employeeDepartment.findMany({ orderBy: { name: "asc" } }) : Promise.resolve([]),
+    activeTab === "admin" && (canManage || capabilities.canViewEmployees) ? prisma.employeeDepartment.findMany({ orderBy: { name: "asc" } }) : Promise.resolve([]),
     ["dashboard", "today", "notifications", "admin", "approvals"].includes(activeTab) || (activeTab === "access" && canManageAccess)
       ? prisma.employeeNotification.findMany({
           where: {
@@ -1247,7 +1266,7 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
   ]);
 
   const visibleMeetings = meetings
-    .filter((meeting) => visibleToRole(meeting.audienceRoles, session.role))
+    .filter((meeting) => visibleToRole(meeting.audienceRoles, session.role) || (meeting.audienceUsers && meeting.audienceUsers.includes(`,${session.userId},`)))
     .map((meeting) => ({
       ...meeting,
       calendarUrl: googleCalendarUrl({
@@ -1294,7 +1313,7 @@ export async function getEmployeePortalData(sortResources = "newest", activeTab 
     crmSheets,
     applicants,
     meetings: visibleMeetings,
-    resources: resources.filter((resource) => visibleToRole(resource.audienceRoles, session.role)),
+    resources: resources.filter((resource) => visibleToRole(resource.audienceRoles, session.role) || (resource.audienceUsers && resource.audienceUsers.includes(`,${session.userId},`))),
     attendance,
     leaveRequests,
     tasks,
@@ -1657,8 +1676,8 @@ export async function saveCrmSheetRequest(input: {
   const { session, user } = await requireEmployee();
   const roleDefinitions = await getEmployeeRoleDefinitionsFromDatabase();
   const capabilities = capabilitiesForRole(session.role, roleDefinitions);
-  if (!capabilities.canManageCrmSheets) {
-    return { success: false, error: "Your role is not mapped to manage CRM sheets." };
+  if (!capabilities.canManageCrmSheets && !capabilities.canRequestCrmSource) {
+    return { success: false, error: "Your role is not mapped to upload or request CRM sheets." };
   }
   await ensureEmployeeCrmSheetAccessColumns();
   const ownerRole = normalizeRole(input.ownerRole || session.role);
@@ -2094,6 +2113,7 @@ export async function saveMeeting(input: {
   endsAt: string;
   meetUrl?: string;
   audienceRoles: string;
+  audienceUsers?: string;
   applicantName?: string;
   applicantEmail?: string;
   notes?: string;
@@ -2108,6 +2128,7 @@ export async function saveMeeting(input: {
     ...rest,
     startsAt: new Date(input.startsAt),
     endsAt: new Date(input.endsAt),
+    audienceUsers: normalizeAudienceUsers(input.audienceUsers),
     createdBy: Number(session.userId),
   };
   if (id) await prisma.employeeMeeting.update({ where: { id: Number(id) }, data });
@@ -2123,6 +2144,7 @@ export async function saveResource(input: {
   url: string;
   description?: string;
   audienceRoles: string;
+  audienceUsers?: string;
   tags?: string;
 }) {
   const { session } = await requireEmployee();
@@ -2131,7 +2153,11 @@ export async function saveResource(input: {
     return { success: false, error: "Only super admin/admin can publish resources." };
   }
   const { id, ...rest } = input;
-  const data = { ...rest, createdBy: Number(session.userId) };
+  const data = {
+    ...rest,
+    audienceUsers: normalizeAudienceUsers(input.audienceUsers),
+    createdBy: Number(session.userId),
+  };
   if (id) await prisma.employeeResource.update({ where: { id: Number(id) }, data });
   else await prisma.employeeResource.create({ data });
   revalidatePath("/employee/portal");

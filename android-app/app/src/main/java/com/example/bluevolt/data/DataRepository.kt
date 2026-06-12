@@ -1,4 +1,4 @@
-package com.example.bluevolt.data
+package com.bluevolt.app.data
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow

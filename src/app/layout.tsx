@@ -83,15 +83,6 @@ export default function RootLayout({
       </head>
       <body className="yama-container">
         <Script
-          strategy="beforeInteractive"
-          type="text/javascript"
-          data-cmp-ab="1"
-          src="https://cdn.consentmanager.net/delivery/autoblocking/838a612c525d6.js"
-          data-cmp-host="c.delivery.consentmanager.net"
-          data-cmp-cdn="cdn.consentmanager.net"
-          data-cmp-codesrc="16"
-        />
-        <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-WP66HV43FZ"
           strategy="afterInteractive"
         />

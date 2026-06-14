@@ -291,7 +291,11 @@ fun PortalScreen(
             } else false
         }?.jsonObject
     }
-    val isClockedIn = activeSession != null
+    var localClockedInState by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(portalDataStr) {
+        localClockedInState = null
+    }
+    val isClockedIn = localClockedInState ?: (activeSession != null)
     val currentUserId = remember(dataObj) {
         val sess = dataObj?.get("session")?.jsonObject
         sess?.get("userId")?.jsonPrimitive?.contentOrNull
@@ -450,11 +454,14 @@ fun PortalScreen(
                                             summaryStatus = if (diffHours + 0.01 >= expectedHours) "Present" else "Half-day"
                                             showClockOutSummaryDialog = true
                                         } else {
-                                            isLoading = true
+                                            localClockedInState = true
                                             scope.launch {
                                                 NetworkClient.clockIn(context).fold(
                                                     onSuccess = { refreshData(currentTabKey) },
-                                                    onFailure = { errorMessage = it.message; isLoading = false }
+                                                    onFailure = { 
+                                                        localClockedInState = null
+                                                        errorMessage = it.message 
+                                                    }
                                                 )
                                             }
                                         }
@@ -608,7 +615,10 @@ fun PortalScreen(
                             onOpenResources = { showResourcesOverlay = true },
                             onOpenPrivileges = { showPrivilegesOverlay = true },
                             onOpenLeaves = { showLeavesOverlay = true },
-                            onOpenIdCard = { showIdCardOverlay = true },
+                            onOpenIdCard = {
+                                viewingIdCardEmployeeId = currentUserId
+                                showIdCardOverlay = true
+                            },
                             onSwitchToTasks = { activeTab = 1 }
                         )
                         1 -> TasksScreen(
@@ -656,7 +666,10 @@ fun PortalScreen(
                             onOpenResources = { showResourcesOverlay = true },
                             onOpenPrivileges = { showPrivilegesOverlay = true },
                             onOpenLeaves = { showLeavesOverlay = true },
-                            onOpenIdCard = { showIdCardOverlay = true },
+                            onOpenIdCard = {
+                                viewingIdCardEmployeeId = currentUserId
+                                showIdCardOverlay = true
+                            },
                             onSwitchToTasks = { activeTab = 1 }
                         )
                         3 -> NotificationsScreen(
@@ -787,11 +800,14 @@ fun PortalScreen(
                     Button(
                         onClick = {
                             showClockOutSummaryDialog = false
-                            isLoading = true
+                            localClockedInState = false
                             scope.launch {
                                 NetworkClient.clockOut(context).fold(
                                     onSuccess = { refreshData(currentTabKey) },
-                                    onFailure = { errorMessage = it.message; isLoading = false }
+                                    onFailure = { 
+                                        localClockedInState = null
+                                        errorMessage = it.message 
+                                    }
                                 )
                             }
                         },
@@ -866,11 +882,14 @@ fun PortalScreen(
                 isLoading = isLoading,
                 onClose = { showAttendanceOverlay = false },
                 onClockIn = {
-                    isLoading = true
+                    localClockedInState = true
                     scope.launch {
                         NetworkClient.clockIn(context).fold(
                             onSuccess = { refreshData(currentTabKey) },
-                            onFailure = { errorMessage = it.message; isLoading = false }
+                            onFailure = { 
+                                localClockedInState = null
+                                errorMessage = it.message 
+                            }
                         )
                     }
                 },
@@ -1921,99 +1940,92 @@ fun MenuScreen(
     val caps = capabilities
     val activeActions = remember(caps) {
         val list = mutableListOf<QuickActionDef>()
-        if (caps != null) {
-            // 1. Attendance
-            list.add(QuickActionDef("Attendance", Icons.Default.DateRange, Color(0xFFEFF6FF), SassPrimary, "attendance"))
+        // 1. Attendance
+        list.add(QuickActionDef("Attendance", Icons.Default.DateRange, Color(0xFFEFF6FF), SassPrimary, "attendance"))
 
-            // 2. Tasks Board
-            list.add(QuickActionDef("Tasks Board", Icons.Default.List, Color(0xFFEEF2F6), SassSecondary, "tasks"))
+        // 2. Tasks Board
+        list.add(QuickActionDef("Tasks Board", Icons.Default.List, Color(0xFFEEF2F6), SassSecondary, "tasks"))
 
-            // 3. CRM
-            if (caps.canUseCrm) {
-                list.add(QuickActionDef("CRM", Icons.Default.Search, Color(0xFFECFDF5), SassSuccess, "crm"))
-            }
-
-            // 4. Approvals
-            if (caps.isSuperiorDashboard) {
-                list.add(QuickActionDef("Review Approvals", Icons.Default.CheckCircle, Color(0xFFFEF2F2), SassDanger, "approvals"))
-            }
-
-            // 5. Leaves Log
-            list.add(QuickActionDef("Leaves Log", Icons.Default.Check, Color(0xFFFDF4E7), SassWarning, "leaves"))
-
-            // 6. Documents
-            if (caps.canViewDocuments) {
-                list.add(QuickActionDef("Documents", Icons.Default.Info, Color(0xFFF5F3FF), SassSecondary, "documents"))
-            }
-
-            // 7. Chat
-            if (caps.canUseChat) {
-                list.add(QuickActionDef("Chat", Icons.Default.Email, Color(0xFFE0F2FE), SassAccent, "support"))
-            }
-
-            // 8. Staff Directory
-            if (caps.canViewEmployees || caps.canManage) {
-                list.add(QuickActionDef("Staff Directory", Icons.Default.AccountBox, Color(0xFFFFF1F2), Color(0xFFF43F5E), "staff"))
-            }
-
-            // 9. Payroll Hub
-            if (caps.canManagePayroll || caps.isSuperiorDashboard) {
-                list.add(QuickActionDef("Payroll Hub", Icons.Default.ShoppingCart, Color(0xFFF0FDF4), SassSuccess, "payroll"))
-            }
-
-            // 11. Security Audits
-            if (caps.canManageAccess) {
-                list.add(QuickActionDef("Security Audits", Icons.Default.Warning, Color(0xFFFEF3C7), SassWarning, "audit"))
-            }
-
-            // 12. Applicants
-            if (caps.canManageApplicants) {
-                list.add(QuickActionDef("Applicants", Icons.Default.Person, Color(0xFFECFDF5), SassSuccess, "applicants"))
-            }
-
-            // 13. Work Ops
-            if (caps.canManageOps || !caps.isSuperiorDashboard) {
-                list.add(QuickActionDef("Work Ops", Icons.Default.Settings, Color(0xFFEFF6FF), SassPrimary, "ops"))
-            }
-
-            // 14. Expenses
-            if (caps.canManageExpenses || !caps.isSuperiorDashboard) {
-                list.add(QuickActionDef("Expenses", Icons.Default.ShoppingCart, Color(0xFFFDF4E7), SassWarning, "expenses"))
-            }
-
-            // 15. Reports
-            if (caps.isSuperiorDashboard) {
-                list.add(QuickActionDef("Reports", Icons.Default.List, Color(0xFFF5F3FF), SassSecondary, "reports"))
-            }
-
-            // 16. Announcements
-            if (caps.canViewAnnouncements || caps.canPublishAnnouncements) {
-                list.add(QuickActionDef("Announcements", Icons.Default.Notifications, Color(0xFFFFF1F2), Color(0xFFF43F5E), "announcements"))
-            }
-
-            // 17. Meetings
-            if (caps.canViewMeetings || caps.canScheduleMeetings) {
-                list.add(QuickActionDef("Meetings", Icons.Default.Call, Color(0xFFE0F2FE), SassAccent, "meetings"))
-            }
-
-            // 18. Resources
-            if (caps.canViewResources || caps.canManageResources) {
-                list.add(QuickActionDef("Resources", Icons.Default.Info, Color(0xFFEEF2F6), SassSecondary, "resources"))
-            }
-
-            // 19. Privileges
-            if (caps.canManageAccess) {
-                list.add(QuickActionDef("Privileges", Icons.Default.Lock, Color(0xFFFEF3C7), SassWarning, "access"))
-            }
-
-            // 20. My ID Card
-            list.add(QuickActionDef("My ID Card", Icons.Default.AccountBox, Color(0xFFEFF6FF), SassPrimary, "id_card"))
-        } else {
-            list.add(QuickActionDef("Attendance", Icons.Default.DateRange, Color(0xFFEFF6FF), SassPrimary, "attendance"))
-            list.add(QuickActionDef("Tasks Board", Icons.Default.List, Color(0xFFEEF2F6), SassSecondary, "tasks"))
+        // 3. CRM
+        if (caps.canUseCrm) {
             list.add(QuickActionDef("CRM", Icons.Default.Search, Color(0xFFECFDF5), SassSuccess, "crm"))
-            list.add(QuickActionDef("Leaves Log", Icons.Default.Check, Color(0xFFFDF4E7), SassWarning, "leaves"))
         }
+
+        // 4. Approvals
+        if (caps.isSuperiorDashboard) {
+            list.add(QuickActionDef("Review Approvals", Icons.Default.CheckCircle, Color(0xFFFEF2F2), SassDanger, "approvals"))
+        }
+
+        // 5. Leaves Log
+        list.add(QuickActionDef("Leaves Log", Icons.Default.Check, Color(0xFFFDF4E7), SassWarning, "leaves"))
+
+        // 6. Documents
+        if (caps.canViewDocuments) {
+            list.add(QuickActionDef("Documents", Icons.Default.Info, Color(0xFFF5F3FF), SassSecondary, "documents"))
+        }
+
+        // 7. Chat
+        if (caps.canUseChat) {
+            list.add(QuickActionDef("Chat", Icons.Default.Email, Color(0xFFE0F2FE), SassAccent, "support"))
+        }
+
+        // 8. Staff Directory
+        if (caps.canViewEmployees || caps.canManage) {
+            list.add(QuickActionDef("Staff Directory", Icons.Default.AccountBox, Color(0xFFFFF1F2), Color(0xFFF43F5E), "staff"))
+        }
+
+        // 9. Payroll Hub
+        if (caps.canManagePayroll || caps.isSuperiorDashboard) {
+            list.add(QuickActionDef("Payroll Hub", Icons.Default.ShoppingCart, Color(0xFFF0FDF4), SassSuccess, "payroll"))
+        }
+
+        // 11. Security Audits
+        if (caps.canManageAccess) {
+            list.add(QuickActionDef("Security Audits", Icons.Default.Warning, Color(0xFFFEF3C7), SassWarning, "audit"))
+        }
+
+        // 12. Applicants
+        if (caps.canManageApplicants) {
+            list.add(QuickActionDef("Applicants", Icons.Default.Person, Color(0xFFECFDF5), SassSuccess, "applicants"))
+        }
+
+        // 13. Work Ops
+        if (caps.canManageOps || !caps.isSuperiorDashboard) {
+            list.add(QuickActionDef("Work Ops", Icons.Default.Settings, Color(0xFFEFF6FF), SassPrimary, "ops"))
+        }
+
+        // 14. Expenses
+        if (caps.canManageExpenses || !caps.isSuperiorDashboard) {
+            list.add(QuickActionDef("Expenses", Icons.Default.ShoppingCart, Color(0xFFFDF4E7), SassWarning, "expenses"))
+        }
+
+        // 15. Reports
+        if (caps.isSuperiorDashboard) {
+            list.add(QuickActionDef("Reports", Icons.Default.List, Color(0xFFF5F3FF), SassSecondary, "reports"))
+        }
+
+        // 16. Announcements
+        if (caps.canViewAnnouncements || caps.canPublishAnnouncements) {
+            list.add(QuickActionDef("Announcements", Icons.Default.Notifications, Color(0xFFFFF1F2), Color(0xFFF43F5E), "announcements"))
+        }
+
+        // 17. Meetings
+        if (caps.canViewMeetings || caps.canScheduleMeetings) {
+            list.add(QuickActionDef("Meetings", Icons.Default.Call, Color(0xFFE0F2FE), SassAccent, "meetings"))
+        }
+
+        // 18. Resources
+        if (caps.canViewResources || caps.canManageResources) {
+            list.add(QuickActionDef("Resources", Icons.Default.Info, Color(0xFFEEF2F6), SassSecondary, "resources"))
+        }
+
+        // 19. Privileges
+        if (caps.canManageAccess) {
+            list.add(QuickActionDef("Privileges", Icons.Default.Lock, Color(0xFFFEF3C7), SassWarning, "access"))
+        }
+
+        // 20. My ID Card
+        list.add(QuickActionDef("My ID Card", Icons.Default.AccountBox, Color(0xFFEFF6FF), SassPrimary, "id_card"))
         list
     }
 
@@ -2171,103 +2183,95 @@ fun HomeScreen(
 
     val activeActions = remember(caps) {
         val list = mutableListOf<QuickActionDef>()
-        if (caps != null) {
-            // 1. Attendance (Always Available)
-            list.add(QuickActionDef("Attendance", Icons.Default.DateRange, Color(0xFFEFF6FF), SassPrimary, "attendance"))
-            
-            // 2. Tasks (Always Available)
-            list.add(QuickActionDef("Tasks Board", Icons.Default.List, Color(0xFFEEF2F6), SassSecondary, "tasks"))
-            
-            // 3. CRM (canUseCrm)
-            if (caps.canUseCrm) {
-                list.add(QuickActionDef("CRM", Icons.Default.Search, Color(0xFFECFDF5), SassSuccess, "crm"))
-            }
-            
-            // 4. Approvals
-            if (caps.isSuperiorDashboard) {
-                list.add(QuickActionDef("Review Approvals", Icons.Default.CheckCircle, Color(0xFFFEF2F2), SassDanger, "approvals"))
-            }
-            
-            // 5. Leaves (Always shown for self-service)
-            list.add(QuickActionDef("Leaves Log", Icons.Default.Check, Color(0xFFFDF4E7), SassWarning, "leaves"))
-            
-            // 6. Corporate Documents (canViewDocuments)
-            if (caps.canViewDocuments) {
-                list.add(QuickActionDef("Documents", Icons.Default.Info, Color(0xFFF5F3FF), SassSecondary, "documents"))
-            }
-            
-            // 7. Chat (canUseChat)
-            if (caps.canUseChat) {
-                list.add(QuickActionDef("Chat", Icons.Default.Email, Color(0xFFE0F2FE), SassAccent, "support"))
-            }
-            
-            // 8. Staff Directory (canViewEmployees || canManage)
-            if (caps.canViewEmployees || caps.canManage) {
-                list.add(QuickActionDef("Staff Directory", Icons.Default.AccountBox, Color(0xFFFFF1F2), Color(0xFFF43F5E), "staff"))
-            }
-            
-            // 9. Payroll Hub (canManagePayroll / isSuperior)
-            if (caps.canManagePayroll || caps.isSuperiorDashboard) {
-                list.add(QuickActionDef("Payroll Hub", Icons.Default.ShoppingCart, Color(0xFFF0FDF4), SassSuccess, "payroll"))
-            }
-            
-            // Performance Reviews card removed
-            
-            // 11. Audit Security Logs (canManageAccess)
-            if (caps.canManageAccess) {
-                list.add(QuickActionDef("Security Audits", Icons.Default.Warning, Color(0xFFFEF3C7), SassWarning, "audit"))
-            }
-
-            // 12. Applicants
-            if (caps.canManageApplicants) {
-                list.add(QuickActionDef("Applicants", Icons.Default.Person, Color(0xFFECFDF5), SassSuccess, "applicants"))
-            }
-
-            // 13. Work Ops
-            if (caps.canManageOps) {
-                list.add(QuickActionDef("Work Ops", Icons.Default.Settings, Color(0xFFEFF6FF), SassPrimary, "ops"))
-            }
-
-            // 14. Expenses
-            if (caps.canManageExpenses) {
-                list.add(QuickActionDef("Expenses", Icons.Default.ShoppingCart, Color(0xFFFDF4E7), SassWarning, "expenses"))
-            }
-
-
-            // 15. Reports
-            if (caps.isSuperiorDashboard) {
-                list.add(QuickActionDef("Reports", Icons.Default.List, Color(0xFFF5F3FF), SassSecondary, "reports"))
-            }
-
-            // 16. Announcements (visible if role can view OR publish)
-            if (caps.canViewAnnouncements || caps.canPublishAnnouncements) {
-                list.add(QuickActionDef("Announcements", Icons.Default.Notifications, Color(0xFFFFF1F2), Color(0xFFF43F5E), "announcements"))
-            }
-
-            // 17. Meetings (visible if role can view OR schedule)
-            if (caps.canViewMeetings || caps.canScheduleMeetings) {
-                list.add(QuickActionDef("Meetings", Icons.Default.Call, Color(0xFFE0F2FE), SassAccent, "meetings"))
-            }
-
-            // 18. Resources (visible if role can view OR manage)
-            if (caps.canViewResources || caps.canManageResources) {
-                list.add(QuickActionDef("Resources", Icons.Default.Info, Color(0xFFEEF2F6), SassSecondary, "resources"))
-            }
-
-            // 19. Privileges
-            if (caps.canManageAccess) {
-                list.add(QuickActionDef("Privileges", Icons.Default.Lock, Color(0xFFFEF3C7), SassWarning, "access"))
-            }
-
-            // 20. My ID Card (always available)
-            list.add(QuickActionDef("My ID Card", Icons.Default.AccountBox, Color(0xFFEFF6FF), SassPrimary, "id_card"))
-        } else {
-            // Fallback default modules
-            list.add(QuickActionDef("Attendance", Icons.Default.DateRange, Color(0xFFEFF6FF), SassPrimary, "attendance"))
-            list.add(QuickActionDef("Tasks", Icons.Default.List, Color(0xFFEEF2F6), SassSecondary, "tasks"))
+        // 1. Attendance (Always Available)
+        list.add(QuickActionDef("Attendance", Icons.Default.DateRange, Color(0xFFEFF6FF), SassPrimary, "attendance"))
+        
+        // 2. Tasks (Always Available)
+        list.add(QuickActionDef("Tasks Board", Icons.Default.List, Color(0xFFEEF2F6), SassSecondary, "tasks"))
+        
+        // 3. CRM (canUseCrm)
+        if (caps.canUseCrm) {
             list.add(QuickActionDef("CRM", Icons.Default.Search, Color(0xFFECFDF5), SassSuccess, "crm"))
-            list.add(QuickActionDef("Leaves", Icons.Default.Check, Color(0xFFFDF4E7), SassWarning, "leaves"))
         }
+        
+        // 4. Approvals
+        if (caps.isSuperiorDashboard) {
+            list.add(QuickActionDef("Review Approvals", Icons.Default.CheckCircle, Color(0xFFFEF2F2), SassDanger, "approvals"))
+        }
+        
+        // 5. Leaves (Always shown for self-service)
+        list.add(QuickActionDef("Leaves Log", Icons.Default.Check, Color(0xFFFDF4E7), SassWarning, "leaves"))
+        
+        // 6. Corporate Documents (canViewDocuments)
+        if (caps.canViewDocuments) {
+            list.add(QuickActionDef("Documents", Icons.Default.Info, Color(0xFFF5F3FF), SassSecondary, "documents"))
+        }
+        
+        // 7. Chat (canUseChat)
+        if (caps.canUseChat) {
+            list.add(QuickActionDef("Chat", Icons.Default.Email, Color(0xFFE0F2FE), SassAccent, "support"))
+        }
+        
+        // 8. Staff Directory (canViewEmployees || canManage)
+        if (caps.canViewEmployees || caps.canManage) {
+            list.add(QuickActionDef("Staff Directory", Icons.Default.AccountBox, Color(0xFFFFF1F2), Color(0xFFF43F5E), "staff"))
+        }
+        
+        // 9. Payroll Hub (canManagePayroll / isSuperior)
+        if (caps.canManagePayroll || caps.isSuperiorDashboard) {
+            list.add(QuickActionDef("Payroll Hub", Icons.Default.ShoppingCart, Color(0xFFF0FDF4), SassSuccess, "payroll"))
+        }
+        
+        // Performance Reviews card removed
+        
+        // 11. Audit Security Logs (canManageAccess)
+        if (caps.canManageAccess) {
+            list.add(QuickActionDef("Security Audits", Icons.Default.Warning, Color(0xFFFEF3C7), SassWarning, "audit"))
+        }
+
+        // 12. Applicants
+        if (caps.canManageApplicants) {
+            list.add(QuickActionDef("Applicants", Icons.Default.Person, Color(0xFFECFDF5), SassSuccess, "applicants"))
+        }
+
+        // 13. Work Ops
+        if (caps.canManageOps) {
+            list.add(QuickActionDef("Work Ops", Icons.Default.Settings, Color(0xFFEFF6FF), SassPrimary, "ops"))
+        }
+
+        // 14. Expenses
+        if (caps.canManageExpenses) {
+            list.add(QuickActionDef("Expenses", Icons.Default.ShoppingCart, Color(0xFFFDF4E7), SassWarning, "expenses"))
+        }
+
+
+        // 15. Reports
+        if (caps.isSuperiorDashboard) {
+            list.add(QuickActionDef("Reports", Icons.Default.List, Color(0xFFF5F3FF), SassSecondary, "reports"))
+        }
+
+        // 16. Announcements (visible if role can view OR publish)
+        if (caps.canViewAnnouncements || caps.canPublishAnnouncements) {
+            list.add(QuickActionDef("Announcements", Icons.Default.Notifications, Color(0xFFFFF1F2), Color(0xFFF43F5E), "announcements"))
+        }
+
+        // 17. Meetings (visible if role can view OR schedule)
+        if (caps.canViewMeetings || caps.canScheduleMeetings) {
+            list.add(QuickActionDef("Meetings", Icons.Default.Call, Color(0xFFE0F2FE), SassAccent, "meetings"))
+        }
+
+        // 18. Resources (visible if role can view OR manage)
+        if (caps.canViewResources || caps.canManageResources) {
+            list.add(QuickActionDef("Resources", Icons.Default.Info, Color(0xFFEEF2F6), SassSecondary, "resources"))
+        }
+
+        // 19. Privileges
+        if (caps.canManageAccess) {
+            list.add(QuickActionDef("Privileges", Icons.Default.Lock, Color(0xFFFEF3C7), SassWarning, "access"))
+        }
+
+        // 20. My ID Card (always available)
+        list.add(QuickActionDef("My ID Card", Icons.Default.AccountBox, Color(0xFFEFF6FF), SassPrimary, "id_card"))
         list
     }
 

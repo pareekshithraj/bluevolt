@@ -24,15 +24,6 @@ const DEFAULT_PROJECTS = [
     passwordHash: "configured-in-admin",
   },
   {
-    id: "stores24-erp",
-    name: "Stores24 POS Settlement Portal",
-    client: "Vemgal Mart Group",
-    status: "ACTIVE",
-    latency: "6.2ms",
-    url: "https://stores24.bluevolt.group",
-    passwordHash: "configured-in-admin",
-  },
-  {
     id: "project-nexus",
     name: "Autonomous Logistics Node",
     client: "Alpha Logistics Solutions",

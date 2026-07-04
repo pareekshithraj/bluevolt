@@ -7,9 +7,8 @@ import { usePathname } from "next/navigation";
 export function SmoothScroll({ children }: { children: ReactNode }) {
     const pathname = usePathname();
     const isEmployeePortal = pathname.startsWith("/employee");
-    const isStores24 = pathname.startsWith("/stores24");
 
-    if (isEmployeePortal || isStores24) {
+    if (isEmployeePortal) {
         return <>{children}</>;
     }
 

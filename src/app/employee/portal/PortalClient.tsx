@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Bell, CalendarDays, ChevronRight, ClipboardList, Code2, FileText, Handshake, LogOut, Menu, MessageCircle, Moon, PenLine, RefreshCw, RotateCw, Star, Sun, Target, UserCheck, Users, Video, WalletCards, X } from "lucide-react";
 import {
@@ -36,6 +35,7 @@ import CrmTab from "@/components/portal/CrmTab";
 import ApplicantsTab from "@/components/portal/ApplicantsTab";
 import EmployeesTab from "@/components/portal/EmployeesTab";
 import PrivilegesTab from "@/components/portal/PrivilegesTab";
+import Modal from "@/components/portal/Modal";
 
 type PortalData = Awaited<ReturnType<typeof getEmployeePortalData>>;
 type EmployeeListItem = PortalData["users"][number] & {
@@ -311,6 +311,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const [chatInputText, setChatInputText] = useState("");
   const [loadingTab, setLoadingTab] = useState<PortalTab | "">("");
   const [error, setError] = useState("");
+  const [activeModal, setActiveModal] = useState<{ id: string; payload?: any /* eslint-disable-line @typescript-eslint/no-explicit-any */ } | null>(null);
   const [sortResources, setSortResources] = useState("newest");
   const [activeEmployeeMenuId, setActiveEmployeeMenuId] = useState<number | null>(null);
   const [workHoursEmployeeId, setWorkHoursEmployeeId] = useState("");
@@ -336,7 +337,18 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const [visibleOpsLeave, setVisibleOpsLeave] = useState(5);
 
 
-  const [theme, setTheme] = useState<"dark" | "light">("light");
+  const [showCrmCloseConfirm, setShowCrmCloseConfirm] = useState(false);
+  const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("bluevolt-theme");
+      if (saved === "light" || saved === "dark") return saved;
+    }
+    return "dark";
+  });
+
   const [now, setNow] = useState(new Date());
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window !== "undefined") {
@@ -354,9 +366,6 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   };
 
   useEffect(() => {
-    setTheme("light");
-    localStorage.setItem("bluevolt-theme", "light");
-
     // Lock page scrolling when in the portal
     document.body.classList.add("portal-body-lock");
     document.documentElement.classList.add("portal-body-lock");
@@ -396,9 +405,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && activeCrmSheetId) {
-        if (window.confirm("Are you sure you want to close this sheet? Unsaved work will be lost.")) {
-          setActiveCrmSheetId(null);
-        }
+        setShowCrmCloseConfirm(true);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -435,6 +442,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   useEffect(() => {
     const handleOutsideClick = () => {
       setActiveEmployeeMenuId(null);
+      setProfileDropdownOpen(false);
     };
     window.addEventListener("click", handleOutsideClick);
     return () => window.removeEventListener("click", handleOutsideClick);
@@ -463,6 +471,11 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     return true;
   }), [data.capabilities]);
 
+  const filteredVisibleTabs = useMemo(() => {
+    if (!sidebarSearchQuery) return visibleTabs;
+    return visibleTabs.filter(item => item.label.toLowerCase().includes(sidebarSearchQuery.toLowerCase()));
+  }, [visibleTabs, sidebarSearchQuery]);
+
   const refresh = (sort = sortResources, currentTab = tab) => startTransition(async () => {
     try {
       const newData = await getEmployeePortalData(sort, currentTab);
@@ -486,6 +499,19 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
         setLoadingTab("");
       }
     });
+  };
+
+  const handleSetActiveCrmSheetId = (id: number | null) => {
+    if (id === null && activeCrmSheetId !== null) {
+      setShowCrmCloseConfirm(true);
+    } else {
+      setActiveCrmSheetId(id);
+    }
+  };
+
+  const confirmCloseCrmSheet = () => {
+    setActiveCrmSheetId(null);
+    setShowCrmCloseConfirm(false);
   };
 
   const employees = data.users as EmployeeListItem[];
@@ -535,7 +561,15 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const currentEmployee = employees.find((user) => user.id === currentUserId);
   const todayKey = portalDateFormatter.format(now);
   const activeAttendance = data.attendance.find((entry) => entry.employeeId === currentUserId && entry.loginAt && !entry.logoutAt && portalDateFormatter.format(validDate(entry.workDate) || now) === todayKey);
-  const isWorking = clockOverride ? clockOverride === "working" : Boolean(activeAttendance);
+  
+  let autoClockedOut = false;
+  if (activeAttendance && activeAttendance.loginAt) {
+    const loginTime = new Date(activeAttendance.loginAt).getTime();
+    if (Date.now() - loginTime > 8 * 60 * 60 * 1000) {
+      autoClockedOut = true;
+    }
+  }
+  const isWorking = clockOverride ? clockOverride === "working" : (Boolean(activeAttendance) && !autoClockedOut);
   const recentAttendance = data.attendance.slice(0, visibleDashboardAttendance);
   const selectedHoursEmployeeId = Number(workHoursEmployeeId || currentUserId);
   const selectedHoursEmployee = employees.find((user) => user.id === selectedHoursEmployeeId) || currentEmployee;
@@ -1076,8 +1110,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
     `/api/employee/id-card?employeeId=${user.id}${download ? "&download=1" : ""}`
   );
 
-  const greetingHour = now.getHours();
-  const greeting = greetingHour < 12 ? "Good morning" : greetingHour < 17 ? "Good afternoon" : "Good evening";
+
   const userInitials = data.session.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 
   const confirmDelete = (entityType: string, id: string, name?: string) => {
@@ -1123,6 +1156,23 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
         </div>
       )}
 
+      {showCrmCloseConfirm && (
+        <div className={styles.modalOverlay} role="dialog" aria-modal="true" aria-label="Confirm closing sheet">
+          <div className={styles.modalPanel} style={{ maxWidth: 450 }}>
+            <div className={styles.modalHeader}>
+              <div>
+                <h2 className={styles.cardTitle}>Unsaved Work</h2>
+                <p className={styles.muted}>Are you sure you want to close this sheet? Any unsaved edits will be lost.</p>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 24 }}>
+              <button className={styles.ghostButton} type="button" onClick={() => setShowCrmCloseConfirm(false)}>Cancel</button>
+              <button className={styles.button} type="button" onClick={confirmCloseCrmSheet}>Close Sheet</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <aside className={`${styles.sidebar} ${mobileSidebarOpen ? styles.sidebarOpen : ""} ${sidebarCollapsed ? styles.sidebarCollapsed : ""}`}>
         {/* Collapse toggle button (Desktop only) */}
         <button 
@@ -1134,27 +1184,14 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
           {sidebarCollapsed ? <ChevronRight size={14} /> : <ChevronRight size={14} style={{ transform: "rotate(180deg)" }} />}
         </button>
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 28, paddingBottom: 16, borderBottom: "1px solid var(--border-color)", width: "100%" }}>
-          {sidebarCollapsed ? (
-            <span style={{ fontSize: "1.45rem", fontWeight: 900, color: "var(--text-brand)" }}>B</span>
-          ) : (
-            <Image src="/logo.png" alt="BLUEVOLT Logo" width={110} height={52} style={{ height: 52, width: "auto", objectFit: "contain" }} />
-          )}
-        </div>
-        <div className={styles.sidebarProfile}>
-          <div className={styles.sidebarAvatar}>
-            <span>{userInitials}</span>
-            {isWorking && <span className={styles.sidebarOnlineDot} />}
+        {!sidebarCollapsed && (
+          <div style={{ padding: "0 12px 24px 12px", fontWeight: 700, fontSize: "0.82rem", letterSpacing: "0.08em", color: "var(--text-primary)" }}>
+            BLUEVOLT
           </div>
-          {!sidebarCollapsed && (
-            <div className={styles.sidebarProfileInfo}>
-              <div className={styles.sidebarName} style={{ margin: 0, fontWeight: 700, fontSize: "0.95rem" }}>{data.session.name}</div>
-              <div className={styles.pill} style={{ marginTop: 4, fontSize: "0.68rem", textTransform: "uppercase" }}>{roleLabel}</div>
-            </div>
-          )}
-        </div>
+        )}
+
         <nav className={styles.nav}>
-          {visibleTabs.map((item) => {
+          {filteredVisibleTabs.map((item) => {
             const Icon = item.icon;
             return (
               <button 
@@ -1166,58 +1203,72 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 type="button"
                 title={item.label}
               >
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-                  <Icon size={18} /> 
-                  {!sidebarCollapsed && (loadingTab === item.id ? "Loading..." : item.label)}
-                </span>
-                {!sidebarCollapsed && tab === item.id && <ChevronRight size={14} className={styles.navChevron} />}
+                <Icon size={14} className={styles.navButtonIcon} /> 
+                {!sidebarCollapsed && (
+                  <span className={styles.navButtonLabel}>
+                    {loadingTab === item.id ? "Loading..." : item.label}
+                  </span>
+                )}
               </button>
             );
           })}
         </nav>
-        <button 
-          className={styles.logoutButton} 
-          type="button" 
-          title="Sign out"
-          onClick={() => startTransition(async () => {
-            await logoutEmployee();
-            router.push("/employee/login");
-          })}
-        >
-          <LogOut size={18} />
-          {!sidebarCollapsed && " Sign out"}
-        </button>
       </aside>
 
       <main className={styles.main}>
         <header className={styles.topbar}>
-          <div>
-            <p className={styles.greetingText}>{greeting}, {data.session.name.split(" ")[0]}</p>
-            <h1 className={styles.title}>Employee Portal</h1>
-            <p className={styles.muted}>{now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
+          {/* Vercel-style Left Breadcrumbs */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span className={styles.vercelBreadcrumbProject} style={{ fontWeight: 600, fontSize: "0.88rem", color: "var(--text-primary)" }}>BlueVolt Groups</span>
+            <span className={styles.vercelBreadcrumbSlash} style={{ color: "var(--text-muted)", fontSize: "0.88rem" }}>/</span>
+            <span className={styles.vercelBreadcrumbActive} style={{ fontWeight: 500, fontSize: "0.88rem", color: "var(--text-muted)" }}>
+              {tabs.find(t => t.id === tab)?.label || "Overview"}
+            </span>
           </div>
-          <div className={styles.workIsland}>
-            <div style={{ display: "flex", alignItems: "center", gap: 16, marginRight: 8, paddingRight: 16, borderRight: "1px solid var(--border-color)", position: "relative" }}>
-              <div className="headerClock" style={{ textAlign: "right", display: "none" }}>
-                <div style={{ fontSize: "1.1rem", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{now.toLocaleTimeString("en-US", { hour12: true, hour: "numeric", minute: "2-digit" })}</div>
-                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{now.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div>
-              </div>
-              <style>{`@media (min-width: 768px) { .headerClock { display: block !important; } }`}</style>
+
+          {/* Vercel-style Right Tools */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {/* Work Switch knob */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, paddingRight: 12, borderRight: "1px solid var(--border-color)" }}>
+              <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontWeight: 500 }}>
+                {isWorking ? "Working" : "Off Duty"}
+              </span>
+              <button 
+                className={`${styles.workSwitch} ${isWorking ? styles.workSwitchOn : ""}`} 
+                type="button" 
+                onClick={isWorking ? handleClockOut : handleClockIn} 
+                aria-pressed={isWorking} 
+                disabled={clockSaving}
+                title={isWorking ? "Clock Out" : "Clock In"}
+                style={{ scale: "0.82", transformOrigin: "right" }}
+              >
+                <span>{isWorking ? "Working" : "Off"}</span>
+                <i />
+              </button>
+            </div>
+
+            {/* Theme, Notifications, Refresh, Profile Avatar dropdown */}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, position: "relative" }}>
+              {/* Theme Toggle */}
               <button type="button" className={styles.refreshIconButton} onClick={() => {
                 const newTheme = theme === "dark" ? "light" : "dark";
                 setTheme(newTheme);
                 localStorage.setItem("bluevolt-theme", newTheme);
               }} aria-label="Toggle Theme">
-                {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+                {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
               </button>
-              <button type="button" className={styles.refreshIconButton} onClick={() => setNotificationsOpen(!notificationsOpen)} aria-label="Notifications" style={{ position: "relative" }}>
-                <Bell size={18} />
+
+              {/* Notification Popover Trigger */}
+              <button type="button" className={styles.refreshIconButton} onClick={(e) => { e.stopPropagation(); setNotificationsOpen(!notificationsOpen); }} aria-label="Notifications" style={{ position: "relative" }}>
+                <Bell size={16} />
                 {notificationFeed.length > 0 && (
-                  <span style={{ position: "absolute", top: 4, right: 4, width: 8, height: 8, background: "#ef4444", borderRadius: "50%", border: "1px solid var(--bg-card)" }} />
+                  <span style={{ position: "absolute", top: 2, right: 2, width: 6, height: 6, background: "#ef4444", borderRadius: "50%" }} />
                 )}
               </button>
+
+              {/* Notifications Popover */}
               {notificationsOpen && (
-                <div className={styles.notificationPopover}>
+                <div className={styles.notificationPopover} style={{ zIndex: 90 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 12, borderBottom: "1px solid var(--border-color)", paddingBottom: 8 }}>
                     <div>
                       <strong style={{ fontSize: "0.95rem" }}>Notifications</strong>
@@ -1301,19 +1352,54 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   </div>
                 </div>
               )}
-            </div>
-            <div className={styles.workIslandMeta}>
-              <span className={`${styles.workDot} ${isWorking ? styles.workDotOn : ""}`} />
-              <div>
-                <strong>{isWorking ? "Working now" : "Off work"}</strong>
-                <span>{currentEmployee?.workStartTime || "09:00"} to {currentEmployee?.workEndTime || "18:00"} {clockSaving ? "saving..." : ""}</span>
+
+              {/* Refresh button */}
+              <button className={styles.refreshIconButton} type="button" onClick={() => refresh(sortResources, tab)} disabled={pending} aria-label="Refresh portal"><RefreshCw size={14} className={pending ? styles.spinning : ""} /></button>
+
+              {/* User dropdown switcher avatar */}
+              <div style={{ position: "relative" }}>
+                <button 
+                  type="button" 
+                  onClick={(e) => { e.stopPropagation(); setProfileDropdownOpen(!profileDropdownOpen); }} 
+                  aria-label="Profile Menu"
+                  style={{ padding: 0, width: 28, height: 28, borderRadius: "50%", background: "var(--text-primary)", color: "var(--text-inverse)", display: "grid", placeItems: "center", fontWeight: 600, fontSize: "0.75rem", border: 0, cursor: "pointer" }}
+                >
+                  {userInitials}
+                </button>
+                {profileDropdownOpen && (
+                  <div className={styles.profilePopover} style={{ position: "absolute", top: 38, right: 0, background: "var(--bg-card)", border: "1px solid var(--border-color)", borderRadius: 6, padding: "8px 0", width: 180, boxShadow: "var(--shadow-md)", zIndex: 100 }}>
+                    <div style={{ padding: "8px 16px", fontSize: "0.82rem" }}>
+                      <strong style={{ display: "block", color: "var(--text-primary)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{data.session.name}</strong>
+                      <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", display: "block" }}>{data.session.email}</span>
+                    </div>
+                    <div style={{ height: 1, background: "var(--border-color)", margin: "6px 0" }} />
+                    <button 
+                      className={styles.profilePopoverItem} 
+                      onClick={() => {
+                        openPortalTab("profile");
+                        setProfileDropdownOpen(false);
+                      }}
+                      type="button"
+                      style={{ width: "100%", textAlign: "left", padding: "6px 16px", background: "transparent", border: 0, color: "var(--text-primary)", cursor: "pointer", fontSize: "0.82rem" }}
+                    >
+                      My Profile
+                    </button>
+                    <div style={{ height: 1, background: "var(--border-color)", margin: "6px 0" }} />
+                    <button 
+                      className={styles.profilePopoverItem} 
+                      onClick={() => startTransition(async () => {
+                        await logoutEmployee();
+                        router.push("/employee/login");
+                      })}
+                      type="button"
+                      style={{ width: "100%", textAlign: "left", padding: "6px 16px", background: "transparent", border: 0, color: "#ef4444", cursor: "pointer", fontSize: "0.82rem", fontWeight: 500 }}
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
-            <button className={`${styles.workSwitch} ${isWorking ? styles.workSwitchOn : ""}`} type="button" onClick={isWorking ? handleClockOut : handleClockIn} aria-pressed={isWorking} disabled={clockSaving}>
-              <span>{isWorking ? "Working" : "Off"}</span>
-              <i />
-            </button>
-            <button className={styles.refreshIconButton} type="button" onClick={() => refresh(sortResources, tab)} disabled={pending} aria-label="Refresh portal"><RefreshCw size={16} className={pending ? styles.spinning : ""} /></button>
           </div>
         </header>
 
@@ -1341,20 +1427,19 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
         )}
 
         {tab === "notifications" && (
-          <section className={styles.grid}>
-            <div className={`${styles.dashboardHero} ${styles.span12}`}>
-              <div>
-                <div className={styles.eyebrow}>Notification Center</div>
-                <h1 className={styles.heroTitle}>One place for every work update.</h1>
-                <p className={styles.muted}>Announcements, meetings, approved documents, CRM assignments, due tasks, and attendance issues are grouped here with direct open actions.</p>
-              </div>
-              <div className={styles.heroActions}>
-                <button className={styles.button} type="button" onClick={() => runAction(() => markAllNotificationsRead())} disabled={unreadBellCount === 0}>Mark all read</button>
+          <div className={styles.vercelDashboard}>
+            <div className={styles.vercelToolbar}>
+              <div className={styles.vercelBreadcrumbProject}>Notification Center</div>
+              <div style={{ flex: 1 }} />
+              <div className={styles.vercelToolbarActions}>
                 <button className={styles.ghostButton} type="button" onClick={() => refresh(sortResources, "notifications")}>Refresh</button>
+                <button className={styles.vercelButtonPrimary} type="button" onClick={() => runAction(() => markAllNotificationsRead())} disabled={unreadBellCount === 0}>
+                  Mark all read
+                </button>
               </div>
             </div>
 
-            <div className={`${styles.card} ${styles.span12}`}>
+            <div className={styles.vercelCard} style={{ marginBottom: 24 }}>
               <div className={styles.sectionHeader}>
                 <div>
                   <h2 className={styles.cardTitle}>Updates by Category</h2>
@@ -1362,664 +1447,436 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 </div>
                 <span className={styles.pill}>{unreadBellCount} unread</span>
               </div>
-              <div className={styles.notificationCenterGrid}>
-                {notificationGroups.length === 0 ? <div className={styles.emptyState}>No updates waiting right now.</div> : notificationGroups.map((group) => (
-                  <div className={styles.notificationGroup} key={group.category}>
-                    <div className={styles.rowHeader}>
-                      <strong>{group.category}</strong>
-                      <span className={styles.pill}>{group.items.length}</span>
-                    </div>
-                    <div className={styles.list}>
-                      {group.items.map((item) => (
-                        <button className={styles.notificationRow} type="button" key={item.id} onClick={item.openAction}>
-                          <span className={item.unread ? `${styles.notificationDot} ${styles.notificationDotUnread}` : styles.notificationDot} />
-                          <span>
-                            <strong>{item.title}</strong>
-                            <small>{item.body}</small>
-                            <em>{formatPortalTimeAgo(item.time)}</em>
-                          </span>
-                          <span className={styles.actionStack}>
-                            <span className={styles.pill}>{item.actionLabel || "Open"}</span>
-                            {item.unread && item.action && (
-                              <span
-                                className={styles.ghostInline}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  item.action?.();
-                                }}
-                              >
-                                Mark read
-                              </span>
-                            )}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {recentAuditEvents.length > 0 && data.capabilities.canUseSuperiorDashboard && (
-              <div className={`${styles.card} ${styles.span12}`}>
-                <div className={styles.sectionHeader}>
-                  <div>
-                    <h2 className={styles.cardTitle}>Recent Audit Trail</h2>
-                    <p className={styles.muted}>Latest management actions for accountability.</p>
-                  </div>
-                  <span className={styles.pill}>{recentAuditEvents.length} events</span>
-                </div>
-                <div className={styles.smartTable}>
-                  <div className={styles.smartTableHeader}>
-                    <span>Actor</span>
-                    <span>Action</span>
-                    <span>Entity</span>
-                    <span>When</span>
-                  </div>
-                  {recentAuditEvents.map((event) => (
-                    <div className={styles.smartTableRow} key={event.id}>
-                      <strong>{event.actorName || "System"}</strong>
-                      <span>{event.action}</span>
-                      <span>{event.entityType}</span>
-                      <span>{formatPortalTimeAgo(event.createdAt)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </section>
-        )}
-
-        {tab === "today" && (
-          <section className={styles.grid}>
-            <div className={`${styles.dashboardHero} ${styles.span12}`}>
-              <div>
-                <div className={styles.eyebrow}>Today</div>
-                <h1 className={styles.heroTitle}>Daily command center.</h1>
-                <p className={styles.muted}>Check-in status, tasks, meetings, CRM callbacks, approvals, announcements, and attendance issues in one working view.</p>
-              </div>
-              <div className={styles.heroActions}>
-                <button className={isWorking ? styles.ghostButton : styles.button} type="button" onClick={isWorking ? handleClockOut : handleClockIn} disabled={clockSaving}>
-                  {isWorking ? "Check out" : "Check in"}
-                </button>
-                {data.capabilities.canUseCrm && <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("crm")}>Open CRM</button>}
-                {data.capabilities.canUseSuperiorDashboard && <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("approvals")}>Approvals</button>}
-              </div>
-            </div>
-
-            {[
-              ["Check-in", isWorking ? "Working" : "Off", currentEmployee ? `${currentEmployee.workStartTime} to ${currentEmployee.workEndTime}` : "Work window not set"],
-              ["Tasks due today", todaysTasks.length, `${dueSoonTasks.length} due soon, ${blockedTasks.length} blocked`],
-              ["Meetings today", todaysMeetings.length, "Visible sessions assigned to you"],
-              ["CRM callbacks", todaysCrmCallbacks.length, "Rows waiting for follow-up"],
-              ["Pending approvals", pendingApprovalCount, "Documents, CRM, applicants, leave, expenses"],
-              ["Attendance issues", attendanceIssues.length, "Late, absent, or half-day records"],
-            ].map(([label, value, hint]) => (
-              <div className={`${styles.card} ${styles.span2} ${styles.metricCard}`} key={String(label)}>
-                <h2 className={styles.cardTitle}>{label}</h2>
-                <span className={styles.metricValue}>{value}</span>
-                <p className={styles.muted}>{hint}</p>
-              </div>
-            ))}
-
-            <div className={`${styles.card} ${styles.span6}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Tasks Due Today</h2>
-                  <p className={styles.muted}>Use consistent statuses: Pending, Done, Blocked, Needs Review.</p>
-                </div>
-                <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("ops")}>Open Work Ops</button>
-              </div>
-              <div className={styles.list}>
-                {todaysTasks.length === 0 ? <div className={styles.emptyState}>No task due today.</div> : todaysTasks.slice(0, 8).map((task) => (
-                  <div className={styles.row} key={`today-task-${task.id}`}>
-                    <div className={styles.rowHeader}><strong>{task.title}</strong><span className={task.status === "Blocked" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{task.status}</span></div>
-                    <p className={styles.muted}>{task.description || "No notes."}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className={`${styles.card} ${styles.span6}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Meetings Today</h2>
-                  <p className={styles.muted}>Join assigned sessions directly.</p>
-                </div>
-                <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("meetings")}>Open Meetings</button>
-              </div>
-              <div className={styles.list}>
-                {todaysMeetings.length === 0 ? <div className={styles.emptyState}>No meeting today.</div> : todaysMeetings.slice(0, 8).map((meeting) => (
-                  <div className={styles.row} key={`today-meeting-${meeting.id}`}>
-                    <div className={styles.rowHeader}><strong>{meeting.title}</strong><span className={styles.pill}>{formatPortalTime(meeting.startsAt)}</span></div>
-                    <p className={styles.muted}>{meeting.notes || "Scheduled meeting."}</p>
-                    {meeting.meetUrl && <a className={styles.ghostButton} href={meeting.meetUrl} target="_blank" rel="noopener noreferrer">Join</a>}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className={`${styles.card} ${styles.span4}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>CRM Callbacks</h2>
-                  <p className={styles.muted}>Rows marked Callback from visible sheets.</p>
-                </div>
-                <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("crm")}>Open CRM</button>
-              </div>
-              <div className={styles.list}>
-                {todaysCrmCallbacks.length === 0 ? <div className={styles.emptyState}>No callback rows.</div> : todaysCrmCallbacks.slice(0, 6).map((row) => {
-                  const cells = row.data && typeof row.data === "object" ? row.data as Record<string, string> : {};
-                  return (
-                    <div className={styles.row} key={`today-callback-${row.id}`}>
-                      <div className={styles.rowHeader}><strong>{cells["School Name"] || cells.Company || `Row ${row.rowNumber}`}</strong><span className={`${styles.pill} ${styles.pillWarn}`}>Callback</span></div>
-                      <p className={styles.muted}>{cells["Phone Number"] || cells.Phone || row.reason || "Call back."}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className={`${styles.card} ${styles.span4}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Announcements</h2>
-                  <p className={styles.muted}>Latest role-visible notices.</p>
-                </div>
-                <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("announcements")}>Open</button>
-              </div>
-              <div className={styles.list}>
-                {data.announcements.length === 0 ? <div className={styles.emptyState}>No announcements.</div> : data.announcements.slice(0, 5).map((announcement) => (
-                  <div className={styles.row} key={`today-announcement-${announcement.id}`}>
-                    <div className={styles.rowHeader}><strong>{announcement.title}</strong><span className={announcement.priority === "Urgent" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{announcement.priority}</span></div>
-                    <p className={styles.muted}>{announcement.body}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className={`${styles.card} ${styles.span4}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Approval Queue</h2>
-                  <p className={styles.muted}>For directors, admins, and super admins.</p>
-                </div>
-                {data.capabilities.canUseSuperiorDashboard && <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("approvals")}>Open</button>}
-              </div>
-              <div className={styles.quickGrid}>
-                {[
-                  ["Documents", pendingDocuments.length],
-                  ["CRM", pendingCrmSheets.length],
-                  ["Applicants", pendingApplicants.length],
-                  ["Leave", pendingLeaveRequests.length],
-                  ["Expenses", pendingExpenseClaims.length],
-                ].map(([label, count]) => (
-                  <div className={styles.row} key={`approval-count-${label}`}>
-                    <span className={styles.label}>{label}</span>
-                    <strong>{count}</strong>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {recentAuditEvents.length > 0 && data.capabilities.canUseSuperiorDashboard && (
-              <div className={`${styles.card} ${styles.span12}`}>
-                <div className={styles.sectionHeader}>
-                  <div>
-                    <h2 className={styles.cardTitle}>Recent Audit Trail</h2>
-                    <p className={styles.muted}>Latest edits, approvals, status changes, and deletes.</p>
-                  </div>
-                  <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("notifications")}>Open Notification Center</button>
-                </div>
-                <div className={styles.auditTimeline}>
-                  {recentAuditEvents.map((event) => (
-                    <div className={styles.auditItem} key={`today-audit-${event.id}`}>
-                      <span className={styles.pill}>{event.entityType}</span>
-                      <strong>{event.action}</strong>
-                      <p className={styles.muted}>{event.actorName || "System"} - {formatPortalTimeAgo(event.createdAt)}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </section>
-        )}
-
-        {tab === "dashboard" && !isSuperiorDashboard && (
-          <section className={styles.grid}>
-            <div className={`${styles.card} ${styles.span12} ${styles.dashboardHero}`}>
-              <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
-                <div style={{ flexShrink: 0, width: 86, height: 78, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-shell)", padding: 12, borderRadius: "18px", border: "1px solid var(--border-color)", boxShadow: "var(--shadow-sm)" }}>
-                  <Image src="/logo.png" alt="BLUEVOLT Logo" width={86} height={78} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                </div>
-                <div>
-                  <span className={styles.eyebrow}>{normalizedRole.includes("sales") ? "Sales Workspace" : normalizedRole.includes("content") ? "Content Workspace" : "My Workspace"}</span>
-                  <h2 className={styles.heroTitle} style={{ margin: "4px 0" }}>Today&apos;s work for {data.session.name}</h2>
-                  <p className={styles.muted} style={{ margin: 0 }}>
-                    Focused view for your tasks, check-in status, CRM/content work, resources, meetings, and documents.
-                  </p>
-                </div>
-              </div>
-              <div className={styles.heroActions}>
-                <button className={styles.button} type="button" onClick={() => openPortalTab("ops")}>My tasks</button>
-                {data.capabilities.canUseCrm && <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("crm")}>My CRM sheets</button>}
-                <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("resources")}>Resources</button>
-                {currentEmployee && <a className={styles.ghostButton} href={idCardUrlFor(currentEmployee)} target="_blank" rel="noopener noreferrer">My ID card</a>}
-              </div>
-            </div>
-
-            <div className={`${styles.card} ${styles.span12}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>{normalizedRole.includes("sales") ? "Sales Focus" : normalizedRole.includes("content") ? "Content Focus" : "My Focus"}</h2>
-                  <p className={styles.muted}>Role-specific work surfaced first, without admin-only controls.</p>
-                </div>
-                <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("today")}>Open Today</button>
-              </div>
-              <div className={styles.roleFocusGrid}>
-                {roleFocusCards.map(([label, value, hint]) => (
-                  <div className={styles.roleFocusCard} key={String(label)}>
-                    <span className={styles.label}>{label}</span>
-                    <strong>{value}</strong>
-                    <p className={styles.muted}>{hint}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}>
-              <h2 className={styles.cardTitle}>Work Status</h2>
-              <span className={styles.metricValue}>{isWorking ? "On" : "Off"}</span>
-              <p className={styles.muted}>{currentEmployee?.workStartTime || "09:00"} to {currentEmployee?.workEndTime || "18:00"}</p>
-            </div>
-            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}>
-              <h2 className={styles.cardTitle}>{normalizedRole.includes("sales") ? "Assigned Sheets" : "My Tasks"}</h2>
-              <span className={styles.metricValue}>{normalizedRole.includes("sales") ? salesAssignedSheets.length : myOpenTasks.length}</span>
-              <p className={styles.muted}>{normalizedRole.includes("sales") ? "CRM sheets visible to you." : `${myOpenTasks.filter((task) => task.status === "Blocked").length} blocked, ${myOpenTasks.filter((task) => task.dueAt).length} with due dates.`}</p>
-            </div>
-            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}>
-              <h2 className={styles.cardTitle}>{normalizedRole.includes("sales") ? "Due Today" : normalizedRole.includes("content") ? "Content Queue" : "Assigned Work"}</h2>
-              <span className={styles.metricValue}>{normalizedRole.includes("sales") ? salesFollowUpsDueToday.length : myOpenTasks.length}</span>
-              <p className={styles.muted}>{normalizedRole.includes("sales") ? "Callbacks or rows marked for today." : "Visible tasks for your role."}</p>
-            </div>
-            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}>
-              <h2 className={styles.cardTitle}>{normalizedRole.includes("sales") ? "Callbacks / Done" : "My Hours"}</h2>
-              <span className={styles.metricValue}>{normalizedRole.includes("sales") ? `${salesCallbackRows.length}/${salesDoneRows.length}` : formatWorkHours(selectedEmployeeWorkHours)}</span>
-              <p className={styles.muted}>{normalizedRole.includes("sales") ? "Callback queue and completed rows." : `${selectedEmployeeSessions} work sessions recorded.`}</p>
-            </div>
-
-            <div className={`${styles.card} ${styles.span8}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>{normalizedRole.includes("sales") ? "Sales Action List" : normalizedRole.includes("content") ? "Content Development Queue" : "Priority Work"}</h2>
-                  <p className={styles.muted}>{normalizedRole.includes("sales") ? "Rows you can follow up from approved CRM sheets." : "Tasks assigned to you or your role."}</p>
-                </div>
-              </div>
-              <div className={styles.list}>
-                {normalizedRole.includes("sales") ? (
-                  roleActionableCrmRows.length === 0 ? <div className={styles.emptyState}>No CRM follow-ups assigned right now.</div> : roleActionableCrmRows.slice(0, 6).map((row) => {
-                    const rowData = row.data && typeof row.data === "object" ? row.data as Record<string, string> : {};
-                    return (
-                      <div className={styles.row} key={row.id}>
-                        <div className={styles.rowHeader}>
-                          <strong>{rowData["School Name"] || rowData.Company || `CRM row ${row.rowNumber}`}</strong>
-                          <span className={row.status === "Callback" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{row.status}</span>
-                        </div>
-                        <p className={styles.muted}>{rowData["Phone Number"] || rowData.Phone || row.reason || "Open follow-up."}</p>
-                      </div>
-                    );
-                  })
+              
+              <div className={styles.notificationCenterGrid} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 24, marginTop: 16 }}>
+                {notificationGroups.length === 0 ? (
+                  <div className={styles.emptyState} style={{ gridColumn: "1 / -1" }}>No updates waiting right now.</div>
                 ) : (
-                  myOpenTasks.length === 0 ? <div className={styles.emptyState}>No assigned work right now.</div> : myOpenTasks.slice(0, 6).map((task) => (
-                    <div className={styles.row} key={task.id}>
-                      <div className={styles.rowHeader}><strong>{task.title}</strong><span className={task.status === "Blocked" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{task.status}</span></div>
-                      <p className={styles.muted}>{task.description || "Update progress from Work Ops."} {task.dueAt ? `Due ${formatPortalDateTime(task.dueAt)}` : ""}</p>
+                  notificationGroups.map((group) => (
+                    <div className={styles.vercelCard} key={group.category} style={{ border: "1px solid var(--border-color)", padding: 16 }}>
+                      <div className={styles.rowHeader} style={{ marginBottom: 12, borderBottom: "1px solid var(--border-color)", paddingBottom: 8 }}>
+                        <strong style={{ fontSize: "1rem" }}>{group.category}</strong>
+                        <span className={styles.pill}>{group.items.length}</span>
+                      </div>
+                      <div className={styles.list} style={{ gap: 12, display: "flex", flexDirection: "column" }}>
+                        {group.items.map((item) => (
+                          <button 
+                            className={styles.notificationRow} 
+                            type="button" 
+                            key={item.id} 
+                            onClick={item.openAction}
+                            style={{ textAlign: "left", padding: 12, background: "var(--bg-shell)", borderRadius: 6, display: "flex", gap: 12, alignItems: "flex-start", border: "1px solid transparent", cursor: "pointer", transition: "all 0.2s" }}
+                          >
+                            <span className={item.unread ? `${styles.notificationDot} ${styles.notificationDotUnread}` : styles.notificationDot} style={{ marginTop: 6 }} />
+                            <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+                              <strong style={{ fontSize: "0.9rem", color: "var(--text-color)" }}>{item.title}</strong>
+                              <small style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>{item.body}</small>
+                              <em style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 4 }}>{formatPortalTimeAgo(item.time)}</em>
+                            </span>
+                            <span className={styles.actionStack} style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+                              <span className={styles.pill} style={{ fontSize: "0.7rem", padding: "2px 6px" }}>{item.actionLabel || "Open"}</span>
+                              {item.unread && item.action && (
+                                <span
+                                  role="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    item.action();
+                                  }}
+                                  style={{ color: "var(--accent-color)", fontSize: "0.8rem", textDecoration: "underline" }}
+                                >
+                                  Mark read
+                                </span>
+                              )}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   ))
                 )}
               </div>
             </div>
-
-            <div className={`${styles.card} ${styles.span4}`}>
-              <h2 className={styles.cardTitle}>Quick Access</h2>
-              <div className={styles.list}>
-                <button className={styles.rowButton} type="button" onClick={() => openPortalTab("profile")}><span>Profile and password</span><ChevronRight size={16} /></button>
-                <button className={styles.rowButton} type="button" onClick={() => openPortalTab("documents")}><span>Documents and letters</span><ChevronRight size={16} /></button>
-                <button className={styles.rowButton} type="button" onClick={() => openPortalTab("meetings")}><span>Meetings</span><ChevronRight size={16} /></button>
-                <button className={styles.rowButton} type="button" onClick={() => openPortalTab("resources")}><span>Resources</span><ChevronRight size={16} /></button>
-              </div>
-            </div>
-
-            <div className={`${styles.card} ${styles.span12}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Alerts & Announcements</h2>
-                  <p className={styles.muted}>Important updates visible to your role.</p>
-                </div>
-                <span className={styles.pill}>{data.notifications.filter((item) => !item.readAt).length + data.announcements.length} updates</span>
-              </div>
-              <div className={styles.list}>
-                {data.notifications.filter((item) => !item.readAt).slice(0, 3).map((item) => (
-                  <div className={styles.row} key={`notification-${item.id}`}>
-                    <div className={styles.rowHeader}><strong>{item.title}</strong><span className={`${styles.pill} ${styles.pillWarn}`}>Alert</span></div>
-                    <p className={styles.muted}>{item.body}</p>
-                    <button className={styles.ghostButton} type="button" onClick={() => runAction(() => markNotificationRead({ id: item.id.toString() }))}>Mark read</button>
-                  </div>
-                ))}
-                {data.announcements.slice(0, 3).map((announcement) => (
-                  <div className={styles.row} key={`announcement-${announcement.id}`}>
-                    <div className={styles.rowHeader}><strong>{announcement.title}</strong><span className={announcement.priority === "Urgent" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{announcement.priority}</span></div>
-                    <p className={styles.muted}>{announcement.body}</p>
-                  </div>
-                ))}
-                {data.notifications.filter((item) => !item.readAt).length === 0 && data.announcements.length === 0 && <div className={styles.emptyState}>No alerts right now.</div>}
-              </div>
-            </div>
-
-            <div className={`${styles.card} ${styles.span6}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Upcoming Meetings</h2>
-                  <p className={styles.muted}>Read-only meeting list for your role.</p>
-                </div>
-                <span className={styles.pill}>{upcomingMeetings.length} upcoming</span>
-              </div>
-              <div className={styles.list}>
-                {upcomingMeetings.length === 0 ? <div className={styles.emptyState}>No upcoming meetings.</div> : upcomingMeetings.map((meeting) => (
-                  <div className={styles.row} key={meeting.id}>
-                    <strong>{meeting.title}</strong>
-                    <p className={styles.muted}>{formatPortalDateTime(meeting.startsAt)}</p>
-                    {meeting.meetUrl && <a className={styles.ghostButton} href={meeting.meetUrl} target="_blank" rel="noopener noreferrer">Join</a>}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className={`${styles.card} ${styles.span6}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Resources For You</h2>
-                  <p className={styles.muted}>Files and links visible to your role.</p>
-                </div>
-                <span className={styles.pill}>{data.resources.length} visible</span>
-              </div>
-              <div className={styles.list}>
-                {recentResources.length === 0 ? <div className={styles.emptyState}>No resources yet.</div> : recentResources.map((resource) => (
-                  <div className={styles.row} key={resource.id}>
-                    <strong>{resource.title}</strong>
-                    <p className={styles.muted}>{resource.resourceType} {resource.tags ? `- ${resource.tags}` : ""}</p>
-                    {resource.url && <a className={styles.ghostButton} href={resource.url} target="_blank" rel="noopener noreferrer">Open</a>}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className={`${styles.card} ${styles.span12}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>My Check-In History</h2>
-                  <p className={styles.muted}>Your recent work sessions and total hours.</p>
-                </div>
-                <span className={styles.pill}>{recentAttendance.length} recent</span>
-              </div>
-              <div className={styles.attendanceGrid}>{recentAttendance.length === 0 ? <div className={styles.emptyState}>No check-in history yet.</div> : recentAttendance.map((entry) => (
-                <div className={styles.attendanceItem} key={entry.id}>
-                  <div>
-                    <strong>{entry.employeeName}</strong>
-                    <p className={styles.muted}>{formatPortalDate(entry.workDate)} - {entry.status}</p>
-                  </div>
-                  <div><span className={styles.label}>In</span><strong>{formatPortalTime(entry.loginAt)}</strong></div>
-                  <div><span className={styles.label}>Out</span><strong>{entry.logoutAt ? formatPortalTime(entry.logoutAt) : "Working"}</strong></div>
-                  <span className={entry.logoutAt ? styles.pill : `${styles.pill} ${styles.pillSuccess}`}>{entry.logoutAt ? `${entry.totalHours.toFixed(2)} hrs` : "Live"}</span>
-                </div>
-              ))}</div>
-              {data.attendance.length > visibleDashboardAttendance && (
-                <button className={styles.ghostButton} type="button" onClick={() => setVisibleDashboardAttendance(v => v + 5)} style={{ width: '100%', marginTop: '16px' }}>
-                  Show More (5)
-                </button>
-              )}
-            </div>
-          </section>
+          </div>
         )}
 
-        {tab === "dashboard" && isSuperiorDashboard && (
-          <section className={styles.grid}>
-            <div className={`${styles.card} ${styles.span12} ${styles.dashboardHero}`}>
-              <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
-                <div style={{ flexShrink: 0, width: 96, height: 86, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-shell)", padding: 12, borderRadius: "18px", border: "1px solid var(--border-color)", boxShadow: "var(--shadow-sm)" }}>
-                  <Image src="/logo.png" alt="BLUEVOLT Logo" width={96} height={86} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                </div>
-                <div>
-                  <span className={styles.eyebrow}>Today Command Center</span>
-                  <h2 className={styles.heroTitle} style={{ margin: "4px 0" }}>Work queue for {roleLabel}</h2>
-                  <p className={styles.muted} style={{ margin: 0 }}>Tasks, meetings, resources, and team signals grouped for engineering, content, and sales workflows.</p>
-                </div>
-              </div>
-              <div className={styles.heroActions}>
-                <button className={styles.button} type="button" onClick={() => openPortalTab("ops")}>Open tasks</button>
-                {data.capabilities.canUseCrm && <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("crm")}>Open CRM</button>}
-                <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("resources")}>Resources</button>
-                {currentEmployee && <a className={styles.ghostButton} href={idCardUrlFor(currentEmployee)} target="_blank" rel="noopener noreferrer">My ID card</a>}
+
+        {tab === "today" && (
+          <div className={styles.vercelDashboard}>
+            <div className={styles.vercelToolbar}>
+              <div className={styles.vercelBreadcrumbProject}>Daily Command Center</div>
+              <div style={{ flex: 1 }} />
+              <div className={styles.vercelToolbarActions}>
+                <button className={isWorking ? styles.ghostButton : styles.vercelButtonPrimary} type="button" onClick={isWorking ? handleClockOut : handleClockIn} disabled={clockSaving} style={isWorking ? {} : { padding: "8px 16px" }}>
+                  {isWorking ? "Check out" : "Check in"}
+                </button>
+                {data.capabilities.canUseCrm && <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("crm")}>CRM</button>}
+                {data.capabilities.canUseSuperiorDashboard && <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("approvals")}>Approvals</button>}
               </div>
             </div>
-            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}><h2 className={styles.cardTitle}>Open Tasks</h2><span className={styles.metricValue}>{openTasks.length}</span><p className={styles.muted}>{blockedTasks.length} blocked, {dueSoonTasks.length} due soon.</p></div>
-            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}><h2 className={styles.cardTitle}>CRM Rows</h2><span className={styles.metricValue}>{actionableCrmRows.length}</span><p className={styles.muted}>Open or callback rows from visible sheets.</p></div>
-            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}><h2 className={styles.cardTitle}>Upcoming Meets</h2><span className={styles.metricValue}>{upcomingMeetings.length}</span><p className={styles.muted}>Visible scheduled sessions.</p></div>
-            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}><h2 className={styles.cardTitle}>Team Online</h2><span className={styles.metricValue}>{onlineEmployees}</span><p className={styles.muted}>{workingEmployees} inside work window.</p></div>
-            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}><h2 className={styles.cardTitle}>Total Employees</h2><span className={styles.metricValue}>{employees.length}</span><p className={styles.muted}>{employees.filter((user) => user.employeeType === "Intern").length} interns, {employees.filter((user) => user.status === "Active").length} active.</p></div>
 
-            <div className={`${styles.card} ${styles.span9}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Work Hours Overview</h2>
-                  <p className={styles.muted}>{data.capabilities.canManage ? "Full-team and employee-wise completed work sessions." : "Your completed work sessions."}</p>
+            <div className={styles.vercelStatGrid} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 24 }}>
+              {[
+                ["Check-in", isWorking ? "Working" : "Off", currentEmployee ? `${currentEmployee.workStartTime} to ${currentEmployee.workEndTime}` : "Work window not set"],
+                ["Tasks due today", todaysTasks.length, `${dueSoonTasks.length} due soon, ${blockedTasks.length} blocked`],
+                ["Meetings today", todaysMeetings.length, "Visible sessions assigned to you"],
+                ["CRM callbacks", todaysCrmCallbacks.length, "Rows waiting for follow-up"],
+                ["Pending approvals", pendingApprovalCount, "Documents, CRM, applicants, leave, expenses"],
+                ["Attendance issues", attendanceIssues.length, "Late, absent, or half-day records"],
+              ].map(([label, value, hint]) => (
+                <div className={styles.vercelCard} key={String(label)}>
+                  <div className={styles.vercelCardHeader}>
+                    <h3 style={{ fontSize: "0.85rem", fontWeight: 500, color: "var(--text-muted)", margin: 0 }}>{label}</h3>
+                  </div>
+                  <div className={styles.metricValue} style={{ fontSize: "1.8rem", fontWeight: 700, margin: "8px 0" }}>{value}</div>
+                  <p className={styles.muted} style={{ fontSize: "0.78rem", margin: 0 }}>{hint}</p>
                 </div>
-                {data.capabilities.canManage && (
-                  <select className={styles.select} style={{ maxWidth: 260 }} value={workHoursEmployeeId} onChange={(event) => setWorkHoursEmployeeId(event.target.value)}>
-                    <option value="">Me: {data.session.name}</option>
-                    {employeeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
+              ))}
+            </div>
+
+            <div className={styles.vercelContentGrid} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))", gap: 24 }}>
+              
+              <div className={styles.vercelCard}>
+                <div className={styles.vercelCardHeader} style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h3 className={styles.cardTitle} style={{ margin: 0 }}>Tasks Due Today</h3>
+                  <button className={styles.ghostButton} style={{ padding: "4px 8px", fontSize: "0.75rem", minHeight: "unset" }} type="button" onClick={() => openPortalTab("ops")}>Open Work Ops</button>
+                </div>
+                <div className={styles.list}>
+                  {todaysTasks.length === 0 ? <div className={styles.emptyState}>No task due today.</div> : todaysTasks.slice(0, 8).map((task) => (
+                    <div className={styles.row} key={`today-task-${task.id}`} style={{ borderBottom: "1px solid var(--border-color)", paddingBottom: 12, marginBottom: 12 }}>
+                      <div className={styles.rowHeader} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                        <strong>{task.title}</strong>
+                        <span className={task.status === "Blocked" ? `${styles.pill} ${styles.pillWarn}` : styles.pill} style={{ fontSize: "0.7rem", padding: "2px 6px" }}>{task.status}</span>
+                      </div>
+                      <p className={styles.muted} style={{ fontSize: "0.85rem", margin: 0 }}>{task.description || "No notes."}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className={styles.vercelCard}>
+                <div className={styles.vercelCardHeader} style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h3 className={styles.cardTitle} style={{ margin: 0 }}>Meetings Today</h3>
+                  <button className={styles.ghostButton} style={{ padding: "4px 8px", fontSize: "0.75rem", minHeight: "unset" }} type="button" onClick={() => openPortalTab("meetings")}>Open Meetings</button>
+                </div>
+                <div className={styles.list}>
+                  {todaysMeetings.length === 0 ? <div className={styles.emptyState}>No meeting today.</div> : todaysMeetings.slice(0, 8).map((meeting) => (
+                    <div className={styles.row} key={`today-meeting-${meeting.id}`} style={{ borderBottom: "1px solid var(--border-color)", paddingBottom: 12, marginBottom: 12 }}>
+                      <div className={styles.rowHeader} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                        <strong>{meeting.title}</strong>
+                        <span className={styles.pill} style={{ fontSize: "0.7rem", padding: "2px 6px" }}>{formatPortalTime(meeting.startsAt)}</span>
+                      </div>
+                      <p className={styles.muted} style={{ fontSize: "0.85rem", margin: "0 0 8px 0" }}>{meeting.notes || "Scheduled meeting."}</p>
+                      {meeting.meetUrl && <a className={styles.ghostButton} style={{ fontSize: "0.75rem", padding: "4px 8px", minHeight: "unset" }} href={meeting.meetUrl} target="_blank" rel="noopener noreferrer">Join</a>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className={styles.vercelCard}>
+                <div className={styles.vercelCardHeader} style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h3 className={styles.cardTitle} style={{ margin: 0 }}>CRM Callbacks</h3>
+                  <button className={styles.ghostButton} style={{ padding: "4px 8px", fontSize: "0.75rem", minHeight: "unset" }} type="button" onClick={() => openPortalTab("crm")}>Open CRM</button>
+                </div>
+                <div className={styles.list}>
+                  {todaysCrmCallbacks.length === 0 ? <div className={styles.emptyState}>No callback rows.</div> : todaysCrmCallbacks.slice(0, 6).map((row) => {
+                    const cells = row.data && typeof row.data === "object" ? row.data as Record<string, string> : {};
+                    return (
+                      <div className={styles.row} key={`today-callback-${row.id}`} style={{ borderBottom: "1px solid var(--border-color)", paddingBottom: 12, marginBottom: 12 }}>
+                        <div className={styles.rowHeader} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                          <strong>{cells["School Name"] || cells.Company || `Row ${row.rowNumber}`}</strong>
+                          <span className={`${styles.pill} ${styles.pillWarn}`} style={{ fontSize: "0.7rem", padding: "2px 6px" }}>Callback</span>
+                        </div>
+                        <p className={styles.muted} style={{ fontSize: "0.85rem", margin: 0 }}>{cells["Phone Number"] || cells.Phone || row.reason || "Call back."}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className={styles.vercelCard}>
+                <div className={styles.vercelCardHeader} style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h3 className={styles.cardTitle} style={{ margin: 0 }}>Announcements</h3>
+                  <button className={styles.ghostButton} style={{ padding: "4px 8px", fontSize: "0.75rem", minHeight: "unset" }} type="button" onClick={() => openPortalTab("announcements")}>Open</button>
+                </div>
+                <div className={styles.list}>
+                  {data.announcements.length === 0 ? <div className={styles.emptyState}>No announcements.</div> : data.announcements.slice(0, 5).map((announcement) => (
+                    <div className={styles.row} key={`today-announcement-${announcement.id}`} style={{ borderBottom: "1px solid var(--border-color)", paddingBottom: 12, marginBottom: 12 }}>
+                      <div className={styles.rowHeader} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                        <strong>{announcement.title}</strong>
+                        <span className={announcement.priority === "Urgent" ? `${styles.pill} ${styles.pillWarn}` : styles.pill} style={{ fontSize: "0.7rem", padding: "2px 6px" }}>{announcement.priority}</span>
+                      </div>
+                      <p className={styles.muted} style={{ fontSize: "0.85rem", margin: 0 }}>{announcement.body}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+
+            {recentAuditEvents.length > 0 && data.capabilities.canUseSuperiorDashboard && (
+              <div className={styles.vercelCard} style={{ marginTop: 24 }}>
+                <div className={styles.vercelCardHeader} style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h3 className={styles.cardTitle} style={{ margin: 0 }}>Recent Audit Trail</h3>
+                  <button className={styles.ghostButton} style={{ padding: "4px 8px", fontSize: "0.75rem", minHeight: "unset" }} type="button" onClick={() => openPortalTab("notifications")}>Open Notification Center</button>
+                </div>
+                <div className={styles.auditTimeline}>
+                  {recentAuditEvents.map((event) => (
+                    <div className={styles.auditItem} key={`today-audit-${event.id}`} style={{ display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid var(--border-color)", paddingBottom: 12, marginBottom: 12 }}>
+                      <span className={styles.pill} style={{ fontSize: "0.7rem", padding: "2px 6px", minWidth: 80, textAlign: "center" }}>{event.entityType}</span>
+                      <strong style={{ fontSize: "0.85rem" }}>{event.action}</strong>
+                      <p className={styles.muted} style={{ fontSize: "0.8rem", margin: 0 }}>{event.actorName || "System"} - {formatPortalTimeAgo(event.createdAt)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "dashboard" && (
+          <div className={styles.vercelDashboard}>
+            {/* Toolbar Header */}
+            <div className={styles.vercelToolbar}>
+
+              <div className={styles.vercelToolbarActions}>
+                {isSuperiorDashboard ? (
+                  <button className={styles.button} type="button" onClick={() => setUserManagementOpen(true)}>
+                    Add New User
+                  </button>
+                ) : (
+                  <button className={styles.button} type="button" onClick={() => openPortalTab("profile")}>
+                    View Profile
+                  </button>
                 )}
               </div>
-              <div className={styles.quickGrid}>
-                {data.capabilities.canManage && (
-                  <div className={styles.row}>
-                    <span className={styles.label}>Full team hours</span>
-                    <strong>{formatWorkHours(teamWorkHours)}</strong>
-                    <p className={styles.muted}>{completedSessions} completed sessions loaded.</p>
+            </div>
+
+            {/* KPI Stat Cards Grid */}
+            <div className={styles.vercelStatGrid} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 24 }}>
+              <div className={styles.vercelCard}>
+                <div className={styles.vercelCardHeader}>
+                  <h3 style={{ fontSize: "0.85rem", fontWeight: 500, color: "var(--text-muted)", margin: 0 }}>
+                    {isSuperiorDashboard ? "Team Work Hours" : "My Work Hours"}
+                  </h3>
+                </div>
+                <div className={styles.metricValue}>
+                  {isSuperiorDashboard ? formatWorkHours(teamWorkHours) : formatWorkHours(selectedEmployeeWorkHours)}
+                </div>
+                <p className={styles.muted} style={{ fontSize: "0.78rem", margin: "8px 0 0" }}>
+                  {isSuperiorDashboard ? `${completedSessions} work sessions logged` : `${selectedEmployeeSessions} sessions recorded`}
+                </p>
+              </div>
+
+              <div className={styles.vercelCard}>
+                <div className={styles.vercelCardHeader}>
+                  <h3 style={{ fontSize: "0.85rem", fontWeight: 500, color: "var(--text-muted)", margin: 0 }}>
+                    {isSuperiorDashboard ? "Global Open Tasks" : "Assigned Tasks"}
+                  </h3>
+                </div>
+                <div className={styles.metricValue}>
+                  {isSuperiorDashboard ? data.tasks.filter(t => t.status !== "Done").length : myOpenTasks.filter(t => t.status !== "Done").length}
+                </div>
+                <p className={styles.muted} style={{ fontSize: "0.78rem", margin: "8px 0 0" }}>
+                  {isSuperiorDashboard ? `${blockedTasks.length} tasks blocked` : `${myOpenTasks.filter(t => t.status === "Blocked").length} blocked`}
+                </p>
+              </div>
+
+              <div className={styles.vercelCard}>
+                <div className={styles.vercelCardHeader}>
+                  <h3 style={{ fontSize: "0.85rem", fontWeight: 500, color: "var(--text-muted)", margin: 0 }}>
+                    CRM Actionable Leads
+                  </h3>
+                </div>
+                <div className={styles.metricValue}>
+                  {isSuperiorDashboard ? actionableCrmRows.length : roleActionableCrmRows.length}
+                </div>
+                <p className={styles.muted} style={{ fontSize: "0.78rem", margin: "8px 0 0" }}>
+                  {isSuperiorDashboard ? `${data.crmSheets.length} active sheets` : "Rows needing callback"}
+                </p>
+              </div>
+
+              <div className={styles.vercelCard}>
+                <div className={styles.vercelCardHeader}>
+                  <h3 style={{ fontSize: "0.85rem", fontWeight: 500, color: "var(--text-muted)", margin: 0 }}>
+                    {isSuperiorDashboard ? "Pending Approvals" : "My Shift Status"}
+                  </h3>
+                </div>
+                {isSuperiorDashboard ? (
+                  <div className={styles.metricValue}>
+                    {pendingLeaveRequests.length + pendingExpenseClaims.length + pendingCrmSheets.length + pendingDocuments.length + pendingApplicants.length}
+                  </div>
+                ) : (
+                  <div className={styles.metricValue} style={{ fontSize: "1.5rem", marginTop: 22, fontWeight: 600 }}>
+                    {isWorking ? "Active Now" : "Off Duty"}
                   </div>
                 )}
-                <div className={styles.row}>
-                  <span className={styles.label}>{selectedHoursEmployee?.name || data.session.name}</span>
-                  <strong>{formatWorkHours(selectedEmployeeWorkHours)}</strong>
-                  <p className={styles.muted}>{selectedEmployeeSessions} sessions in history.</p>
-                </div>
-                <div className={styles.row}>
-                  <span className={styles.label}>Currently working</span>
-                  <strong>{data.attendance.filter((entry) => entry.loginAt && !entry.logoutAt).length}</strong>
-                  <p className={styles.muted}>Live check-ins across visible records.</p>
-                </div>
+                <p className={styles.muted} style={{ fontSize: "0.78rem", margin: "8px 0 0" }}>
+                  {isSuperiorDashboard ? "Requires leadership review" : isWorking ? "Active session running" : "Toggle switch to start work"}
+                </p>
               </div>
             </div>
 
-            <div className={`${styles.card} ${styles.span12}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Check-In History</h2>
-                  <p className={styles.muted}>{data.capabilities.canManage ? "Recent employee clock-in and clock-out records." : "Your recent work sessions."}</p>
-                </div>
-                <span className={styles.pill}>{recentAttendance.length} recent</span>
-              </div>
-              <div className={styles.attendanceGrid}>{recentAttendance.length === 0 ? <div className={styles.emptyState}>No check-in history yet.</div> : recentAttendance.map((entry) => (
-                <div className={styles.attendanceItem} key={entry.id}>
-                  <div>
-                    <strong>{entry.employeeName}</strong>
-                    <p className={styles.muted}>{formatPortalDate(entry.workDate)} - {entry.status}</p>
+            {/* Split Screen Layout */}
+            <div className={styles.vercelContentGrid} style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: 24 }}>
+              {/* Left Column: Today & Quick Actions */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+                <div className={styles.vercelCard}>
+                  <div className={styles.vercelCardHeader} style={{ borderBottom: "1px solid var(--border-color)", paddingBottom: 12, marginBottom: 16 }}>
+                    <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 600 }}>Today&apos;s Summary</h3>
                   </div>
-                  <div>
-                    <span className={styles.label}>In</span>
-                    <strong>{formatPortalTime(entry.loginAt)}</strong>
+                  
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                    <div>
+                      <strong style={{ fontSize: "0.78rem", textTransform: "uppercase", color: "var(--text-muted)" }}>Duty Status</strong>
+                      <p style={{ margin: "4px 0", fontWeight: 500 }}>{isWorking ? "Working (Clocked In)" : "Clocked Out"}</p>
+                    </div>
+                    <div>
+                      <strong style={{ fontSize: "0.78rem", textTransform: "uppercase", color: "var(--text-muted)" }}>Tasks Due</strong>
+                      <p style={{ margin: "4px 0", fontWeight: 500 }}>{todaysTasks.length} tasks due today</p>
+                    </div>
                   </div>
-                  <div>
-                    <span className={styles.label}>Out</span>
-                    <strong>{entry.logoutAt ? formatPortalTime(entry.logoutAt) : "Working"}</strong>
-                  </div>
-                  <span className={entry.logoutAt ? styles.pill : `${styles.pill} ${styles.pillSuccess}`}>{entry.logoutAt ? `${entry.totalHours.toFixed(2)} hrs` : "Live"}</span>
-                </div>
-              ))}</div>
-            </div>
 
-            <div className={`${styles.card} ${styles.span4}`}>
-              <div className={styles.rowHeader}>
-                <h2 className={styles.cardTitle}><Code2 size={16} /> Engineering</h2>
-                <span className={styles.pill}>{blockedTasks.length} blockers</span>
-              </div>
-              <div className={styles.list}>
-                {[
-                  ["Active builds", `${openTasks.filter((task) => ["Pending", "Needs Review", "Blocked"].includes(task.status)).length} tasks in motion`],
-                  ["Proof review", `${data.tasks.filter((task) => task.proofUrl).length} proof links submitted`],
-                  ["Docs", `${data.documents.filter((doc) => ["NDA", "Certificate", "General"].includes(doc.documentType)).length} technical/admin docs visible`],
-                ].map(([title, copy]) => <div className={styles.row} key={title}><strong>{title}</strong><p className={styles.muted}>{copy}</p></div>)}
-              </div>
-            </div>
-            <div className={`${styles.card} ${styles.span4}`}>
-              <div className={styles.rowHeader}>
-                <h2 className={styles.cardTitle}><PenLine size={16} /> Content</h2>
-                <span className={styles.pill}>{data.tasks.filter((task) => task.ownerRole === "content" || task.title.toLowerCase().includes("content")).length} tasks</span>
-              </div>
-              <div className={styles.list}>
-                {data.tasks.filter((task) => task.ownerRole === "content" || task.title.toLowerCase().includes("content")).slice(0, 3).map((task) => (
-                  <div className={styles.row} key={task.id}>
-                    <div className={styles.rowHeader}><strong>{task.title}</strong><span className={styles.pill}>{task.status}</span></div>
-                    <p className={styles.muted}>{task.description || "Content task ready for update."}</p>
+                  {/* Quick Action Buttons Group */}
+                  <div style={{ marginTop: 24, paddingTop: 16, borderTop: "1px solid var(--border-color)" }}>
+                    <strong style={{ display: "block", fontSize: "0.78rem", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 12 }}>
+                      Quick Actions
+                    </strong>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {!isSuperiorDashboard && (
+                        <button 
+                          className={styles.ghostButton} 
+                          type="button" 
+                          onClick={() => {
+                            setClockSaving(true);
+                            startTransition(async () => {
+                              try {
+                                if (isWorking) {
+                                  await clockOutEmployee();
+                                } else {
+                                  await clockInEmployee();
+                                }
+                                refresh();
+                              } catch (err) {
+                                setError(simplePortalError(err));
+                              } finally {
+                                setClockSaving(false);
+                              }
+                            });
+                          }}
+                          disabled={clockSaving}
+                        >
+                          {clockSaving ? "Saving..." : isWorking ? "Clock Out" : "Clock In"}
+                        </button>
+                      )}
+                      <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("chat")}>Group Chat</button>
+                      {data.capabilities.canUseCrm && (
+                        <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("crm")}>CRM sheets</button>
+                      )}
+                      {data.capabilities.canRequestCrmSource && (
+                        <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("ops")}>Work Ops</button>
+                      )}
+                      {isSuperiorDashboard && (
+                        <>
+                          <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("approvals")}>Approvals Queue</button>
+                          <a className={styles.ghostButton} href="/api/employee/export?type=employees">Export Roster</a>
+                        </>
+                      )}
+                    </div>
                   </div>
-                ))}
-                {data.tasks.filter((task) => task.ownerRole === "content" || task.title.toLowerCase().includes("content")).length === 0 && <div className={styles.emptyState}>No content tasks.</div>}
+                </div>
               </div>
-            </div>
-            <div className={`${styles.card} ${styles.span4}`}>
-              <div className={styles.rowHeader}>
-                <h2 className={styles.cardTitle}><Target size={16} /> Sales</h2>
-                <span className={styles.pill}>{actionableCrmRows.length} CRM rows</span>
-              </div>
-              <div className={styles.list}>
-                {actionableCrmRows.slice(0, 3).map((row) => {
-                  const rowData = row.data && typeof row.data === "object" ? row.data as Record<string, string> : {};
-                  return (
-                  <div className={styles.row} key={row.id}>
-                    <div className={styles.rowHeader}><strong>{rowData["School Name"] || rowData.Company || `Row ${row.rowNumber}`}</strong><span className={row.status === "Callback" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{row.status}</span></div>
-                    <p className={styles.muted}>{rowData["Phone Number"] || rowData.Phone || row.reason || "Open CRM follow-up."}</p>
-                  </div>
-                  );
-                })}
-                {actionableCrmRows.length === 0 && <div className={styles.emptyState}>No open CRM rows.</div>}
-              </div>
-            </div>
 
-            <div className={`${styles.card} ${styles.span8}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Priority Work</h2>
-                  <p className={styles.muted}>Newest visible tasks, due items, and blocked work.</p>
-                </div>
-              </div>
-              <div className={styles.list}>{openTasks.length === 0 ? <div className={styles.emptyState}>No open tasks.</div> : openTasks.slice(0, 5).map((task) => (
-                <div className={styles.row} key={task.id}>
-                  <div className={styles.rowHeader}><strong>{task.title}</strong><span className={task.status === "Blocked" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{task.status}</span></div>
-                  <p className={styles.muted}>{task.assignedName || displayRole(task.ownerRole)} {task.dueAt ? `- Due ${formatPortalDateTime(task.dueAt)}` : ""}</p>
-                </div>
-              ))}</div>
-            </div>
-            <div className={`${styles.card} ${styles.span4}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Meetings & Resources</h2>
-                  <p className={styles.muted}>Next calls and useful files.</p>
-                </div>
-              </div>
-              <div className={styles.list}>
-                {upcomingMeetings.length === 0 ? <div className={styles.emptyState}>No upcoming meetings.</div> : upcomingMeetings.map((meeting) => (
-                  <div className={styles.row} key={meeting.id}>
-                    <strong>{meeting.title}</strong>
-                    <p className={styles.muted}>{formatPortalDateTime(meeting.startsAt)}</p>
+              {/* Right Column: Recent Activity (Audit trail) */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+                <div className={styles.vercelCard}>
+                  <div className={styles.vercelCardHeader} style={{ borderBottom: "1px solid var(--border-color)", paddingBottom: 12, marginBottom: 16 }}>
+                    <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 600 }}>Recent Activity</h3>
                   </div>
-                ))}
-                {recentResources.map((resource) => (
-                  <div className={styles.row} key={`resource-${resource.id}`}>
-                    <strong>{resource.title}</strong>
-                    <p className={styles.muted}>{resource.resourceType} - {resource.audienceRoles}</p>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {recentAuditEvents.length === 0 ? (
+                      <p className={styles.muted} style={{ fontSize: "0.85rem", margin: 0 }}>No recent audit events.</p>
+                    ) : (
+                      recentAuditEvents.map((event) => (
+                        <div key={event.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", paddingBottom: 10, borderBottom: "1px solid var(--border-color)", fontSize: "0.82rem" }}>
+                          <div>
+                            <strong style={{ display: "block", color: "var(--text-primary)" }}>{event.action}</strong>
+                            <span style={{ color: "var(--text-muted)" }}>{event.actorName || "System"}</span>
+                          </div>
+                          <span style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>
+                            {formatPortalTimeAgo(event.createdAt)}
+                          </span>
+                        </div>
+                      ))
+                    )}
                   </div>
-                ))}
-              </div>
-            </div>
-            <div className={`${styles.card} ${styles.span6}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Notifications</h2>
-                  <p className={styles.muted}>Unread operational updates for your role or account.</p>
                 </div>
-                <span className={styles.pill}>{data.notifications.filter((item) => !item.readAt).length} unread</span>
-              </div>
-              <div className={styles.list}>{data.notifications.length === 0 ? <div className={styles.emptyState}>No notifications.</div> : data.notifications.slice(0, 5).map((item) => (
-                <div className={styles.row} key={item.id}>
-                  <div className={styles.rowHeader}><strong>{item.title}</strong><span className={item.readAt ? `${styles.pill} ${styles.pillMuted}` : `${styles.pill} ${styles.pillWarn}`}>{item.readAt ? "Read" : "Unread"}</span></div>
-                  <p>{item.body}</p>
-                  {!item.readAt && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => markNotificationRead({ id: item.id.toString() }))}>Mark read</button>}
-                </div>
-              ))}</div>
-            </div>
-            <div className={`${styles.card} ${styles.span6}`}>
-              <h2 className={styles.cardTitle}>Exports</h2>
-              <p className={styles.muted}>Admin/HR can download operational data as CSV.</p>
-              <div className={styles.toolbar}>
-                {["employees", "attendance", "payroll", "crm", "expenses"].map((type) => (
-                  <a className={styles.ghostButton} href={`/api/employee/export?type=${type}`} key={type}>{type}</a>
-                ))}
               </div>
             </div>
-          </section>
+          </div>
         )}
 
         {tab === "profile" && (
-          <section className={styles.grid}>
-            <div className={`${styles.dashboardHero} ${styles.span12}`}>
-              <div>
-                <div className={styles.eyebrow}>My Profile</div>
-                <h1 className={styles.heroTitle}>Account, ID card, and password security.</h1>
-                <p className={styles.muted}>Update your password after first login and keep your account access private.</p>
+          <div className={styles.vercelDashboard}>
+            <div className={styles.vercelToolbar}>
+              <div className={styles.vercelBreadcrumbProject}>My Profile & Security</div>
+              <div style={{ flex: 1 }} />
+              {currentEmployee && <a className={styles.ghostButton} href={idCardUrlFor(currentEmployee)} target="_blank" rel="noopener noreferrer" style={{ padding: "6px 12px", minHeight: "unset" }}>Open ID Card</a>}
+              {currentEmployee && <a className={styles.vercelButtonPrimary} href={idCardUrlFor(currentEmployee, true)} style={{ padding: "6px 12px", minHeight: "unset" }}>Download ID Card</a>}
+            </div>
+
+            <div className={styles.vercelContentGrid} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, alignItems: "start" }}>
+              <div className={styles.vercelCard}>
+                <div className={styles.vercelCardHeader} style={{ borderBottom: "1px solid var(--border-color)", paddingBottom: 16, marginBottom: 16 }}>
+                  <h3 style={{ margin: 0, fontSize: "1.05rem" }}>Profile Summary</h3>
+                </div>
+                <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 24 }}>
+                  <div className={styles.avatar} style={{ width: 56, height: 56, fontSize: "1.2rem", background: "var(--text-brand)", color: "#fff" }}>
+                    {data.session.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <strong style={{ fontSize: "1.1rem", display: "block" }}>{data.session.name}</strong>
+                    <p className={styles.muted} style={{ margin: "2px 0 6px" }}>{data.session.email}</p>
+                    <span className={styles.pill}>{roleLabel}</span>
+                  </div>
+                </div>
+
+                {currentEmployee && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12, borderTop: "1px solid var(--border-color)", paddingTop: 16 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.9rem" }}>
+                      <span className={styles.muted}>Department</span>
+                      <strong style={{ fontFamily: "var(--font-mono)" }}>{currentEmployee.department}</strong>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.9rem" }}>
+                      <span className={styles.muted}>Employee Type</span>
+                      <strong style={{ fontFamily: "var(--font-mono)" }}>{currentEmployee.employeeType}</strong>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.9rem" }}>
+                      <span className={styles.muted}>Work Window</span>
+                      <strong style={{ fontFamily: "var(--font-mono)" }}>{currentEmployee.workStartTime} to {currentEmployee.workEndTime}</strong>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className={styles.heroActions}>
-                {currentEmployee && <a className={styles.ghostButton} href={idCardUrlFor(currentEmployee)} target="_blank" rel="noopener noreferrer">Open ID Card</a>}
-                {currentEmployee && <a className={styles.ghostButton} href={idCardUrlFor(currentEmployee, true)}>Download ID Card</a>}
+
+              <div className={styles.vercelCard}>
+                <div className={styles.vercelCardHeader} style={{ borderBottom: "1px solid var(--border-color)", paddingBottom: 16, marginBottom: 16 }}>
+                  <h3 style={{ margin: 0, fontSize: "1.05rem" }}>Security & Password</h3>
+                </div>
+                <form className={styles.formGrid} onSubmit={submit(changeEmployeePassword)}>
+                  <p className={styles.muted} style={{ margin: "0 0 16px", fontSize: "0.85rem", gridColumn: "1 / -1", lineHeight: 1.5 }}>
+                    Default password for new accounts is <strong>abc123</strong>. Replace it with a private password after your first login to secure your account.
+                  </p>
+                  <Field label="Current Password" name="currentPassword" type="password" required wide />
+                  <Field label="New Password" name="newPassword" type="password" required wide />
+                  <Field label="Confirm Password" name="confirmPassword" type="password" required wide />
+                  <div className={styles.fieldWide} style={{ marginTop: 8 }}>
+                    <button className={styles.button} style={{ width: "100%" }} type="submit">Update Password</button>
+                  </div>
+                </form>
               </div>
             </div>
-            <div className={`${styles.card} ${styles.span5}`}>
-              <h2 className={styles.cardTitle}>Profile Summary</h2>
-              <div className={styles.profileCard}>
-                <div className={styles.profileAvatar}>{data.session.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</div>
-                <div>
-                  <strong>{data.session.name}</strong>
-                  <p className={styles.muted}>{data.session.email}</p>
-                  <span className={styles.pill}>{roleLabel}</span>
-                </div>
-              </div>
-              {currentEmployee && (
-                <div className={styles.list}>
-                  <div className={styles.row}><span className={styles.label}>Department</span><strong>{currentEmployee.department}</strong></div>
-                  <div className={styles.row}><span className={styles.label}>Employee Type</span><strong>{currentEmployee.employeeType}</strong></div>
-                  <div className={styles.row}><span className={styles.label}>Work Window</span><strong>{currentEmployee.workStartTime} to {currentEmployee.workEndTime}</strong></div>
-                </div>
-              )}
-            </div>
-            <form className={`${styles.card} ${styles.span7} ${styles.formGrid}`} onSubmit={submit(changeEmployeePassword)}>
-              <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Reset Password</h2>
-              <p className={`${styles.muted} ${styles.fieldWide}`}>Default password for new accounts is abc123. Replace it with a private password after first login.</p>
-              <Field label="Current Password" name="currentPassword" type="password" required wide />
-              <Field label="New Password" name="newPassword" type="password" required />
-              <Field label="Confirm Password" name="confirmPassword" type="password" required />
-              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Password</button>
-            </form>
-          </section>
+          </div>
         )}
 
         {tab === "crm" && (
@@ -2027,7 +1884,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
             data={data}
             runAction={runAction}
             activeCrmSheetId={activeCrmSheetId}
-            setActiveCrmSheetId={setActiveCrmSheetId}
+            setActiveCrmSheetId={handleSetActiveCrmSheetId}
             selectedCrmRowId={selectedCrmRowId}
             setSelectedCrmRowId={setSelectedCrmRowId}
             selectedCrmCell={selectedCrmCell}
@@ -2040,141 +1897,124 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
         )}
 
         {tab === "approvals" && (
-          <section className={styles.grid}>
-            <div className={`${styles.dashboardHero} ${styles.span12}`}>
-              <div>
-                <span className={styles.eyebrow}>Leadership Queue</span>
-                <h2 className={styles.heroTitle} style={{ margin: "4px 0" }}>One place to approve operational requests.</h2>
-                <p className={styles.muted} style={{ margin: 0 }}>Documents, CRM source access, applicants, leave, and expenses are grouped here for directors/admins.</p>
-              </div>
-              <div className={styles.heroActions}>
-                <button className={styles.button} type="button" onClick={() => refresh(sortResources, "approvals")}>Refresh Queue</button>
+          <div className={styles.vercelDashboard}>
+            <div className={styles.vercelToolbar}>
+              <div className={styles.vercelBreadcrumbProject}>Leadership Queue</div>
+              <div style={{ flex: 1 }} />
+              <div className={styles.vercelToolbarActions}>
+                <button className={styles.ghostButton} type="button" onClick={() => refresh(sortResources, "approvals")}>Refresh Queue</button>
               </div>
             </div>
 
-            {[
-              ["Documents", pendingDocuments.length, "Pending director/signatory approval."],
-              ["CRM Sheets", pendingCrmSheets.length, "Waiting for source approval."],
-              ["Applicants", pendingApplicants.length, "Awaiting accept/reject decision."],
-              ["Leave", pendingLeaveRequests.length, "Pending leave approvals."],
-              ["Expenses", pendingExpenseClaims.length, "Pending claim approvals."],
-            ].map(([title, count, hint]) => (
-              <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`} key={String(title)}>
-                <h2 className={styles.cardTitle}>{title}</h2>
-                <span className={styles.metricValue}>{count}</span>
-                <p className={styles.muted}>{hint}</p>
-              </div>
-            ))}
-
-            <div className={`${styles.card} ${styles.span6}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Document Approvals</h2>
-                  <p className={styles.muted}>Employees see approved documents only after signature approval.</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 20, marginBottom: 24 }}>
+              {[
+                ["Documents", pendingDocuments.length, "Pending director/signatory approval."],
+                ["CRM Sheets", pendingCrmSheets.length, "Waiting for source approval."],
+                ["Applicants", pendingApplicants.length, "Awaiting accept/reject decision."],
+                ["Leave", pendingLeaveRequests.length, "Pending leave approvals."],
+                ["Expenses", pendingExpenseClaims.length, "Pending claim approvals."],
+              ].map(([title, count, hint]) => (
+                <div className={styles.vercelCard} key={String(title)} style={{ padding: 24 }}>
+                  <h2 className={styles.cardTitle}>{title}</h2>
+                  <span className={styles.metricValue}>{count}</span>
+                  <p className={styles.muted} style={{ fontSize: "0.85rem" }}>{hint}</p>
                 </div>
-                <span className={styles.pill}>{pendingDocuments.length} pending</span>
-              </div>
-              <div className={styles.list}>
-                {pendingDocuments.length === 0 ? <div className={styles.emptyState}>No documents waiting for approval.</div> : pendingDocuments.map((document) => (
-                  <div className={styles.row} key={`approval-document-${document.id}`}>
-                    <div className={styles.rowHeader}><strong>{document.title}</strong><span className={styles.pill}>{document.documentType}</span></div>
-                    <p className={styles.muted}>{document.employeeName || "General document"} - {documentWorkflowStatus(document.notes)} - {cleanDocumentNotes(document.notes) || "Pending signatory action."}</p>
-                    <div className={styles.toolbar}>
-                      <a className={styles.ghostButton} href={document.url} target="_blank" rel="noopener noreferrer">Open</a>
-                      {data.capabilities.canSignDocuments && <button className={styles.button} type="button" onClick={() => runAction(() => approveEmployeeDocument({ id: document.id.toString() }))}>Approve & Sign</button>}
+              ))}
+            </div>
+
+            <div className={styles.vercelContentGrid} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+              <div className={styles.vercelCard}>
+                <div className={styles.sectionHeader}>
+                  <h2 className={styles.cardTitle} style={{ margin: 0 }}>Document Approvals</h2>
+                  <span className={styles.pill}>{pendingDocuments.length} pending</span>
+                </div>
+                <div className={styles.list}>
+                  {pendingDocuments.length === 0 ? <div className={styles.emptyState}>No documents waiting for approval.</div> : pendingDocuments.map((document) => (
+                    <div className={styles.row} key={`approval-document-${document.id}`}>
+                      <div className={styles.rowHeader}><strong>{document.title}</strong><span className={styles.pill}>{document.documentType}</span></div>
+                      <p className={styles.muted}>{document.employeeName || "General document"} - {documentWorkflowStatus(document.notes)} - {cleanDocumentNotes(document.notes) || "Pending signatory action."}</p>
+                      <div className={styles.toolbar}>
+                        <a className={styles.ghostButton} href={document.fileUrl} target="_blank" rel="noopener noreferrer">View File</a>
+                        <button className={styles.ghostButton} type="button" onClick={() => runAction(() => approveEmployeeDocument({ id: document.id.toString(), note: `Approved via portal by ${data.session.name}` }))}>Approve</button>
+                        <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "document", id: document.id.toString(), status: "Rejected" }))}>Reject</button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className={`${styles.card} ${styles.span6}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>CRM Sheet Access</h2>
-                  <p className={styles.muted}>Approve source sheets before sales/content teams can work them.</p>
+                  ))}
                 </div>
-                <span className={styles.pill}>{pendingCrmSheets.length} pending</span>
               </div>
-              <div className={styles.list}>
-                {pendingCrmSheets.length === 0 ? <div className={styles.emptyState}>No CRM sheets waiting for approval.</div> : pendingCrmSheets.map((sheet) => (
-                  <div className={styles.row} key={`approval-sheet-${sheet.id}`}>
-                    <div className={styles.rowHeader}><strong>{sheet.title}</strong><span className={styles.pill}>{sheet.rows.length} rows</span></div>
-                    <p className={styles.muted}>{sheet.sourceName || "Imported source"} - requested by {sheet.requestedByName || "Unknown"}</p>
-                    <div className={styles.toolbar}>
-                      <button className={styles.button} type="button" onClick={() => runAction(() => approveCrmSheet({ id: sheet.id.toString(), status: "Approved" }))}>Approve</button>
-                      <button className={styles.ghostButton} type="button" onClick={() => runAction(() => approveCrmSheet({ id: sheet.id.toString(), status: "Rejected" }))}>Reject</button>
+
+              <div className={styles.vercelCard}>
+                <div className={styles.sectionHeader}>
+                  <h2 className={styles.cardTitle}>CRM Source Approvals</h2>
+                  <span className={styles.pill}>{pendingCrmSheets.length} pending</span>
+                </div>
+                <div className={styles.list}>
+                  {pendingCrmSheets.length === 0 ? <div className={styles.emptyState}>No CRM requests.</div> : pendingCrmSheets.map((sheet) => (
+                    <div className={styles.row} key={`approval-crm-${sheet.id}`}>
+                      <div className={styles.rowHeader}><strong>{sheet.title}</strong><span className={styles.pill}>{sheet.status}</span></div>
+                      <p className={styles.muted}>Role: {displayRole(sheet.ownerRole)} - Requested By: {sheet.employeeName}</p>
+                      <div className={styles.toolbar}>
+                        <button className={styles.ghostButton} type="button" onClick={() => runAction(() => approveCrmSheet({ id: sheet.id.toString(), approvedBy: data.session.name }))}>Approve Upload</button>
+                        <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "crmSheet", id: sheet.id.toString(), status: "Rejected" }))}>Reject</button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className={`${styles.card} ${styles.span4}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Applicant Decisions</h2>
-                  <p className={styles.muted}>Open Applicants for appointment details.</p>
+                  ))}
                 </div>
-                <button className={styles.ghostButton} type="button" onClick={() => openPortalTab("applicants")}>Open</button>
               </div>
-              <div className={styles.list}>
-                {pendingApplicants.length === 0 ? <div className={styles.emptyState}>No applicant decisions pending.</div> : pendingApplicants.slice(0, 6).map((applicant) => (
-                  <div className={styles.row} key={`approval-applicant-${applicant.id}`}>
-                    <div className={styles.rowHeader}><strong>{applicant.name}</strong><span className={styles.pill}>{applicant.stage}</span></div>
-                    <p className={styles.muted}>{applicant.roleApplied} - {applicant.email}</p>
-                    <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "applicant", id: applicant.id.toString(), status: "Rejected" }))}>Reject</button>
-                  </div>
-                ))}
-              </div>
-            </div>
 
-            <div className={`${styles.card} ${styles.span4}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Leave Requests</h2>
-                  <p className={styles.muted}>Approve or reject employee leave.</p>
+              <div className={styles.vercelCard}>
+                <div className={styles.sectionHeader}>
+                  <h2 className={styles.cardTitle}>Applicants</h2>
+                  <span className={styles.pill}>{pendingApplicants.length} pending</span>
                 </div>
-                <span className={styles.pill}>{pendingLeaveRequests.length} pending</span>
-              </div>
-              <div className={styles.list}>
-                {pendingLeaveRequests.length === 0 ? <div className={styles.emptyState}>No leave waiting.</div> : pendingLeaveRequests.map((leave) => (
-                  <div className={styles.row} key={`approval-leave-${leave.id}`}>
-                    <div className={styles.rowHeader}><strong>{leave.employeeName}</strong><span className={styles.pill}>{leave.leaveType}</span></div>
-                    <p className={styles.muted}>{formatPortalDate(leave.startsAt)} to {formatPortalDate(leave.endsAt)} {leave.reason ? `- ${leave.reason}` : ""}</p>
-                    <div className={styles.toolbar}>
-                      <button className={styles.button} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "leave", id: leave.id.toString(), status: "Approved" }))}>Approve</button>
-                      <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "leave", id: leave.id.toString(), status: "Rejected" }))}>Reject</button>
+                <div className={styles.list}>
+                  {pendingApplicants.length === 0 ? <div className={styles.emptyState}>No applicants.</div> : pendingApplicants.map((applicant) => (
+                    <div className={styles.row} key={`approval-applicant-${applicant.id}`}>
+                      <div className={styles.rowHeader}><strong>{applicant.name}</strong><span className={styles.pill}>{applicant.roleApplied}</span></div>
+                      <p className={styles.muted}>{applicant.email} {applicant.phone || ""}</p>
+                      <div className={styles.toolbar}>
+                        <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "applicant", id: applicant.id.toString(), status: "Offer" }))}>Accept</button>
+                        <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "applicant", id: applicant.id.toString(), status: "Rejected" }))}>Reject</button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className={`${styles.card} ${styles.span4}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Expenses</h2>
-                  <p className={styles.muted}>Review pending claims.</p>
+                  ))}
                 </div>
-                <span className={styles.pill}>{pendingExpenseClaims.length} pending</span>
               </div>
-              <div className={styles.list}>
-                {pendingExpenseClaims.length === 0 ? <div className={styles.emptyState}>No expenses waiting.</div> : pendingExpenseClaims.map((claim) => (
-                  <div className={styles.row} key={`approval-expense-${claim.id}`}>
-                    <div className={styles.rowHeader}><strong>{claim.employeeName}</strong><span className={styles.pill}>Rs. {formatPortalNumber(claim.amount)}</span></div>
-                    <p className={styles.muted}>{claim.category} - {formatPortalDate(claim.claimDate)}</p>
-                    <div className={styles.toolbar}>
-                      {claim.receiptUrl && <a className={styles.ghostButton} href={claim.receiptUrl} target="_blank" rel="noopener noreferrer">Receipt</a>}
-                      <button className={styles.button} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "expense", id: claim.id.toString(), status: "Approved" }))}>Approve</button>
-                      <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "expense", id: claim.id.toString(), status: "Rejected" }))}>Reject</button>
+
+              <div className={styles.vercelCard}>
+                <div className={styles.sectionHeader}>
+                  <h2 className={styles.cardTitle}>Leave & Expenses</h2>
+                  <span className={styles.pill}>{pendingLeaveRequests.length + pendingExpenseClaims.length} pending</span>
+                </div>
+                <div className={styles.list}>
+                  {pendingLeaveRequests.map((leave) => (
+                    <div className={styles.row} key={`approval-leave-${leave.id}`}>
+                      <div className={styles.rowHeader}><strong>{leave.employeeName}</strong><span className={styles.pill}>Leave</span></div>
+                      <p className={styles.muted}>{leave.leaveType} - {formatPortalDate(leave.startsAt)} to {formatPortalDate(leave.endsAt)}</p>
+                      <div className={styles.toolbar}>
+                        <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "leave", id: leave.id.toString(), status: "Approved" }))}>Approve</button>
+                        <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "leave", id: leave.id.toString(), status: "Rejected" }))}>Reject</button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                  {pendingExpenseClaims.map((claim) => (
+                    <div className={styles.row} key={`approval-expense-${claim.id}`}>
+                      <div className={styles.rowHeader}><strong>{claim.employeeName}</strong><span className={styles.pill}>Expense</span></div>
+                      <p className={styles.muted}>{claim.category} - Rs. {formatPortalNumber(claim.amount)}</p>
+                      <div className={styles.toolbar}>
+                        {claim.receiptUrl && <a className={styles.ghostButton} href={claim.receiptUrl} target="_blank" rel="noopener noreferrer">Receipt</a>}
+                        <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "expense", id: claim.id.toString(), status: "Approved" }))}>Approve</button>
+                        <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "expense", id: claim.id.toString(), status: "Rejected" }))}>Reject</button>
+                      </div>
+                    </div>
+                  ))}
+                  {pendingLeaveRequests.length + pendingExpenseClaims.length === 0 && <div className={styles.emptyState}>No leave or expense approvals.</div>}
+                </div>
               </div>
             </div>
-          </section>
+          </div>
         )}
+
 
         {tab === "applicants" && (
           <ApplicantsTab
@@ -2189,306 +2029,257 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
         )}
 
         {tab === "ops" && (
-          <section className={styles.grid}>
-            <div className={`${styles.card} ${styles.span12}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Leave & Attendance Calendar</h2>
-                  <p className={styles.muted}>Recent check-ins, auto attendance outcomes, and leave requests in one timeline.</p>
-                </div>
-                <span className={styles.pill}>{calendarItems.length} items</span>
+          <div className={styles.vercelDashboard}>
+            <div className={styles.vercelToolbar}>
+              <div className={styles.vercelBreadcrumbProject}>Work Operations</div>
+              <div style={{ flex: 1 }} />
+              <div className={styles.vercelToolbarActions}>
+                {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && (
+                  <>
+                    <button className={styles.ghostButton} type="button" onClick={() => setActiveModal({ id: "create-attendance" })}>Add Attendance</button>
+                    <button className={styles.ghostButton} type="button" onClick={() => setActiveModal({ id: "create-leave" })}>Add Leave</button>
+                    <button className={styles.vercelButtonPrimary} type="button" onClick={() => setActiveModal({ id: "create-task" })}>Assign Task +</button>
+                  </>
+                )}
               </div>
-              <div className={styles.calendarStrip}>
-                {calendarItems.length === 0 ? <div className={styles.emptyState}>No calendar activity yet.</div> : calendarItems.map((item) => (
-                  <div className={styles.calendarItem} key={item.id}>
-                    <span className={styles.label}>{formatPortalDate(item.date)}</span>
-                    <strong>{item.title}</strong>
-                    <p className={styles.muted}>{item.kind} - {item.meta}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && (
-              <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveAttendance)}>
-                <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Attendance Entry</h2>
-                <Field label="Employee" name="employeeId" options={employeeOptions} required wide />
-                <Field label="Work Date" name="workDate" type="date" required />
-                <Field label="Login At" name="loginAt" type="datetime-local" />
-                <Field label="Logout At" name="logoutAt" type="datetime-local" />
-                <Field label="Total Hours" name="totalHours" type="number" />
-                <Field label="Status" name="status" options={["Present", "Absent", "Late", "Half-day", "Remote"]} />
-                <Field label="Notes" name="notes" textarea wide />
-                <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Attendance</button>
-              </form>
-            )}
-            <div className={`${styles.card} ${data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps ? styles.span8 : styles.span12}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Attendance & Timesheets</h2>
-                  <p className={styles.muted}>Track daily status, hours, late logins, remote work, and absences.</p>
-                </div>
-                <span className={styles.pill}>{data.attendance.length} records</span>
-              </div>
-              <div className={styles.list}>{data.attendance.length === 0 ? <div className={styles.emptyState}>No attendance records yet.</div> : data.attendance.slice(0, visibleOpsAttendance).map((entry) => (
-                <div className={styles.row} key={entry.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'center', padding: '16px', borderRadius: '12px', background: 'var(--card-bg)' }}>
-                  <div>
-                    <div className={styles.rowHeader} style={{ marginBottom: '4px' }}>
-                      <strong style={{ fontSize: '1.05rem' }}>{entry.employeeName}</strong>
-                      <span className={entry.logoutAt ? styles.pill : `${styles.pill} ${styles.pillSuccess}`}>{entry.logoutAt ? entry.status : "Working now"}</span>
-                    </div>
-                    <p className={styles.muted} style={{ fontSize: '0.9rem', marginBottom: entry.notes ? '8px' : '0' }}>
-                      <CalendarDays size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'text-bottom' }} /> {formatPortalDate(entry.workDate)} &nbsp;|&nbsp; 
-                      <strong>In:</strong> {formatPortalTime(entry.loginAt)} &nbsp;|&nbsp; 
-                      <strong>Out:</strong> {entry.logoutAt ? formatPortalTime(entry.logoutAt) : "Live"} &nbsp;|&nbsp; 
-                      <span style={{ color: 'var(--text-color)', fontWeight: 500 }}>{entry.totalHours.toFixed(2)} hrs</span>
-                    </p>
-                    {entry.notes && <p style={{ fontSize: '0.85rem', padding: '8px', background: 'var(--bg-shell)', borderRadius: '6px', margin: 0 }}>{entry.notes}</p>}
-                  </div>
-                  {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && (
-                    <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "attendance", id: entry.id.toString() }))}>
-                      Delete
-                    </button>
-                  )}
-                </div>
-              ))}</div>
-              {data.attendance.length > visibleOpsAttendance && (
-                <button className={styles.ghostButton} type="button" onClick={() => setVisibleOpsAttendance(v => v + 5)} style={{ width: '100%', marginTop: '16px' }}>
-                  Show More (5)
-                </button>
-              )}
             </div>
 
-            <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveLeaveRequest)}>
-              <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Leave Request</h2>
-              {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && <Field label="Employee" name="employeeId" options={employeeOptions} wide />}
-              <Field label="Leave Type" name="leaveType" options={["Casual", "Sick", "Unpaid", "Emergency", "Comp Off"]} />
-              <Field label="Starts" name="startsAt" type="date" required />
-              <Field label="Ends" name="endsAt" type="date" required />
-              {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && <Field label="Status" name="status" options={["Pending", "Approved", "Rejected"]} />}
-              <Field label="Reason" name="reason" textarea wide />
-              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Leave</button>
-            </form>
-            <div className={`${styles.card} ${styles.span8}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Leave Board</h2>
-                  <p className={styles.muted}>Employees can request leave; admin/HR can add and mark approval status.</p>
+            <div className={styles.vercelContentGrid} style={{ display: "grid", gridTemplateColumns: "1fr", gap: 24, marginBottom: 24 }}>
+              <div className={styles.vercelCard}>
+                <div className={styles.sectionHeader}>
+                  <h2 className={styles.cardTitle} style={{ margin: 0 }}>Leave & Attendance Calendar</h2>
+                  <span className={styles.pill}>{calendarItems.length} items</span>
                 </div>
-                <span className={styles.pill}>{data.leaveRequests.length} requests</span>
+                <div className={styles.calendarStrip} style={{ display: "flex", gap: 12, overflowX: "auto", padding: "16px 0", msOverflowStyle: "none", scrollbarWidth: "none" }}>
+                  {calendarItems.length === 0 ? <div className={styles.emptyState} style={{ width: "100%" }}>No calendar activity yet.</div> : calendarItems.map((item) => (
+                    <div className={styles.calendarItem} key={item.id} style={{ minWidth: 200, padding: 16, background: "var(--bg-shell)", borderRadius: 8, border: "1px solid var(--border-color)" }}>
+                      <span className={styles.label} style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: 4 }}>{formatPortalDate(item.date)}</span>
+                      <strong style={{ display: "block", marginBottom: 4 }}>{item.title}</strong>
+                      <p className={styles.muted} style={{ fontSize: "0.8rem", margin: 0 }}>{item.kind} - {item.meta}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className={styles.list}>{data.leaveRequests.length === 0 ? <div className={styles.emptyState}>No leave requests yet.</div> : data.leaveRequests.slice(0, visibleOpsLeave).map((leave) => (
-                <div className={styles.row} key={leave.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'center', padding: '16px', borderRadius: '12px', background: 'var(--card-bg)' }}>
-                  <div>
-                    <div className={styles.rowHeader} style={{ marginBottom: '4px' }}>
-                      <strong style={{ fontSize: '1.05rem' }}>{leave.employeeName}</strong>
-                      <span className={leave.status === "Approved" ? `${styles.pill} ${styles.pillSuccess}` : leave.status === "Rejected" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{leave.status}</span>
-                    </div>
-                    <p className={styles.muted} style={{ fontSize: '0.9rem', marginBottom: leave.reason ? '8px' : '0' }}>
-                      <CalendarDays size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'text-bottom' }} /> {leave.leaveType} &nbsp;|&nbsp; 
-                      {formatPortalDate(leave.startsAt)} to {formatPortalDate(leave.endsAt)}
-                    </p>
-                    {leave.reason && <p style={{ fontSize: '0.85rem', padding: '8px', background: 'var(--bg-shell)', borderRadius: '6px', margin: 0 }}>{leave.reason}</p>}
-                  </div>
-                  {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && (
-                    <div className={styles.toolbar} style={{ flexDirection: 'column', gap: '8px' }}>
-                      <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "leave", id: leave.id.toString(), status: "Approved" }))} style={{ padding: '6px 12px' }}>Approve</button>
-                      <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "leave", id: leave.id.toString(), status: "Rejected" }))} style={{ padding: '6px 12px' }}>Reject</button>
-                      <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "leave", id: leave.id.toString() }))} style={{ padding: '6px 12px' }}>Delete</button>
-                    </div>
-                  )}
-                </div>
-              ))}</div>
-              {data.leaveRequests.length > visibleOpsLeave && (
-                <button className={styles.ghostButton} type="button" onClick={() => setVisibleOpsLeave(v => v + 5)} style={{ width: '100%', marginTop: '16px' }}>
-                  Show More (5)
-                </button>
-              )}
             </div>
 
-            {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveTask)}>
-              <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Assign Task</h2>
-              <Field label="Title" name="title" required wide />
-              <Field label="Assign To" name="assignedTo" options={[{ label: "Role based / unassigned", value: "" }, ...employeeOptions]} wide />
-              <Field label="Owner Role" name="ownerRole" options={ownerRoleOptions} />
-              <Field label="Priority" name="priority" options={["High", "Medium", "Low"]} />
-              <Field label="Status" name="status" options={["Pending", "Needs Review", "Blocked", "Done"]} />
-              <Field label="Due At" name="dueAt" type="datetime-local" />
-              <Field label="Proof URL" name="proofUrl" type="url" wide />
-              <Field label="Description" name="description" textarea wide />
-              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Task</button>
-            </form>}
-            <div className={`${styles.card} ${data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps ? styles.span8 : styles.span12}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Task Tracker</h2>
-                  <p className={styles.muted}>Assign by person or role, track status, priority, due date, and proof links.</p>
+            <div className={styles.vercelContentGrid} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+              <div className={styles.vercelCard}>
+                <div className={styles.sectionHeader}>
+                  <h2 className={styles.cardTitle} style={{ margin: 0 }}>Attendance & Timesheets</h2>
+                  <span className={styles.pill}>{data.attendance.length} records</span>
                 </div>
-                <span className={styles.pill}>{data.tasks.length} visible</span>
+                <div className={styles.list}>
+                  {data.attendance.length === 0 ? <div className={styles.emptyState}>No attendance records yet.</div> : data.attendance.slice(0, visibleOpsAttendance).map((entry) => (
+                    <div className={styles.row} key={entry.id}>
+                      <div className={styles.rowHeader}>
+                        <strong>{entry.employeeName}</strong>
+                        <span className={entry.logoutAt ? styles.pill : `${styles.pill} ${styles.pillSuccess}`}>{entry.logoutAt ? entry.status : "Working now"}</span>
+                      </div>
+                      <p className={styles.muted} style={{ fontSize: '0.85rem' }}>
+                        {formatPortalDate(entry.workDate)} | In: {formatPortalTime(entry.loginAt)} | Out: {entry.logoutAt ? formatPortalTime(entry.logoutAt) : "Live"} | {entry.totalHours.toFixed(2)} hrs
+                      </p>
+                      {entry.notes && <p style={{ fontSize: '0.8rem', padding: '6px', background: 'var(--bg-shell)', borderRadius: '4px', margin: 0 }}>{entry.notes}</p>}
+                      {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && (
+                        <div className={styles.toolbar}>
+                          <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "attendance", id: entry.id.toString() }))}>Delete</button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {data.attendance.length > visibleOpsAttendance && (
+                  <button className={styles.ghostButton} type="button" onClick={() => setVisibleOpsAttendance(v => v + 5)} style={{ width: '100%', marginTop: '16px' }}>Show More (5)</button>
+                )}
               </div>
-              <div className={styles.list}>{data.tasks.length === 0 ? <div className={styles.emptyState}>No tasks yet.</div> : data.tasks.map((task) => (
-                <div className={styles.row} key={task.id}>
-                  <div className={styles.rowHeader}><strong>{task.title}</strong><span className={task.priority === "High" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{task.priority}</span></div>
-                  <p className={styles.muted}>{task.assignedName || displayRole(task.ownerRole)} - {task.status}{task.dueAt ? ` - Due ${formatPortalDateTime(task.dueAt)}` : ""}</p>
-                  {task.proofUrl && <a href={task.proofUrl} target="_blank" rel="noopener noreferrer">Open proof</a>}
-                  <div className={styles.toolbar}>
-                    {["Pending", "Needs Review", "Blocked", "Done"].map((status) => <button className={styles.ghostButton} key={status} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "task", id: task.id.toString(), status }))}>{status}</button>)}
-                    {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "task", id: task.id.toString() }))}>Delete</button>}
-                  </div>
-                  {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && (
-                    <details className={styles.editPanel}>
-                      <summary>Edit task</summary>
-                      <form className={styles.formGrid} onSubmit={submit(saveTask)}>
-                        <input type="hidden" name="id" value={task.id} />
-                        <Field label="Title" name="title" defaultValue={task.title} required wide />
-                        <Field label="Assign To" name="assignedTo" options={[{ label: "Role based / unassigned", value: "" }, ...employeeOptions]} defaultValue={task.assignedTo?.toString() || ""} wide />
-                        <Field label="Owner Role" name="ownerRole" options={ownerRoleOptions} defaultValue={task.ownerRole} />
-                        <Field label="Priority" name="priority" options={["High", "Medium", "Low"]} defaultValue={task.priority} />
-                        <Field label="Status" name="status" options={["Pending", "Needs Review", "Blocked", "Done"]} defaultValue={task.status === "Open" ? "Pending" : task.status} />
-                        <Field label="Due At" name="dueAt" type="datetime-local" defaultValue={inputDateTime(task.dueAt)} />
-                        <Field label="Proof URL" name="proofUrl" type="url" defaultValue={task.proofUrl || ""} wide />
-                        <Field label="Description" name="description" textarea defaultValue={task.description || ""} wide />
-                        <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Task</button>
-                      </form>
-                    </details>
-                  )}
+
+              <div className={styles.vercelCard}>
+                <div className={styles.sectionHeader}>
+                  <h2 className={styles.cardTitle} style={{ margin: 0 }}>Leave Board</h2>
+                  <span className={styles.pill}>{data.leaveRequests.length} requests</span>
                 </div>
-              ))}</div>
+                <div className={styles.list}>
+                  {data.leaveRequests.length === 0 ? <div className={styles.emptyState}>No leave requests yet.</div> : data.leaveRequests.slice(0, visibleOpsLeave).map((leave) => (
+                    <div className={styles.row} key={leave.id}>
+                      <div className={styles.rowHeader}>
+                        <strong>{leave.employeeName}</strong>
+                        <span className={leave.status === "Approved" ? `${styles.pill} ${styles.pillSuccess}` : leave.status === "Rejected" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{leave.status}</span>
+                      </div>
+                      <p className={styles.muted} style={{ fontSize: '0.85rem' }}>{leave.leaveType} | {formatPortalDate(leave.startsAt)} to {formatPortalDate(leave.endsAt)}</p>
+                      {leave.reason && <p style={{ fontSize: '0.8rem', padding: '6px', background: 'var(--bg-shell)', borderRadius: '4px', margin: 0 }}>{leave.reason}</p>}
+                      {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && (
+                        <div className={styles.toolbar}>
+                          <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "leave", id: leave.id.toString(), status: "Approved" }))}>Approve</button>
+                          <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "leave", id: leave.id.toString(), status: "Rejected" }))}>Reject</button>
+                          <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "leave", id: leave.id.toString() }))}>Delete</button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {data.leaveRequests.length > visibleOpsLeave && (
+                  <button className={styles.ghostButton} type="button" onClick={() => setVisibleOpsLeave(v => v + 5)} style={{ width: '100%', marginTop: '16px' }}>Show More (5)</button>
+                )}
+              </div>
+
+              <div className={styles.vercelCard} style={{ gridColumn: "1 / -1" }}>
+                <div className={styles.sectionHeader}>
+                  <h2 className={styles.cardTitle} style={{ margin: 0 }}>Task Tracker</h2>
+                  <span className={styles.pill}>{data.tasks.length} visible</span>
+                </div>
+                <div className={styles.list}>
+                  {data.tasks.length === 0 ? <div className={styles.emptyState}>No tasks yet.</div> : data.tasks.map((task) => (
+                    <div className={styles.row} key={task.id} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 16 }}>
+                      <div>
+                        <div className={styles.rowHeader}><strong>{task.title}</strong><span className={task.priority === "High" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{task.priority}</span></div>
+                        <p className={styles.muted}>{task.assignedName || displayRole(task.ownerRole)} - {task.status}{task.dueAt ? ` - Due ${formatPortalDateTime(task.dueAt)}` : ""}</p>
+                        {task.proofUrl && <a href={task.proofUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.85rem" }}>Open proof</a>}
+                      </div>
+                      <div className={styles.toolbar} style={{ flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          {["Pending", "Needs Review", "Blocked", "Done"].map((status) => <button className={styles.ghostButton} key={status} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "task", id: task.id.toString(), status }))}>{status}</button>)}
+                        </div>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && (
+                            <>
+                              <button className={styles.ghostButton} type="button" onClick={() => setActiveModal({ id: "edit-task", payload: task })}>Edit</button>
+                              <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "task", id: task.id.toString() }))}>Delete</button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-          </section>
+          </div>
         )}
+
 
         {tab === "expenses" && (
-          <section className={styles.grid}>
-            <div className={`${styles.dashboardHero} ${styles.span12}`}>
-              <div>
-                <span className={styles.eyebrow}>{canManageExpenseClaims ? "Expense Desk" : "My Claims"}</span>
-                <h2 className={styles.heroTitle} style={{ margin: "4px 0" }}>{canManageExpenseClaims ? "Review employee claims and submit on behalf when needed." : "Submit your own reimbursement claims."}</h2>
-                <p className={styles.muted} style={{ margin: 0 }}>{canManageExpenseClaims ? "Managers can approve, reject, pay, and create claims for team members." : "Employees can only create and edit their own pending claims."}</p>
+          <div className={styles.vercelDashboard}>
+            <div className={styles.vercelToolbar}>
+              <div className={styles.vercelBreadcrumbProject}>{canManageExpenseClaims ? "Expense Desk" : "My Claims"}</div>
+              <div style={{ flex: 1 }} />
+              <button 
+                className={styles.vercelButtonPrimary} 
+                type="button" 
+                onClick={() => setActiveModal({ id: "create-expense" })}
+              >
+                {canManageExpenseClaims ? "Record Claim +" : "Submit Claim +"}
+              </button>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 20, marginBottom: 24 }}>
+              <div className={styles.vercelCard} style={{ padding: 24, borderTop: "3px solid var(--text-brand)" }}>
+                <h2 className={styles.cardTitle}>Total Value</h2>
+                <span className={styles.metricValue}>Rs. {formatPortalNumber(data.expenses.reduce((sum, claim) => sum + Number(claim.amount || 0), 0))}</span>
+                <p className={styles.muted} style={{ fontSize: "0.85rem" }}>Visible claims.</p>
+              </div>
+              <div className={styles.vercelCard} style={{ padding: 24 }}>
+                <h2 className={styles.cardTitle}>Pending</h2>
+                <span className={styles.metricValue}>{data.expenses.filter((claim) => claim.status === "Pending").length}</span>
+                <p className={styles.muted} style={{ fontSize: "0.85rem" }}>Claims awaiting review.</p>
+              </div>
+              <div className={styles.vercelCard} style={{ padding: 24 }}>
+                <h2 className={styles.cardTitle}>Approved</h2>
+                <span className={styles.metricValue}>{data.expenses.filter((claim) => claim.status === "Approved").length}</span>
+                <p className={styles.muted} style={{ fontSize: "0.85rem" }}>Accepted but not paid.</p>
+              </div>
+              <div className={styles.vercelCard} style={{ padding: 24 }}>
+                <h2 className={styles.cardTitle}>Paid</h2>
+                <span className={styles.metricValue}>{data.expenses.filter((claim) => claim.status === "Paid").length}</span>
+                <p className={styles.muted} style={{ fontSize: "0.85rem" }}>Completed reimbursements.</p>
               </div>
             </div>
-            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}>
-              <h2 className={styles.cardTitle}>Pending</h2>
-              <span className={styles.metricValue}>{data.expenses.filter((claim) => claim.status === "Pending").length}</span>
-              <p className={styles.muted}>Claims awaiting review.</p>
-            </div>
-            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}>
-              <h2 className={styles.cardTitle}>Approved</h2>
-              <span className={styles.metricValue}>{data.expenses.filter((claim) => claim.status === "Approved").length}</span>
-              <p className={styles.muted}>Accepted but not paid.</p>
-            </div>
-            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}>
-              <h2 className={styles.cardTitle}>Paid</h2>
-              <span className={styles.metricValue}>{data.expenses.filter((claim) => claim.status === "Paid").length}</span>
-              <p className={styles.muted}>Completed reimbursements.</p>
-            </div>
-            <div className={`${styles.card} ${styles.span3} ${styles.metricCard}`}>
-              <h2 className={styles.cardTitle}>Total Value</h2>
-              <span className={styles.metricValue}>Rs. {formatPortalNumber(data.expenses.reduce((sum, claim) => sum + Number(claim.amount || 0), 0))}</span>
-              <p className={styles.muted}>Visible claims.</p>
-            </div>
-            <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveExpenseClaim)}>
-              <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>{canManageExpenseClaims ? "Create / Record Claim" : "New Expense Claim"}</h2>
-              <p className={`${styles.muted} ${styles.fieldWide}`}>{canManageExpenseClaims ? "Select an employee only when recording a claim on behalf of someone else." : `This claim will be submitted as ${data.session.name}.`}</p>
-              {canManageExpenseClaims && <Field label="Employee" name="employeeId" options={employeeOptions} wide />}
-              <Field label="Category" name="category" options={["Travel", "Food", "Software", "Office", "General"]} />
-              <Field label="Amount" name="amount" type="number" required />
-              <Field label="Claim Date" name="claimDate" type="date" required />
-              <Field label="Receipt URL" name="receiptUrl" type="url" wide />
-              {canManageExpenseClaims && <Field label="Status" name="status" options={["Pending", "Approved", "Rejected", "Paid"]} />}
-              <Field label="Notes" name="notes" textarea wide />
-              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">{canManageExpenseClaims ? "Save Claim" : "Submit Claim"}</button>
-            </form>
-            <div className={`${styles.card} ${styles.span8}`}>
+
+            <div className={styles.vercelCard}>
               <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Expense Claims</h2>
-                  <p className={styles.muted}>Submit receipts and approve or reject monthly claims.</p>
-                </div>
+                <h3 className={styles.cardTitle} style={{ margin: 0 }}>Expense Claims</h3>
                 <span className={styles.pill}>{data.expenses.length} claims</span>
               </div>
-              <div className={styles.list}>{data.expenses.length === 0 ? <div className={styles.emptyState}>No expense claims yet.</div> : data.expenses.map((claim) => (
-                <div className={styles.row} key={claim.id}>
-                  <div className={styles.rowHeader}><strong>{claim.employeeName}</strong><span className={styles.pill}>{claim.status}</span></div>
-                  <p className={styles.muted}>{claim.category} - Rs. {formatPortalNumber(claim.amount)} - {formatPortalDate(claim.claimDate)}</p>
-                  {claim.receiptUrl && <a href={claim.receiptUrl} target="_blank" rel="noopener noreferrer">Open receipt</a>}
-                  {canManageExpenseClaims && <div className={styles.toolbar}>{["Approved", "Rejected", "Paid"].map((status) => <button className={styles.ghostButton} key={status} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "expense", id: claim.id.toString(), status }))}>{status}</button>)}<button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "expense", id: claim.id.toString() }))}>Delete</button></div>}
-                  {(canManageExpenseClaims || claim.status === "Pending") && (
-                    <details className={styles.editPanel}>
-                      <summary>Edit expense</summary>
-                      <form className={styles.formGrid} onSubmit={submit(saveExpenseClaim)}>
-                        <input type="hidden" name="id" value={claim.id} />
-                        {canManageExpenseClaims && <Field label="Employee" name="employeeId" options={employeeOptions} defaultValue={claim.employeeId.toString()} wide />}
-                        <Field label="Category" name="category" options={["Travel", "Food", "Software", "Office", "General"]} defaultValue={claim.category} />
-                        <Field label="Amount" name="amount" type="number" defaultValue={claim.amount.toString()} required />
-                        <Field label="Claim Date" name="claimDate" type="date" defaultValue={inputDate(claim.claimDate)} required />
-                        <Field label="Receipt URL" name="receiptUrl" type="url" defaultValue={claim.receiptUrl || ""} wide />
-                        {canManageExpenseClaims && <Field label="Status" name="status" options={["Pending", "Approved", "Rejected", "Paid"]} defaultValue={claim.status} />}
-                        <Field label="Notes" name="notes" textarea defaultValue={claim.notes || ""} wide />
-                        <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Expense</button>
-                      </form>
-                    </details>
-                  )}
-                </div>
-              ))}</div>
+              
+              <div className={styles.list}>
+                {data.expenses.length === 0 ? (
+                  <div className={styles.emptyState}>No expense claims yet.</div>
+                ) : (
+                  data.expenses.map((claim) => (
+                    <div className={styles.row} key={claim.id}>
+                      <div className={styles.rowHeader}>
+                        <strong>{claim.employeeName}</strong>
+                        <span className={styles.pill}>{claim.status}</span>
+                      </div>
+                      <p className={styles.muted}>{claim.category} - Rs. {formatPortalNumber(claim.amount)} - {formatPortalDate(claim.claimDate)}</p>
+                      {claim.receiptUrl && <a href={claim.receiptUrl} target="_blank" rel="noopener noreferrer">Open receipt</a>}
+                      
+                      <div className={styles.toolbar}>
+                        {canManageExpenseClaims && (
+                          ["Approved", "Rejected", "Paid"].map((status) => (
+                            <button className={styles.ghostButton} key={status} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "expense", id: claim.id.toString(), status }))}>{status}</button>
+                          ))
+                        )}
+                        {canManageExpenseClaims && (
+                          <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "expense", id: claim.id.toString() }))}>Delete</button>
+                        )}
+                        {(canManageExpenseClaims || claim.status === "Pending") && (
+                          <button 
+                            className={styles.ghostButton} 
+                            type="button" 
+                            onClick={() => setActiveModal({ id: "edit-expense", payload: claim })}
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
-          </section>
+          </div>
         )}
 
+
         {tab === "payroll" && (
-          <section className={styles.grid}>
-            <div className={`${styles.dashboardHero} ${styles.span12}`}>
-              <div>
-                <div className={styles.eyebrow}>Salary Management</div>
-                <h1 className={styles.heroTitle}>Payroll overview for employees, interns, and paid contractors.</h1>
-                <p className={styles.muted}>Review monthly payroll, mark payment status, and export payroll records without opening multiple forms.</p>
+          <div className={styles.vercelDashboard}>
+            <div className={styles.vercelToolbar}>
+              <div className={styles.vercelBreadcrumbProject}>Salary Management</div>
+              <div style={{ flex: 1 }} />
+              <button className={styles.ghostButton} type="button" onClick={() => downloadCsv("bluevolt-payroll.csv", payrollRows)} style={{ padding: "6px 12px", minHeight: "unset", fontSize: "0.85rem" }}>Export CSV</button>
+              {data.capabilities.canManagePayroll && (
+                {/* UNKNOWN FORM: unknown */}
+              )}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 20, marginBottom: 24 }}>
+              <div className={styles.vercelCard} style={{ padding: 24, borderTop: "3px solid var(--text-brand)" }}>
+                <span className={styles.muted} style={{ fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>Total Payroll</span>
+                <div style={{ fontSize: "2rem", fontWeight: 700, marginTop: 12, color: "var(--text-primary)", fontFamily: "var(--font-mono)" }}>Rs. {formatPortalNumber(payrollTotal)}</div>
               </div>
-              <div className={styles.heroActions}>
-                <button className={styles.button} type="button" onClick={() => downloadCsv("bluevolt-payroll.csv", payrollRows)}>Export CSV</button>
+              <div className={styles.vercelCard} style={{ padding: 24, borderTop: "3px solid #f59e0b" }}>
+                <span className={styles.muted} style={{ fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>Ready to Pay</span>
+                <div style={{ fontSize: "2rem", fontWeight: 700, marginTop: 12, color: "var(--text-primary)", fontFamily: "var(--font-mono)" }}>{payrollReady}</div>
+              </div>
+              <div className={styles.vercelCard} style={{ padding: 24, borderTop: "3px solid #10b981" }}>
+                <span className={styles.muted} style={{ fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>Paid</span>
+                <div style={{ fontSize: "2rem", fontWeight: 700, marginTop: 12, color: "var(--text-primary)", fontFamily: "var(--font-mono)" }}>{payrollPaid}</div>
+              </div>
+              <div className={styles.vercelCard} style={{ padding: 24, borderTop: "3px solid #6366f1" }}>
+                <span className={styles.muted} style={{ fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>Employees</span>
+                <div style={{ fontSize: "2rem", fontWeight: 700, marginTop: 12, color: "var(--text-primary)", fontFamily: "var(--font-mono)" }}>{employees.length}</div>
               </div>
             </div>
-            <div className={`${styles.card} ${styles.metricCard} ${styles.span3}`}>
-              <span className={styles.muted}>Total Payroll</span>
-              <span className={styles.metricValue}>Rs. {formatPortalNumber(payrollTotal)}</span>
-            </div>
-            <div className={`${styles.card} ${styles.metricCard} ${styles.span3}`}>
-              <span className={styles.muted}>Ready to Pay</span>
-              <span className={styles.metricValue}>{payrollReady}</span>
-            </div>
-            <div className={`${styles.card} ${styles.metricCard} ${styles.span3}`}>
-              <span className={styles.muted}>Paid</span>
-              <span className={styles.metricValue}>{payrollPaid}</span>
-            </div>
-            <div className={`${styles.card} ${styles.metricCard} ${styles.span3}`}>
-              <span className={styles.muted}>Employees</span>
-              <span className={styles.metricValue}>{employees.length}</span>
-            </div>
-            {data.capabilities.canManagePayroll && (
-              <details className={`${styles.card} ${styles.span12} ${styles.editPanel}`}>
-                <summary>Add payroll record</summary>
-                <form className={styles.formGrid} onSubmit={submit(savePayrollInput)}>
-                  <Field label="Employee" name="employeeId" options={employeeOptions} required wide />
-                  <Field label="Pay Period" name="payPeriod" placeholder="2026-05" required />
-                  <Field label="Pay Type" name="payType" options={["Salary", "Stipend", "Contract", "Bonus Only"]} />
-                  <Field label="Amount" name="amount" type="number" />
-                  <Field label="Working Days" name="workingDays" type="number" />
-                  <Field label="Unpaid Leave Days" name="unpaidLeaveDays" type="number" />
-                  <Field label="Bonus" name="bonus" type="number" />
-                  <Field label="Deductions" name="deductions" type="number" />
-                  <Field label="Status" name="status" options={["Draft", "Pending Approval", "Approved", "Paid", "Hold"]} />
-                  <Field label="Notes" name="notes" textarea wide />
-                  <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Payroll</button>
-                </form>
-              </details>
-            )}
-            <div className={`${styles.card} ${styles.span12}`}>
-              <div className={styles.sectionHeader}>
+
+            <div className={styles.vercelCard} style={{ padding: 0, overflow: "hidden" }}>
+              <div style={{ padding: "20px 24px", borderBottom: "1px solid var(--border-color)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
-                  <h2 className={styles.cardTitle}>Payroll Inputs</h2>
-                  <p className={styles.muted}>Salary/stipend, unpaid leave, bonus, deductions, and payment status.</p>
+                  <h3 style={{ margin: 0, fontSize: "1.1rem" }}>Payroll Records</h3>
+                  <p className={styles.muted} style={{ margin: "4px 0 0", fontSize: "0.85rem" }}>Salary/stipend, unpaid leave, bonus, deductions, and payment status.</p>
                 </div>
                 <span className={styles.pill}>{data.payrollInputs.length} records</span>
               </div>
-              <div className={styles.smartTable}>
+              
+              <div className={styles.smartTable} style={{ margin: 0, border: "none", borderRadius: 0 }}>
                 <div className={styles.smartTableHeader}>
                   <span>Employee</span>
                   <span>Period</span>
@@ -2500,408 +2291,288 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                 {data.payrollInputs.length === 0 ? <div className={styles.emptyState}>No payroll records yet.</div> : data.payrollInputs.map((payroll) => (
                   <div className={styles.smartTableRow} key={payroll.id}>
                     <div className={styles.identityCell}>
-                      <span className={styles.avatar}>{payroll.employeeName.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
-                      <span><strong>{payroll.employeeName}</strong><small>{payroll.workingDays} working days, {payroll.unpaidLeaveDays} unpaid leave</small></span>
+                      <span className={styles.avatar} style={{ width: 36, height: 36, fontSize: "0.9rem" }}>{payroll.employeeName.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                        <strong style={{ fontSize: "0.95rem" }}>{payroll.employeeName}</strong>
+                        <small style={{ color: "var(--text-muted)" }}>{payroll.workingDays} days worked, {payroll.unpaidLeaveDays} unpaid leave</small>
+                      </div>
                     </div>
-                    <span>{payroll.payPeriod}</span>
-                    <span>{payroll.payType}</span>
-                    <strong>Rs. {formatPortalNumber(payroll.amount)}</strong>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.9rem" }}>{payroll.payPeriod}</span>
+                    <span className={styles.pill} style={{ justifySelf: "flex-start", background: "var(--bg-shell)" }}>{payroll.payType}</span>
+                    <strong style={{ fontSize: "1.05rem", fontFamily: "var(--font-mono)" }}>Rs. {formatPortalNumber(payroll.amount)}</strong>
                     <span className={payroll.status === "Paid" ? `${styles.pill} ${styles.pillSuccess}` : payroll.status === "Hold" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{payroll.status}</span>
                     {data.capabilities.canManagePayroll && (
-                      <span className={styles.actionStack}>
-                        {["Pending Approval", "Approved", "Paid", "Hold"].map((status) => <button className={styles.ghostButton} key={status} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "payroll", id: payroll.id.toString(), status }))}>{status}</button>)}
-                        <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "payroll", id: payroll.id.toString() }))}>Delete</button>
-                      </span>
+                {/* UNKNOWN FORM: unknown */}
                     )}
                   </div>
                 ))}
               </div>
             </div>
-          </section>
+          </div>
         )}
 
         {tab === "reports" && (
-          <section className={styles.grid}>
-            <div className={`${styles.dashboardHero} ${styles.span12}`}>
-              <div>
-                <div className={styles.eyebrow}>Reports</div>
-                <h1 className={styles.heroTitle}>Download the operating data you need.</h1>
-                <p className={styles.muted}>Employees, applications, payroll, attendance, CRM, resources, documents, and expenses can be exported for reviews or backups.</p>
-              </div>
-              <div className={styles.heroActions}>
-                <button className={styles.button} type="button" onClick={() => {
-                  downloadCsv("bluevolt-all-reports-summary.csv", [
-                    { report: "employees", records: employees.length },
-                    { report: "applicants", records: data.applicants.length },
-                    { report: "attendance", records: data.attendance.length },
-                    { report: "payroll", records: data.payrollInputs.length },
-                    { report: "resources", records: data.resources.length },
-                    { report: "documents", records: data.documents.length },
-                    { report: "expenses", records: data.expenses.length },
-                  ]);
-                }}>Export Summary</button>
-              </div>
+          <div className={styles.vercelDashboard}>
+            <div className={styles.vercelToolbar}>
+              <div className={styles.vercelBreadcrumbProject}>Reports & Exports</div>
+              <div style={{ flex: 1 }} />
+              <button className={styles.vercelButtonPrimary} type="button" onClick={() => {
+                downloadCsv("bluevolt-all-reports-summary.csv", [
+                  { report: "employees", records: employees.length },
+                  { report: "applicants", records: data.applicants.length },
+                  { report: "attendance", records: data.attendance.length },
+                  { report: "payroll", records: data.payrollInputs.length },
+                  { report: "resources", records: data.resources.length },
+                  { report: "documents", records: data.documents.length },
+                  { report: "expenses", records: data.expenses.length },
+                ]);
+              }}>Export All Summary</button>
             </div>
-            {[
-              { title: "Employee Report", hint: "Roster, roles, work type, paid/unpaid status", count: employees.length, action: () => downloadCsv("bluevolt-employees.csv", employeeRows) },
-              { title: "Applicant Report", hint: "Public form submissions and decisions", count: data.applicants.length, action: () => downloadCsv("bluevolt-applicants.csv", applicantRows) },
-              { title: "Attendance Report", hint: "Check-in, check-out, and total hours", count: data.attendance.length, action: () => downloadCsv("bluevolt-attendance.csv", attendanceRows) },
-              { title: "Payroll Report", hint: "Salary/stipend inputs and status", count: data.payrollInputs.length, action: () => downloadCsv("bluevolt-payroll.csv", payrollRows) },
-              { title: "Resource Report", hint: "Links, files, tags, and role visibility", count: data.resources.length, action: () => downloadCsv("bluevolt-resources.csv", data.resources.map((item) => ({ title: item.title, type: item.resourceType, url: item.url, audience: item.audienceRoles, tags: item.tags || "" }))) },
-              { title: "Expense Report", hint: "Claims, receipts, amounts, and status", count: data.expenses.length, action: () => downloadCsv("bluevolt-expenses.csv", data.expenses.map((item) => ({ employee: item.employeeName, category: item.category, amount: item.amount, date: formatPortalDate(item.claimDate), status: item.status, receipt: item.receiptUrl || "" }))) },
-            ].map((report) => (
-              <div className={`${styles.card} ${styles.span4} ${styles.reportCard}`} key={report.title}>
-                <div>
-                  <h2 className={styles.cardTitle}>{report.title}</h2>
-                  <p className={styles.muted}>{report.hint}</p>
+            
+            <div className={styles.vercelProjectsGrid}>
+              {[
+                { title: "Employee Report", hint: "Roster, roles, work type, paid/unpaid status", count: employees.length, action: () => downloadCsv("bluevolt-employees.csv", employeeRows) },
+                { title: "Applicant Report", hint: "Public form submissions and decisions", count: data.applicants.length, action: () => downloadCsv("bluevolt-applicants.csv", applicantRows) },
+                { title: "Attendance Report", hint: "Check-in, check-out, and total hours", count: data.attendance.length, action: () => downloadCsv("bluevolt-attendance.csv", attendanceRows) },
+                { title: "Payroll Report", hint: "Salary/stipend inputs and status", count: data.payrollInputs.length, action: () => downloadCsv("bluevolt-payroll.csv", payrollRows) },
+                { title: "Resource Report", hint: "Links, files, tags, and role visibility", count: data.resources.length, action: () => downloadCsv("bluevolt-resources.csv", data.resources.map((item) => ({ title: item.title, type: item.resourceType, url: item.url, audience: item.audienceRoles, tags: item.tags || "" }))) },
+                { title: "Expense Report", hint: "Claims, receipts, amounts, and status", count: data.expenses.length, action: () => downloadCsv("bluevolt-expenses.csv", data.expenses.map((item) => ({ employee: item.employeeName, category: item.category, amount: item.amount, date: formatPortalDate(item.claimDate), status: item.status, receipt: item.receiptUrl || "" }))) },
+              ].map((report) => (
+                <div className={styles.vercelProjectCard} key={report.title}>
+                  <div className={styles.vercelProjectHeader} style={{ paddingBottom: 16 }}>
+                    <div>
+                      <h4 style={{ fontSize: "1.05rem" }}>{report.title}</h4>
+                      <span className={styles.muted} style={{ fontSize: "0.85rem", marginTop: 4, display: "block" }}>{report.hint}</span>
+                    </div>
+                  </div>
+                  <div className={styles.vercelProjectFooter} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border-color)", paddingTop: 16 }}>
+                    <span className={styles.pill}>{report.count} records</span>
+                    <button className={styles.ghostButton} type="button" onClick={report.action} style={{ padding: "6px 12px", minHeight: "unset" }}>Download CSV</button>
+                  </div>
                 </div>
-                <div className={styles.rowHeader}>
-                  <span className={styles.metricValue}>{report.count}</span>
-                  <button className={styles.button} type="button" onClick={report.action}>Download</button>
-                </div>
-              </div>
-            ))}
-          </section>
+              ))}
+            </div>
+          </div>
         )}
 
         {tab === "reviews" && (
-          <section className={styles.grid}>
-            {data.capabilities.canReviewPerformance && (
-              <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(savePerformanceReview)}>
-                <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Performance Review</h2>
-                <Field label="Employee" name="employeeId" options={employeeOptions} required wide />
-                <Field label="Review Period" name="reviewPeriod" placeholder="May 2026" required />
-                <Field label="Score" name="score" type="number" />
-                <Field label="Status" name="status" options={["Draft", "Shared", "Final"]} />
-                <Field label="KPI Summary" name="kpiSummary" textarea wide />
-                <Field label="Strengths" name="strengths" textarea wide />
-                <Field label="Improvements" name="improvements" textarea wide />
-                <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Review</button>
-              </form>
-            )}
-            <div className={`${styles.card} ${data.capabilities.canReviewPerformance ? styles.span8 : styles.span12}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Performance Reviews</h2>
-                  <p className={styles.muted}>Monthly scorecards, KPI notes, strengths, and improvement plans.</p>
-                </div>
-                <span className={styles.pill}>{data.reviews.length} reviews</span>
-              </div>
-              <div className={styles.list}>{data.reviews.length === 0 ? <div className={styles.emptyState}>No reviews yet.</div> : data.reviews.map((review) => (
-                <div className={styles.row} key={review.id}>
-                  <div className={styles.rowHeader}><strong>{review.employeeName}</strong><span className={styles.pill}>{review.score}/10</span></div>
-                  <p className={styles.muted}>{review.reviewPeriod} - {review.status}</p>
-                  {review.kpiSummary && <p>{review.kpiSummary}</p>}
-                  {data.capabilities.canReviewPerformance && (
-                    <>
-                      <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "review", id: review.id.toString() }))}>Delete</button>
-                      <details className={styles.editPanel}>
-                        <summary>Edit review</summary>
-                        <form className={styles.formGrid} onSubmit={submit(savePerformanceReview)}>
-                          <input type="hidden" name="id" value={review.id} />
-                          <Field label="Employee" name="employeeId" options={employeeOptions} defaultValue={review.employeeId.toString()} required wide />
-                          <Field label="Review Period" name="reviewPeriod" defaultValue={review.reviewPeriod} required />
-                          <Field label="Score" name="score" type="number" defaultValue={review.score.toString()} />
-                          <Field label="Status" name="status" options={["Draft", "Shared", "Final"]} defaultValue={review.status} />
-                          <Field label="KPI Summary" name="kpiSummary" textarea defaultValue={review.kpiSummary || ""} wide />
-                          <Field label="Strengths" name="strengths" textarea defaultValue={review.strengths || ""} wide />
-                          <Field label="Improvements" name="improvements" textarea defaultValue={review.improvements || ""} wide />
-                          <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Review</button>
-                        </form>
-                      </details>
-                    </>
-                  )}
-                </div>
-              ))}</div>
+          <div className={styles.vercelDashboard}>
+            <div className={styles.vercelToolbar}>
+              <div className={styles.vercelBreadcrumbProject}>Performance Reviews</div>
+              <div style={{ flex: 1 }} />
+              {data.capabilities.canReviewPerformance && (
+                {/* UNKNOWN FORM: unknown */}
+              )}
             </div>
-          </section>
+
+            <div className={styles.vercelProjectsGrid}>
+              {data.reviews.length === 0 ? <div className={styles.emptyState} style={{ gridColumn: "1 / -1" }}>No performance reviews found.</div> : data.reviews.map((review) => (
+                <div className={styles.vercelProjectCard} key={review.id}>
+                  <div className={styles.vercelProjectHeader}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <span className={styles.avatar} style={{ width: 36, height: 36 }}>{review.employeeName.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
+                      <div>
+                        <h4>{review.employeeName}</h4>
+                        <span style={{ fontSize: "0.85rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{review.reviewPeriod}</span>
+                      </div>
+                    </div>
+                    <span className={styles.vercelCardTag} style={{ background: "var(--bg-shell)", fontWeight: 700 }}>{review.score}/10</span>
+                  </div>
+                  <div className={styles.vercelProjectDesc} style={{ minHeight: 60 }}>
+                    {review.kpiSummary ? <p style={{ fontSize: "0.85rem", lineHeight: 1.5, margin: 0 }}>{review.kpiSummary}</p> : <p className={styles.muted} style={{ fontSize: "0.85rem", margin: 0, fontStyle: "italic" }}>No KPI summary provided.</p>}
+                  </div>
+                  <div className={styles.vercelProjectFooter} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                    <span className={review.status === "Final" ? `${styles.pill} ${styles.pillSuccess}` : styles.pill}>{review.status}</span>
+                    {data.capabilities.canReviewPerformance && (
+                {/* UNKNOWN FORM: unknown */}
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {tab === "documents" && (
-          <section className={styles.grid}>
-            {data.capabilities.canManageDocuments && (
-              <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveEmployeeDocument)}>
-                <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Employee Document</h2>
-                <Field label="Employee" name="employeeId" options={[{ label: "General document", value: "" }, ...employeeOptions]} wide />
-                <Field label="Title" name="title" required />
-                <Field label="Type" name="documentType" options={["Offer Letter", "NDA", "ID Proof", "Resume", "Certificate", "Payslip", "General"]} />
-                <label className={`${styles.field} ${styles.fieldWide}`}>
-                  <span className={styles.label}>Upload File</span>
-                  <input className={styles.input} type="file" onChange={(event) => uploadFile(event.target.files?.[0])} />
-                </label>
-                {uploadedFile ? (
-                  <input type="hidden" name="url" value={uploadedFile.url} />
-                ) : (
-                  <Field label="URL" name="url" type="url" wide />
-                )}
-                <input type="hidden" name="fileName" value={uploadedFile?.fileName || ""} />
-                <input type="hidden" name="fileSize" value={uploadedFile?.fileSize || ""} />
-                <input type="hidden" name="mimeType" value={uploadedFile?.mimeType || ""} />
-                <Field label="Visibility Roles" name="visibilityRoles" defaultValue="super_admin,director,authorized_signatory,admin,hr" wide />
-                <Field label="Notes" name="notes" textarea wide />
-                <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Document</button>
-              </form>
-            )}
-            <div className={`${styles.card} ${data.capabilities.canManageDocuments ? styles.span8 : styles.span12}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Employee Documents</h2>
-                  <p className={styles.muted}>Offer letters, NDA, ID proof, resumes, certificates, payslips, and private links.</p>
-                </div>
-                <span className={styles.pill}>{data.documents.length} documents</span>
-              </div>
-              <div className={styles.list}>{data.documents.length === 0 ? <div className={styles.emptyState}>No documents yet.</div> : data.documents.map((document) => (
-                <div className={styles.row} key={document.id}>
-                  <div className={styles.rowHeader}>
-                    <strong>{document.title}</strong>
-                    <div className={styles.compactMeta}>
-                      <span className={styles.pill}>{document.documentType}</span>
-                      <span className={documentApproved(document.notes) ? `${styles.pill} ${styles.pillSuccess}` : documentPending(document.notes) ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>
-                        {documentWorkflowStatus(document.notes)}
-                      </span>
-                    </div>
-                  </div>
-                  <p className={styles.muted}>{document.employeeName || "General"} - {document.visibilityRoles}</p>
-                  <div className={styles.compactMeta}>
-                    <span className={styles.pill}>Signatory: {documentMeta(document.notes, "Approved by") || "Not signed"}</span>
-                    <span className={styles.pill}>Signed: {documentMeta(document.notes, "Signed at") ? formatPortalDateTime(documentMeta(document.notes, "Signed at")) : "Pending"}</span>
-                    <span className={styles.pill}>{documentMeta(document.notes, "Sent status") || "Sent status not set"}</span>
-                    <span className={styles.pill}>{documentMeta(document.notes, "Downloaded status") || "Downloaded status not set"}</span>
-                  </div>
-                  {cleanDocumentNotes(document.notes) && <p className={styles.muted}>{cleanDocumentNotes(document.notes)}</p>}
-                  <a href={document.url} target="_blank" rel="noopener noreferrer">Open document</a>
-                  {data.capabilities.canSignDocuments && !documentApproved(document.notes) && (
-                    <button className={styles.button} type="button" onClick={() => runAction(() => approveEmployeeDocument({ id: document.id.toString() }))}>Approve & Sign</button>
-                  )}
-                  {data.capabilities.canManageDocuments && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "document", id: document.id.toString() }))}>Delete</button>}
-                  {data.capabilities.canManageDocuments && (
-                    <details className={styles.editPanel}>
-                      <summary>Edit document</summary>
-                      <form className={styles.formGrid} onSubmit={submit(saveEmployeeDocument)}>
-                        <input type="hidden" name="id" value={document.id} />
-                        <Field label="Employee" name="employeeId" options={[{ label: "General document", value: "" }, ...employeeOptions]} defaultValue={document.employeeId?.toString() || ""} wide />
-                        <Field label="Title" name="title" defaultValue={document.title} required />
-                        <Field label="Type" name="documentType" options={["Offer Letter", "NDA", "ID Proof", "Resume", "Certificate", "Payslip", "General"]} defaultValue={document.documentType} />
-                        <Field label="URL" name="url" type="url" defaultValue={document.url} wide />
-                        <Field label="Visibility Roles" name="visibilityRoles" defaultValue={document.visibilityRoles} wide />
-                        <Field label="Notes" name="notes" textarea defaultValue={document.notes || ""} wide />
-                        <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Document</button>
-                      </form>
-                    </details>
-                  )}
-                </div>
-              ))}</div>
+          <div className={styles.vercelDashboard}>
+            <div className={styles.vercelToolbar}>
+              <div className={styles.vercelBreadcrumbProject}>Employee Documents</div>
+              <div style={{ flex: 1 }} />
+              {data.capabilities.canManageDocuments && (
+                {/* UNKNOWN FORM: unknown */}
+              )}
             </div>
-          </section>
+
+            <div className={styles.vercelProjectsGrid}>
+              {data.documents.length === 0 ? <div className={styles.emptyState}>No documents yet.</div> : data.documents.map((document) => (
+                <div className={styles.vercelProjectCard} key={document.id}>
+                  <div className={styles.vercelProjectHeader}>
+                    <div className={styles.vercelProjectMeta}>
+                      <h4>{document.title}</h4>
+                      <span>{document.employeeName || "General"} - {document.visibilityRoles}</span>
+                    </div>
+                    <div className={documentApproved(document.notes) ? styles.vercelProjectStatusIndicatorActive : documentPending(document.notes) ? styles.vercelProjectStatusIndicatorWarning : styles.vercelAlertIndicatorRed} title={documentWorkflowStatus(document.notes)} />
+                  </div>
+                  <div className={styles.vercelProjectDesc}>
+                    <p style={{ margin: "0 0 8px" }}><strong>Type:</strong> <span className={styles.vercelCardTag}>{document.documentType}</span></p>
+                    <div className={styles.compactMeta} style={{ margin: "8px 0" }}>
+                      <span className={styles.pill}>Signatory: {documentMeta(document.notes, "Approved by") || "Not signed"}</span>
+                      <span className={styles.pill}>Signed: {documentMeta(document.notes, "Signed at") ? formatPortalDateTime(documentMeta(document.notes, "Signed at")) : "Pending"}</span>
+                    </div>
+                    {cleanDocumentNotes(document.notes) && <p>{cleanDocumentNotes(document.notes)}</p>}
+                  </div>
+                  <div className={styles.vercelProjectFooter} style={{ flexWrap: "wrap", gap: 8 }}>
+                    <a href={document.url} target="_blank" rel="noopener noreferrer" className={styles.button} style={{ fontSize: "0.75rem", padding: "4px 10px", minHeight: "unset" }}>Open</a>
+                    {data.capabilities.canSignDocuments && !documentApproved(document.notes) && (
+                      <button className={styles.button} type="button" style={{ fontSize: "0.75rem", padding: "4px 10px", minHeight: "unset", background: "#10b981", color: "white", borderColor: "#10b981" }} onClick={() => runAction(() => approveEmployeeDocument({ id: document.id.toString() }))}>Approve</button>
+                    )}
+                    {data.capabilities.canManageDocuments && <button className={styles.ghostButton} type="button" style={{ fontSize: "0.75rem", padding: "4px 10px", minHeight: "unset", color: "#ef4444" }} onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "document", id: document.id.toString() }))}>Delete</button>}
+                    {data.capabilities.canManageDocuments && (
+                {/* UNKNOWN FORM: unknown */}
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {tab === "announcements" && (
-          <section className={styles.grid}>
-            {data.capabilities.canPublishAnnouncements && (
-              <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveAnnouncement)}>
-                <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Publish Announcement</h2>
-                <Field label="Title" name="title" required wide />
-                <Field label="Audience Roles" name="audienceRoles" options={ownerRoleOptions} defaultValue="all" wide />
-                <Field label="Priority" name="priority" options={["Normal", "Important", "Urgent"]} />
-                <Field label="Body" name="body" textarea wide required />
-                <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Publish</button>
-              </form>
-            )}
-            <div className={`${styles.card} ${data.capabilities.canPublishAnnouncements ? styles.span8 : styles.span12}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Announcements</h2>
-                  <p className={styles.muted}>Broadcast updates to all employees or selected roles.</p>
-                </div>
-                <span className={styles.pill}>{data.announcements.length} visible</span>
-              </div>
-              <div>{data.announcements.length === 0 ? <div className={styles.emptyState}>No announcements yet.</div> : data.announcements.map((announcement) => (
-                <div className={`${styles.announcementCard} ${announcement.priority === "Urgent" ? styles.announcementCardUrgent : announcement.priority === "Important" ? styles.announcementCardImportant : styles.announcementCardNormal}`} key={announcement.id}>
-                  <div className={styles.rowHeader}>
-                    <strong style={{ fontSize: "1.1rem" }}>{announcement.title}</strong>
-                    <span className={announcement.priority === "Urgent" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>
-                      {announcement.priority}
-                    </span>
+          <div className={styles.vercelDashboard}>
+            <div className={styles.vercelToolbar}>
+              <div className={styles.vercelBreadcrumbProject}>Announcements</div>
+              <div style={{ flex: 1 }} />
+              {data.capabilities.canPublishAnnouncements && (
+                <button className={styles.vercelButtonPrimary} style={{ margin: 0, padding: "8px 12px", minHeight: "unset" }} onClick={() => setActiveModal({ id: "create-announcement" })}>
+                  New Announcement +
+                </button>
+              )}
+            </div>
+
+            <div className={styles.vercelProjectsGrid}>
+              {data.announcements.length === 0 ? <div className={styles.emptyState}>No announcements yet.</div> : data.announcements.map((announcement) => (
+                <div className={styles.vercelProjectCard} key={announcement.id} style={announcement.priority === "Urgent" ? { borderColor: "rgba(239, 68, 68, 0.5)", background: "var(--error-bg)" } : {}}>
+                  <div className={styles.vercelProjectHeader}>
+                    <div className={styles.vercelProjectMeta}>
+                      <h4>{announcement.title}</h4>
+                      <span>Visible to: {displayRole(announcement.audienceRoles)}</span>
+                    </div>
+                    <div className={announcement.priority === "Urgent" ? styles.vercelAlertIndicatorRed : announcement.priority === "Important" ? styles.vercelAlertIndicatorOrange : styles.vercelAlertIndicatorGreen} title={announcement.priority} />
                   </div>
-                  <p style={{ margin: "8px 0", lineHeight: "1.5", fontSize: "0.95rem" }}>{announcement.body}</p>
-                  <p className={styles.muted} style={{ fontSize: "0.82rem", display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
-                    <span>Visible to: {displayRole(announcement.audienceRoles)}</span>
-                    <span>{formatPortalTimeAgo(announcement.createdAt)}</span>
-                  </p>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 12 }}>
+                  <div className={styles.vercelProjectDesc}>
+                    <p style={{ margin: "8px 0", lineHeight: "1.5", color: "var(--text-primary)" }}>{announcement.body}</p>
+                    <p className={styles.muted} style={{ fontSize: "0.75rem", marginTop: 12 }}>
+                      {formatPortalTimeAgo(announcement.createdAt)}
+                    </p>
+                  </div>
+                  <div className={styles.vercelProjectFooter} style={{ flexWrap: "wrap", gap: 8 }}>
                     {data.capabilities.canPublishAnnouncements && (
-                      <button className={styles.ghostButton} style={{ fontSize: "0.8rem", padding: "6px 14px", minHeight: 34, color: "#f87171" }} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "announcement", id: announcement.id.toString() }))}>
+                      <button className={styles.ghostButton} style={{ fontSize: "0.75rem", padding: "4px 10px", minHeight: "unset", color: "#ef4444" }} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "announcement", id: announcement.id.toString() }))}>
                         Delete
                       </button>
                     )}
                     {data.capabilities.canPublishAnnouncements && (
-                      <details className={styles.editPanel} style={{ width: "100%", marginTop: 8 }}>
-                        <summary style={{ fontSize: "0.78rem" }}>Edit announcement</summary>
-                        <form className={styles.formGrid} onSubmit={submit(saveAnnouncement)} style={{ marginTop: 8 }}>
-                          <input type="hidden" name="id" value={announcement.id} />
-                          <Field label="Title" name="title" defaultValue={announcement.title} required wide />
-                          <Field label="Audience Roles" name="audienceRoles" options={audienceOptionsForValue(announcement.audienceRoles)} defaultValue={announcement.audienceRoles} wide />
-                          <Field label="Priority" name="priority" options={["Normal", "Important", "Urgent"]} defaultValue={announcement.priority} />
-                          <Field label="Body" name="body" textarea defaultValue={announcement.body} wide required />
-                          <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Announcement</button>
-                        </form>
-                      </details>
+                      <button className={styles.ghostButton} style={{ fontSize: "0.75rem", padding: "4px 10px", minHeight: "unset" }} type="button" onClick={() => setActiveModal({ id: "edit-announcement", payload: announcement })}>
+                        Edit
+                      </button>
                     )}
                   </div>
                 </div>
-              ))}</div>
+              ))}
             </div>
-          </section>
+          </div>
         )}
 
         {tab === "meetings" && (
-          <section className={styles.grid}>
-            {data.capabilities.canScheduleMeetings && (
-              <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveMeeting)}>
-                <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Schedule Google Meet</h2>
-                <Field label="Title" name="title" required wide />
-                <Field label="Starts At" name="startsAt" type="datetime-local" required />
-                <Field label="Ends At" name="endsAt" type="datetime-local" required />
-                <Field label="Meet URL" name="meetUrl" type="url" wide />
-                <Field label="Audience Roles" name="audienceRoles" options={ownerRoleOptions} defaultValue="all" wide />
-                <label className={`${styles.field} ${styles.fieldWide}`}>
-                  <span className={styles.label}>Visible Employees</span>
-                  <select className={styles.select} name="audienceUsers" multiple size={Math.min(Math.max(employees.length, 3), 6)}>
-                    {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} ({employee.email})</option>)}
-                  </select>
-                  <span className={styles.muted}>Optional. Ctrl/Shift to select multiple. They can view the meeting even if their role is not in Audience Roles.</span>
-                </label>
-                <Field label="Applicant Name" name="applicantName" />
-                <Field label="Applicant Email" name="applicantEmail" type="email" />
-                <Field label="Notes" name="notes" textarea wide />
-                <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Meeting</button>
-              </form>
-            )}
-            <div className={`${styles.card} ${data.capabilities.canScheduleMeetings ? styles.span8 : styles.span12}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Meeting Schedule</h2>
-                  <p className={styles.muted}>Meet links can be opened directly or added to Google Calendar.</p>
-                </div>
-                <span className={styles.pill}>{data.meetings.length} visible</span>
-              </div>
-              <div className={styles.meetingTimeline}>
-                {data.meetings.length === 0 ? (
-                  <div className={styles.emptyState}>No visible meetings yet.</div>
-                ) : (
-                  data.meetings.map((meeting) => (
-                    <div className={styles.meetingTimelineCard} key={meeting.id}>
-                      <div className={styles.rowHeader}>
-                        <strong style={{ fontSize: "1.05rem" }}>{meeting.title}</strong>
-                        <span className={styles.pill}>{displayRole(meeting.audienceRoles)}</span>
+          <div className={styles.vercelDashboard}>
+            <div className={styles.vercelToolbar}>
+              <div className={styles.vercelBreadcrumbProject}>Meeting Schedule</div>
+              <div style={{ flex: 1 }} />
+              {data.capabilities.canScheduleMeetings && (
+                <button className={styles.vercelButtonPrimary} style={{ margin: 0, padding: "8px 12px", minHeight: "unset" }} onClick={() => setActiveModal({ id: "create-meeting" })}>
+                  Schedule Meeting +
+                </button>
+              )}
+            </div>
+
+            <div className={styles.vercelProjectsGrid}>
+              {data.meetings.length === 0 ? (
+                <div className={styles.emptyState}>No visible meetings yet.</div>
+              ) : (
+                data.meetings.map((meeting) => (
+                  <div className={styles.vercelProjectCard} key={meeting.id}>
+                    <div className={styles.vercelProjectHeader}>
+                      <div className={styles.vercelProjectMeta}>
+                        <h4>{meeting.title}</h4>
+                        <span>{displayRole(meeting.audienceRoles)}</span>
                       </div>
-                      <p className={styles.muted} style={{ fontSize: "0.84rem", margin: "6px 0 12px" }}>
+                      <div className={styles.vercelProjectStatusIndicatorActive} title="Scheduled" />
+                    </div>
+                    <div className={styles.vercelProjectDesc}>
+                      <p style={{ margin: "0 0 12px", color: "var(--text-primary)", fontWeight: 500 }}>
                         {formatPortalDateTime(meeting.startsAt)} – {formatPortalDateTime(meeting.endsAt)}
                       </p>
                       {meeting.notes && (
-                        <p className={styles.muted} style={{ fontSize: "0.84rem", background: "var(--bg-shell)", padding: "10px 14px", borderRadius: 8, margin: "8px 0 12px", borderLeft: "3px solid var(--border-color)" }}>
+                        <p className={styles.muted} style={{ fontSize: "0.84rem", background: "var(--bg-shell)", padding: "10px 14px", borderRadius: 8, borderLeft: "3px solid var(--border-color)" }}>
                           {meeting.notes}
                         </p>
                       )}
-                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                        {meeting.meetUrl && (
-                          <a className={styles.button} href={meeting.meetUrl} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", padding: "6px 14px", minHeight: 34, fontSize: "0.8rem", textDecoration: "none", alignItems: "center" }}>
-                            Join Google Meet
-                          </a>
-                        )}
-                        <a className={styles.ghostButton} href={meeting.calendarUrl} target="_blank" rel="noopener noreferrer" style={{ padding: "6px 14px", minHeight: 34, fontSize: "0.8rem" }}>
-                          Add to Calendar
+                    </div>
+                    <div className={styles.vercelProjectFooter} style={{ flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+                      {meeting.meetUrl && (
+                        <a className={styles.button} href={meeting.meetUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.75rem", padding: "4px 10px", minHeight: "unset", background: "#10b981", color: "white", borderColor: "#10b981", textDecoration: "none" }}>
+                          Join Meet
                         </a>
-                        {data.capabilities.canScheduleMeetings && (
-                          <button className={styles.ghostButton} style={{ padding: "6px 14px", minHeight: 34, fontSize: "0.8rem", color: "#f87171" }} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "meeting", id: meeting.id.toString() }))}>
-                            Delete
-                          </button>
-                        )}
-                      </div>
+                      )}
+                      <a className={styles.ghostButton} href={meeting.calendarUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.75rem", padding: "4px 10px", minHeight: "unset", textDecoration: "none" }}>
+                        Add to Calendar
+                      </a>
                       {data.capabilities.canScheduleMeetings && (
-                        <details className={styles.editPanel} style={{ marginTop: 12 }}>
-                          <summary style={{ fontSize: "0.78rem" }}>Edit meeting</summary>
-                          <form className={styles.formGrid} onSubmit={submit(saveMeeting)} style={{ marginTop: 8 }}>
-                            <input type="hidden" name="id" value={meeting.id} />
-                            <Field label="Title" name="title" defaultValue={meeting.title} required wide />
-                            <Field label="Starts At" name="startsAt" type="datetime-local" defaultValue={inputDateTime(meeting.startsAt)} required />
-                            <Field label="Ends At" name="endsAt" type="datetime-local" defaultValue={inputDateTime(meeting.endsAt)} required />
-                            <Field label="Meet URL" name="meetUrl" type="url" defaultValue={meeting.meetUrl || ""} wide />
-                            <Field label="Audience Roles" name="audienceRoles" options={audienceOptionsForValue(meeting.audienceRoles)} defaultValue={meeting.audienceRoles} wide />
-                            <label className={`${styles.field} ${styles.fieldWide}`}>
-                              <span className={styles.label}>Visible Employees</span>
-                              <select className={styles.select} name="audienceUsers" multiple size={Math.min(Math.max(employees.length, 3), 6)} defaultValue={(meeting.audienceUsers || "").split(",").filter(Boolean)}>
-                                {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} ({employee.email})</option>)}
-                              </select>
-                              <span className={styles.muted}>Optional. Ctrl/Shift to select multiple. They can view the meeting even if their role is not in Audience Roles.</span>
-                            </label>
-                            <Field label="Applicant Name" name="applicantName" defaultValue={meeting.applicantName || ""} />
-                            <Field label="Applicant Email" name="applicantEmail" type="email" defaultValue={meeting.applicantEmail || ""} />
-                            <Field label="Notes" name="notes" textarea defaultValue={meeting.notes || ""} wide />
-                            <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Meeting</button>
-                          </form>
-                        </details>
+                        <button className={styles.ghostButton} style={{ fontSize: "0.75rem", padding: "4px 10px", minHeight: "unset", color: "#ef4444" }} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "meeting", id: meeting.id.toString() }))}>
+                          Delete
+                        </button>
+                      )}
+                      {data.capabilities.canScheduleMeetings && (
+                          <button className={styles.ghostButton} style={{ fontSize: "0.75rem", padding: "4px 10px", minHeight: "unset" }} type="button" onClick={() => setActiveModal({ id: "edit-meeting", payload: meeting })}>
+                            Edit
+                          </button>
                       )}
                     </div>
-                  ))
-                )}
-              </div>
+                  </div>
+                ))
+              )}
             </div>
-          </section>
+          </div>
         )}
 
         {tab === "resources" && (
-          <section className={styles.grid}>
-            {data.capabilities.canManageResources && (
-              <form className={`${styles.card} ${styles.span4} ${styles.formGrid}`} onSubmit={submit(saveResource)}>
-                <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Publish Resource</h2>
-                <Field label="Title" name="title" required />
-                <Field label="Type" name="resourceType" options={["Link", "PDF", "Excel", "PowerPoint", "Document", "Image", "Video", "Other"]} />
-                <label className={`${styles.field} ${styles.fieldWide}`}>
-                  <span className={styles.label}>Upload File</span>
-                  <input className={styles.input} type="file" onChange={(event) => uploadFile(event.target.files?.[0])} />
-                  {uploadedFile && <span className={styles.muted}>Uploaded: {uploadedFile.fileName}. This link will be saved as the resource.</span>}
-                </label>
-                {uploadedFile ? (
-                  <input type="hidden" name="url" value={uploadedFile.url} />
-                ) : (
-                  <Field label="URL" name="url" type="url" required wide />
+          <div className={styles.vercelDashboard}>
+            <div className={styles.vercelToolbar}>
+              <div className={styles.vercelBreadcrumbProject}>Resource Library</div>
+              <div style={{ flex: 1 }} />
+              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                <select className={styles.select} style={{ maxWidth: 170 }} value={resourceTypeFilter} onChange={(event) => setResourceTypeFilter(event.target.value)}>
+                  <option value="all">All types</option>
+                  {["Link", "PDF", "Excel", "PowerPoint", "Document", "Image", "Video", "Other"].map((type) => <option key={type} value={type}>{type}</option>)}
+                </select>
+                <select className={styles.select} style={{ maxWidth: 150 }} value={sortResources} onChange={(event) => {
+                  setSortResources(event.target.value);
+                  refresh(event.target.value);
+                }}>
+                  <option value="newest">Newest</option>
+                  <option value="title">Title</option>
+                  <option value="type">Type</option>
+                </select>
+                {data.capabilities.canManageResources && (
+                <button className={styles.vercelButtonPrimary} style={{ margin: 0, padding: "8px 12px", minHeight: "unset" }} onClick={() => setActiveModal({ id: "create-resource" })}>
+                  Publish Resource +
+                </button>
                 )}
-                <Field label="Audience Roles" name="audienceRoles" options={ownerRoleOptions} defaultValue="all" wide />
-                <label className={`${styles.field} ${styles.fieldWide}`}>
-                  <span className={styles.label}>Visible Employees</span>
-                  <select className={styles.select} name="audienceUsers" multiple size={Math.min(Math.max(employees.length, 3), 6)}>
-                    {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} ({employee.email})</option>)}
-                  </select>
-                  <span className={styles.muted}>Optional. Ctrl/Shift to select multiple. They can view the resource even if their role is not in Audience Roles.</span>
-                </label>
-                <Field label="Tags" name="tags" wide />
-                <Field label="Description" name="description" textarea wide />
-                <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Publish Resource</button>
-              </form>
-            )}
-            <div className={`${styles.card} ${data.capabilities.canManageResources ? styles.span8 : styles.span12}`}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h2 className={styles.cardTitle}>Resource Library</h2>
-                  <p className={styles.muted}>Sort and filter role-visible resources by file type.</p>
-                </div>
-                <div className={styles.toolbar}>
-                  <select className={styles.select} style={{ maxWidth: 170 }} value={resourceTypeFilter} onChange={(event) => setResourceTypeFilter(event.target.value)}>
-                    <option value="all">All types</option>
-                    {["Link", "PDF", "Excel", "PowerPoint", "Document", "Image", "Video", "Other"].map((type) => <option key={type} value={type}>{type}</option>)}
-                  </select>
-                  <select className={styles.select} style={{ maxWidth: 150 }} value={sortResources} onChange={(event) => {
-                    setSortResources(event.target.value);
-                    refresh(event.target.value);
-                  }}>
-                    <option value="newest">Newest</option>
-                    <option value="title">Title</option>
-                    <option value="type">Type</option>
-                  </select>
-                </div>
               </div>
-              <div className={styles.resourceCardGrid}>{filteredResources.length === 0 ? <div className={styles.emptyState}>No matching resources.</div> : filteredResources.map((resource) => {
+            </div>
+
+            <div className={styles.vercelProjectsGrid}>
+              {filteredResources.length === 0 ? <div className={styles.emptyState}>No matching resources.</div> : filteredResources.map((resource) => {
                 const renderIcon = () => {
                   switch (resource.resourceType) {
                     case "Link": return "🔗";
@@ -2915,159 +2586,155 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   }
                 };
                 return (
-                  <div className={styles.resourceCard} key={resource.id}>
-                    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
-                      <div className={styles.rowHeader} style={{ alignItems: "flex-start", gap: 8, marginBottom: 0 }}>
-                        <strong style={{ fontSize: "1.05rem", display: "flex", alignItems: "center", gap: 6 }}>
-                          <span>{renderIcon()}</span>
-                          {resource.title}
-                        </strong>
-                        <span className={styles.pill}>{resource.resourceType}</span>
+                  <div className={styles.vercelProjectCard} key={resource.id}>
+                    <div className={styles.vercelProjectHeader}>
+                      <div className={styles.vercelProjectMeta} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: "1.2rem" }}>{renderIcon()}</span>
+                        <div>
+                          <h4>{resource.title}</h4>
+                          <span>Visible to: {displayRole(resource.audienceRoles)} {resource.tags ? `• ${resource.tags}` : ""}</span>
+                        </div>
                       </div>
-                      <p className={styles.muted} style={{ fontSize: "0.82rem", margin: 0 }}>
-                        Visible to: {displayRole(resource.audienceRoles)} {resource.tags ? `• ${resource.tags}` : ""}
-                      </p>
+                      <span className={styles.vercelCardTag}>{resource.resourceType}</span>
+                    </div>
+                    <div className={styles.vercelProjectDesc}>
                       {resource.description && (
-                        <p className={styles.muted} style={{ fontSize: "0.85rem", marginTop: 4, background: "var(--bg-shell)", padding: "8px 12px", borderRadius: 8, borderLeft: "3px solid var(--border-color)", lineHeight: "1.4" }}>
+                        <p style={{ fontSize: "0.85rem", lineHeight: "1.4", margin: "8px 0", color: "var(--text-primary)" }}>
                           {resource.description}
                         </p>
                       )}
                     </div>
-                    <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                        <a className={styles.button} href={resource.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", fontSize: "0.8rem", padding: "6px 14px", minHeight: 34, display: "inline-flex", alignItems: "center" }}>
-                          Open / Download
-                        </a>
-                        {data.capabilities.canManageResources && (
-                          <button className={styles.ghostButton} style={{ fontSize: "0.8rem", padding: "6px 14px", minHeight: 34, color: "#f87171" }} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "resource", id: resource.id.toString() }))}>
-                            Delete
-                          </button>
-                        )}
-                      </div>
+                    <div className={styles.vercelProjectFooter} style={{ flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+                      <a className={styles.button} href={resource.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", fontSize: "0.75rem", padding: "4px 10px", minHeight: "unset", background: "var(--text-primary)", color: "var(--text-inverse)", borderColor: "var(--text-primary)" }}>
+                        Open / Download
+                      </a>
                       {data.capabilities.canManageResources && (
-                        <details className={styles.editPanel} style={{ marginTop: 8 }}>
-                          <summary style={{ fontSize: "0.78rem" }}>Edit resource</summary>
-                          <form className={styles.formGrid} onSubmit={submit(saveResource)} style={{ marginTop: 8 }}>
-                            <input type="hidden" name="id" value={resource.id} />
-                            <Field label="Title" name="title" defaultValue={resource.title} required />
-                            <Field label="Type" name="resourceType" options={["Link", "PDF", "Excel", "PowerPoint", "Document", "Image", "Video", "Other"]} defaultValue={resource.resourceType} />
-                            <Field label="URL" name="url" type="url" defaultValue={resource.url} required wide />
-                            <Field label="Audience Roles" name="audienceRoles" options={audienceOptionsForValue(resource.audienceRoles)} defaultValue={resource.audienceRoles} wide />
-                            <label className={`${styles.field} ${styles.fieldWide}`}>
-                              <span className={styles.label}>Visible Employees</span>
-                              <select className={styles.select} name="audienceUsers" multiple size={Math.min(Math.max(employees.length, 3), 6)} defaultValue={(resource.audienceUsers || "").split(",").filter(Boolean)}>
-                                {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} ({employee.email})</option>)}
-                              </select>
-                              <span className={styles.muted}>Optional. Ctrl/Shift to select multiple. They can view the resource even if their role is not in Audience Roles.</span>
-                            </label>
-                            <Field label="Tags" name="tags" defaultValue={resource.tags || ""} wide />
-                            <Field label="Description" name="description" textarea defaultValue={resource.description || ""} wide />
-                            <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Resource</button>
-                          </form>
-                        </details>
+                        <button className={styles.ghostButton} style={{ fontSize: "0.75rem", padding: "4px 10px", minHeight: "unset", color: "#ef4444" }} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "resource", id: resource.id.toString() }))}>
+                          Delete
+                        </button>
+                      )}
+                      {data.capabilities.canManageResources && (
+                          <button className={styles.ghostButton} style={{ fontSize: "0.75rem", padding: "4px 10px", minHeight: "unset" }} type="button" onClick={() => setActiveModal({ id: "edit-resource", payload: resource })}>
+                            Edit
+                          </button>
                       )}
                     </div>
                   </div>
                 );
-              })}</div>
+              })}
             </div>
-          </section>
+          </div>
         )}
 
         {tab === "chat" && (
-          <section className={styles.chatContainer}>
-            <div className={styles.chatHeader}>
-              <div>
-                <h3 className={styles.cardTitle} style={{ margin: 0, fontSize: "1.2rem" }}>BLUEVOLT team room</h3>
-                <p className={styles.muted} style={{ margin: "2px 0 0 0", fontSize: "0.85rem" }}>
-                  Internal company chat for quick coordination across departments. Keep sensitive data out of group chat.
-                </p>
-              </div>
-              <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                <button className={styles.ghostButton} style={{ minHeight: "36px", padding: "6px 14px", fontSize: "0.85rem" }} type="button" onClick={() => refresh(sortResources, "chat")}>Refresh</button>
+          <div className={styles.vercelDashboard}>
+            <div className={styles.vercelToolbar}>
+              <div className={styles.vercelBreadcrumbProject}>BLUEVOLT team room</div>
+              <div style={{ flex: 1 }} />
+              <div className={styles.vercelToolbarActions}>
                 <span className={styles.pill}>{data.chatMessages.length} messages</span>
+                <button className={styles.ghostButton} type="button" onClick={() => refresh(sortResources, "chat")}>Refresh</button>
               </div>
             </div>
 
-            <div className={styles.chatMessagesArea}>
-              {data.chatMessages.length === 0 ? (
-                <div className={styles.emptyState}>No messages yet. Start the conversation!</div>
-              ) : (
-                data.chatMessages.map((message) => {
-                  const isMine = message.employeeId === currentUserId;
-                  const initials = message.employeeName
-                    ? message.employeeName
-                        .split(" ")
-                        .filter(Boolean)
-                        .slice(0, 2)
-                        .map((n) => n[0].toUpperCase())
-                        .join("")
-                    : "??";
+            <div className={styles.vercelCard} style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 200px)", padding: 0, overflow: "hidden" }}>
+              <div className={styles.chatMessagesArea} style={{ flex: 1, overflowY: "auto", padding: 24 }}>
+                {data.chatMessages.length === 0 ? (
+                  <div className={styles.emptyState}>No messages yet. Start the conversation!</div>
+                ) : (
+                  data.chatMessages.map((message) => {
+                    const isMine = message.employeeId === currentUserId;
+                    const initials = message.employeeName
+                      ? message.employeeName
+                          .split(" ")
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .map((n) => n[0].toUpperCase())
+                          .join("")
+                      : "??";
 
-                  return (
-                    <div
-                      key={message.id}
-                      className={`${styles.chatMessageRow} ${isMine ? styles.chatMessageRowMine : ""}`}
-                    >
-                      {!isMine && (
-                        <div className={styles.chatAvatar} title={message.employeeName}>
-                          {initials}
-                        </div>
-                      )}
-                      <div className={styles.chatBubbleContent}>
-                        <div className={`${styles.chatMeta} ${isMine ? styles.chatMetaMine : ""}`}>
-                          <span className={styles.chatSenderName}>
-                            {isMine ? "You" : message.employeeName}
-                          </span>
-                          <span className={styles.chatSenderRole}>
-                            {displayRole(message.employeeRole)}
-                          </span>
-                          <span>{formatPortalTimeAgo(message.createdAt)}</span>
-                        </div>
-                        <div
-                          className={`${styles.chatBubbleNew} ${isMine ? styles.chatBubbleNewMine : ""} ${
-                            (message as { sending?: boolean }).sending ? styles.chatBubbleSending : ""
-                          }`}
-                        >
-                          <p style={{ margin: 0 }}>{message.body}</p>
+                    return (
+                      <div
+                        key={message.id}
+                        className={`${styles.chatMessageRow} ${isMine ? styles.chatMessageRowMine : ""}`}
+                        style={{ display: "flex", gap: 12, marginBottom: 16, flexDirection: isMine ? "row-reverse" : "row" }}
+                      >
+                        {!isMine && (
+                          <div className={styles.chatAvatar} title={message.employeeName} style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--border-color)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.8rem", fontWeight: 600 }}>
+                            {initials}
+                          </div>
+                        )}
+                        <div className={styles.chatBubbleContent} style={{ maxWidth: "70%", display: "flex", flexDirection: "column", alignItems: isMine ? "flex-end" : "flex-start" }}>
+                          <div className={`${styles.chatMeta} ${isMine ? styles.chatMetaMine : ""}`} style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 4, display: "flex", gap: 8 }}>
+                            <span className={styles.chatSenderName} style={{ fontWeight: 600 }}>
+                              {isMine ? "You" : message.employeeName}
+                            </span>
+                            <span className={styles.chatSenderRole}>
+                              {displayRole(message.employeeRole)}
+                            </span>
+                            <span>{formatPortalTimeAgo(message.createdAt)}</span>
+                          </div>
+                          <div
+                            className={`${styles.chatBubbleNew} ${isMine ? styles.chatBubbleNewMine : ""} ${
+                              (message as { sending?: boolean }).sending ? styles.chatBubbleSending : ""
+                            }`}
+                            style={{ 
+                              background: isMine ? "var(--text-brand)" : "var(--bg-shell)", 
+                              color: isMine ? "#fff" : "var(--text-primary)", 
+                              border: isMine ? "none" : "1px solid var(--border-color)",
+                              padding: "10px 14px",
+                              borderRadius: 12,
+                              borderTopRightRadius: isMine ? 4 : 12,
+                              borderTopLeftRadius: isMine ? 12 : 4,
+                              fontSize: "0.9rem",
+                              opacity: (message as { sending?: boolean }).sending ? 0.7 : 1
+                            }}
+                          >
+                            <p style={{ margin: 0 }}>{message.body}</p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })
-              )}
-              <div ref={chatEndRef} />
-            </div>
-
-            <form
-              className={styles.chatInputContainer}
-              onSubmit={handleSendChatMessage}
-            >
-              <div className={styles.chatInputWrapper}>
-                <textarea
-                  className={styles.chatTextarea}
-                  value={chatInputText}
-                  onChange={(e) => setChatInputText(e.target.value)}
-                  placeholder="Type a message... (Press Enter to send, Shift+Enter for new line)"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendChatMessage();
-                    }
-                  }}
-                  rows={1}
-                />
+                    );
+                  })
+                )}
+                <div ref={chatEndRef} />
               </div>
-              <button
-                type="submit"
-                className={styles.chatSendButton}
-                disabled={!chatInputText.trim()}
-                title="Send Message"
-              >
-                <MessageCircle size={20} />
-              </button>
-            </form>
-          </section>
+
+              <div style={{ padding: 16, borderTop: "1px solid var(--border-color)", background: "var(--bg-card)" }}>
+                <form
+                  className={styles.chatInputContainer}
+                  onSubmit={handleSendChatMessage}
+                  style={{ display: "flex", gap: 12, alignItems: "flex-end" }}
+                >
+                  <div className={styles.chatInputWrapper} style={{ flex: 1, position: "relative" }}>
+                    <textarea
+                      className={styles.chatTextarea}
+                      value={chatInputText}
+                      onChange={(e) => setChatInputText(e.target.value)}
+                      placeholder="Type a message... (Press Enter to send, Shift+Enter for new line)"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendChatMessage();
+                        }
+                      }}
+                      rows={1}
+                      style={{ width: "100%", padding: "12px 16px", borderRadius: 20, border: "1px solid var(--border-color)", background: "var(--bg-input)", resize: "none", minHeight: 44, maxHeight: 120, outline: "none", fontSize: "0.95rem" }}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className={styles.chatSendButton}
+                    disabled={!chatInputText.trim()}
+                    title="Send Message"
+                    style={{ width: 44, height: 44, borderRadius: "50%", background: "var(--text-brand)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", border: "none", cursor: chatInputText.trim() ? "pointer" : "not-allowed", opacity: chatInputText.trim() ? 1 : 0.5, flexShrink: 0 }}
+                  >
+                    <MessageCircle size={20} />
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
         )}
 
         {tab === "access" && (
@@ -3105,6 +2772,179 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
             currentUserId={currentUserId}
           />
         )}
+
+        {activeModal?.id === "create-expense" && (
+          <Modal title={canManageExpenseClaims ? "Create / Record Claim" : "New Expense Claim"} subtitle={canManageExpenseClaims ? "Select an employee only when recording a claim on behalf of someone else." : `This claim will be submitted as ${data.session.name}.`} onClose={() => setActiveModal(null)}>
+            <form className={styles.formGrid} onSubmit={submit(saveExpenseClaim, () => setActiveModal(null))}>
+              {canManageExpenseClaims && <Field label="Employee" name="employeeId" options={employeeOptions} wide />}
+              <Field label="Category" name="category" options={["Travel", "Food", "Software", "Office", "General"]} />
+              <Field label="Amount" name="amount" type="number" required />
+              <Field label="Claim Date" name="claimDate" type="date" required />
+              <Field label="Receipt URL" name="receiptUrl" type="url" wide />
+              {canManageExpenseClaims && <Field label="Status" name="status" options={["Pending", "Approved", "Rejected", "Paid"]} />}
+              <Field label="Notes" name="notes" textarea wide />
+              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">{canManageExpenseClaims ? "Save Claim" : "Submit Claim"}</button>
+            </form>
+          </Modal>
+        )}
+
+        {activeModal?.id === "edit-expense" && activeModal.payload && (
+          <Modal title="Edit Expense" subtitle="Update claim details." onClose={() => setActiveModal(null)}>
+            <form className={styles.formGrid} onSubmit={submit(saveExpenseClaim, () => setActiveModal(null))}>
+              <input type="hidden" name="id" value={activeModal.payload.id} />
+              {canManageExpenseClaims && <Field label="Employee" name="employeeId" options={employeeOptions} defaultValue={activeModal.payload.employeeId.toString()} wide />}
+              <Field label="Category" name="category" options={["Travel", "Food", "Software", "Office", "General"]} defaultValue={activeModal.payload.category} />
+              <Field label="Amount" name="amount" type="number" defaultValue={activeModal.payload.amount.toString()} required />
+              <Field label="Claim Date" name="claimDate" type="date" defaultValue={inputDate(activeModal.payload.claimDate)} required />
+              <Field label="Receipt URL" name="receiptUrl" type="url" defaultValue={activeModal.payload.receiptUrl || ""} wide />
+              {canManageExpenseClaims && <Field label="Status" name="status" options={["Pending", "Approved", "Rejected", "Paid"]} defaultValue={activeModal.payload.status} />}
+              <Field label="Notes" name="notes" textarea defaultValue={activeModal.payload.notes || ""} wide />
+              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Expense</button>
+            </form>
+          </Modal>
+        )}
+
+        {activeModal?.id === "create-attendance" && (
+          <Modal title="Attendance Entry" subtitle="Add or adjust attendance." onClose={() => setActiveModal(null)}>
+            <form className={styles.formGrid} onSubmit={submit(saveAttendance, () => setActiveModal(null))}>
+              <Field label="Employee" name="employeeId" options={employeeOptions} required wide />
+              <Field label="Work Date" name="workDate" type="date" required />
+              <Field label="Login At" name="loginAt" type="datetime-local" />
+              <Field label="Logout At" name="logoutAt" type="datetime-local" />
+              <Field label="Total Hours" name="totalHours" type="number" />
+              <Field label="Status" name="status" options={["Present", "Absent", "Late", "Half-day", "Remote"]} />
+              <Field label="Notes" name="notes" textarea wide />
+              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Attendance</button>
+            </form>
+          </Modal>
+        )}
+
+        {activeModal?.id === "create-leave" && (
+          <Modal title="Leave Request" subtitle="Apply for or record a leave." onClose={() => setActiveModal(null)}>
+            <form className={styles.formGrid} onSubmit={submit(saveLeaveRequest, () => setActiveModal(null))}>
+              {data.capabilities.canUseSuperiorDashboard && data.capabilities.canManageOps && <Field label="Employee" name="employeeId" options={employeeOptions} wide />}
+              <Field label="Leave Type" name="leaveType" options={["Casual", "Sick", "Unpaid", "Emergency", "Comp Off"]} />
+              <Field label="Starts" name="startsAt" type="date" required />
+              <Field label="Ends" name="endsAt" type="date" required />
+              <Field label="Reason" name="reason" textarea wide />
+              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Leave</button>
+            </form>
+          </Modal>
+        )}
+
+        {activeModal?.id === "create-task" && (
+          <Modal title="Assign Task" subtitle="Create a new task." onClose={() => setActiveModal(null)}>
+            <form className={styles.formGrid} onSubmit={submit(saveTask, () => setActiveModal(null))}>
+              <Field label="Title" name="title" required wide />
+              <Field label="Assign To" name="assignedTo" options={[{ label: "Role based / unassigned", value: "" }, ...employeeOptions]} wide />
+              <Field label="Owner Role" name="ownerRole" options={ownerRoleOptions} />
+              <Field label="Priority" name="priority" options={["High", "Medium", "Low"]} />
+              <Field label="Status" name="status" options={["Pending", "Needs Review", "Blocked", "Done"]} />
+              <Field label="Due At" name="dueAt" type="datetime-local" />
+              <Field label="Proof URL" name="proofUrl" type="url" wide />
+              <Field label="Description" name="description" textarea wide />
+              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Task</button>
+            </form>
+          </Modal>
+        )}
+
+        {activeModal?.id === "edit-task" && activeModal.payload && (
+          <Modal title="Edit Task" subtitle="Update task details." onClose={() => setActiveModal(null)}>
+            <form className={styles.formGrid} onSubmit={submit(saveTask, () => setActiveModal(null))}>
+              <input type="hidden" name="id" value={activeModal.payload.id} />
+              <Field label="Title" name="title" defaultValue={activeModal.payload.title} required wide />
+              <Field label="Assign To" name="assignedTo" options={[{ label: "Role based / unassigned", value: "" }, ...employeeOptions]} defaultValue={activeModal.payload.assignedTo?.toString() || ""} wide />
+              <Field label="Owner Role" name="ownerRole" options={ownerRoleOptions} defaultValue={activeModal.payload.ownerRole} />
+              <Field label="Priority" name="priority" options={["High", "Medium", "Low"]} defaultValue={activeModal.payload.priority} />
+              <Field label="Status" name="status" options={["Pending", "Needs Review", "Blocked", "Done"]} defaultValue={activeModal.payload.status === "Open" ? "Pending" : activeModal.payload.status} />
+              <Field label="Due At" name="dueAt" type="datetime-local" defaultValue={inputDateTime(activeModal.payload.dueAt)} />
+              <Field label="Proof URL" name="proofUrl" type="url" defaultValue={activeModal.payload.proofUrl || ""} wide />
+              <Field label="Description" name="description" textarea defaultValue={activeModal.payload.description || ""} wide />
+              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Task</button>
+            </form>
+          </Modal>
+        )}
+        {activeModal?.id === "create-announcement" && (
+          <Modal title="New Announcement" subtitle="Broadcast a message to the team." onClose={() => setActiveModal(null)}>
+            <form className={styles.formGrid} onSubmit={submit(saveAnnouncement, () => setActiveModal(null))}>
+              <Field label="Title" name="title" required wide />
+              <Field label="Body" name="body" textarea required wide />
+              <Field label="Important" name="isImportant" options={[{ label: "No", value: "false" }, { label: "Yes", value: "true" }]} defaultValue="false" />
+              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Publish</button>
+            </form>
+          </Modal>
+        )}
+
+        {activeModal?.id === "edit-announcement" && activeModal.payload && (
+          <Modal title="Edit Announcement" subtitle="Update broadcast message." onClose={() => setActiveModal(null)}>
+            <form className={styles.formGrid} onSubmit={submit(saveAnnouncement, () => setActiveModal(null))}>
+              <input type="hidden" name="id" value={activeModal.payload.id} />
+              <Field label="Title" name="title" defaultValue={activeModal.payload.title} required wide />
+              <Field label="Body" name="body" textarea defaultValue={activeModal.payload.body} required wide />
+              <Field label="Important" name="isImportant" options={[{ label: "No", value: "false" }, { label: "Yes", value: "true" }]} defaultValue={activeModal.payload.isImportant ? "true" : "false"} />
+              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update</button>
+            </form>
+          </Modal>
+        )}
+
+        {activeModal?.id === "create-meeting" && (
+          <Modal title="Schedule Meeting" subtitle="Create a new event." onClose={() => setActiveModal(null)}>
+            <form className={styles.formGrid} onSubmit={submit(saveMeeting, () => setActiveModal(null))}>
+              <Field label="Title" name="title" required wide />
+              <Field label="Description" name="description" textarea wide />
+              <Field label="Time" name="time" type="datetime-local" required />
+              <Field label="Duration (min)" name="durationMinutes" type="number" defaultValue="30" required />
+              <Field label="Type" name="meetingType" options={["Sync", "1-on-1", "All Hands", "Client", "Training"]} />
+              <Field label="Meet URL" name="meetUrl" type="url" wide />
+              <Field label="Location" name="location" />
+              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Schedule</button>
+            </form>
+          </Modal>
+        )}
+
+        {activeModal?.id === "edit-meeting" && activeModal.payload && (
+          <Modal title="Edit Meeting" subtitle="Update event details." onClose={() => setActiveModal(null)}>
+            <form className={styles.formGrid} onSubmit={submit(saveMeeting, () => setActiveModal(null))}>
+              <input type="hidden" name="id" value={activeModal.payload.id} />
+              <Field label="Title" name="title" defaultValue={activeModal.payload.title} required wide />
+              <Field label="Description" name="description" textarea defaultValue={activeModal.payload.description || ""} wide />
+              <Field label="Time" name="time" type="datetime-local" defaultValue={inputDateTime(activeModal.payload.time)} required />
+              <Field label="Duration (min)" name="durationMinutes" type="number" defaultValue={activeModal.payload.durationMinutes.toString()} required />
+              <Field label="Type" name="meetingType" options={["Sync", "1-on-1", "All Hands", "Client", "Training"]} defaultValue={activeModal.payload.meetingType} />
+              <Field label="Meet URL" name="meetUrl" type="url" defaultValue={activeModal.payload.meetUrl || ""} wide />
+              <Field label="Location" name="location" defaultValue={activeModal.payload.location || ""} />
+              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Meeting</button>
+            </form>
+          </Modal>
+        )}
+
+        {activeModal?.id === "create-resource" && (
+          <Modal title="Publish Resource" subtitle="Share a learning resource." onClose={() => setActiveModal(null)}>
+            <form className={styles.formGrid} onSubmit={submit(saveResource, () => setActiveModal(null))}>
+              <Field label="Title" name="title" required />
+              <Field label="Description" name="description" textarea required wide />
+              <Field label="URL" name="url" type="url" required wide />
+              <Field label="Type" name="resourceType" options={["Video", "Article", "Course", "Tool"]} />
+              <Field label="Required Role" name="requiredRole" options={[{ label: "Everyone", value: "" }, ...ownerRoleOptions]} />
+              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Publish Resource</button>
+            </form>
+          </Modal>
+        )}
+
+        {activeModal?.id === "edit-resource" && activeModal.payload && (
+          <Modal title="Edit Resource" subtitle="Update resource link." onClose={() => setActiveModal(null)}>
+            <form className={styles.formGrid} onSubmit={submit(saveResource, () => setActiveModal(null))}>
+              <input type="hidden" name="id" value={activeModal.payload.id} />
+              <Field label="Title" name="title" defaultValue={activeModal.payload.title} required />
+              <Field label="Description" name="description" textarea defaultValue={activeModal.payload.description || ""} required wide />
+              <Field label="URL" name="url" type="url" defaultValue={activeModal.payload.url} required wide />
+              <Field label="Type" name="resourceType" options={["Video", "Article", "Course", "Tool"]} defaultValue={activeModal.payload.resourceType} />
+              <Field label="Required Role" name="requiredRole" options={[{ label: "Everyone", value: "" }, ...ownerRoleOptions]} defaultValue={activeModal.payload.requiredRole || ""} />
+              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Resource</button>
+            </form>
+          </Modal>
+        )}
+
       </main>
     </div>
   );

@@ -25,13 +25,7 @@ const nextConfig: NextConfig = {
     ],
   },
   async redirects() {
-    return [
-      {
-        source: "/stores24/:path*",
-        destination: "https://stores24.bluevolt.group/stores24/:path*",
-        permanent: true,
-      },
-    ];
+    return [];
   },
   async headers() {
     return [

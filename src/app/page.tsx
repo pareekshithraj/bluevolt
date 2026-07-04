@@ -1,7 +1,5 @@
 import Image from "next/image";
 import Link from "next/link";
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 import { ArrowRight, ShieldCheck, Smartphone, Workflow } from "lucide-react";
 import AnimatedMeshGradient from "@/components/AnimatedMeshGradient";
 import { InvoicingWidget, SecurityWidget, UnifiedRecordsWidget } from "@/components/BentoWidgets";
@@ -46,19 +44,10 @@ const operatingLanes = [
 const ecosystemLogos = [
   { href: "/about", src: "/Assets/Logos/BLUEVOLT.png", alt: "BLUEVOLT Logo" },
   { href: "https://schools24.in", src: "/Assets/Logos/SCHOOLS24.png", alt: "Schools24 Logo", external: true },
-  { href: "https://stores24.bluevolt.group", src: "/Assets/Logos/STORES24.png", alt: "Stores24 Logo", external: true },
-  { href: "/products/events24", src: "/Assets/Logos/EVENTS24.png", alt: "Events24 Logo" },
   { href: "https://hoscore.in", src: "/Assets/Logos/HOSCORE.png", alt: "Hoscore Logo", external: true },
 ];
 
 export default async function Home() {
-  const host = (await headers()).get("host")?.toLowerCase() ?? "";
-  const stores24External = "https://stores24.bluevolt.group";
-
-  if (host.startsWith("stores24.")) {
-    redirect(stores24External);
-  }
-
   return (
     <main>
       <div
@@ -393,13 +382,13 @@ export default async function Home() {
           background: "linear-gradient(to bottom, #080c16 0%, #0e1224 100%)",
         }}
       >
-        <div className="logo-strip-title">
+        <div className="logo-strip-title" style={{ display: "none" }}>
           <Reveal delay={0.1}>
-            <span>Trusted & Powered by Leading Institutions</span>
+            <span></span>
           </Reveal>
         </div>
 
-        <div className="logo-strip-row">
+        <div className="logo-strip-row" style={{ marginTop: "2rem" }}>
           {ecosystemLogos.map((logo, index) => (
             <Reveal key={logo.alt} delay={0.1 + index * 0.1}>
               <a

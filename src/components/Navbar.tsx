@@ -66,9 +66,6 @@ export default function Navbar() {
                         <Link href="https://schools24.in" target="_blank" className="nav-link-corporate" onClick={() => setMobileMenuOpen(false)}>
                             Schools24
                         </Link>
-                        <Link href="https://stores24.bluevolt.group" target="_blank" className="nav-link-corporate" onClick={() => setMobileMenuOpen(false)}>
-                            Stores24
-                        </Link>
                         <Link href="/services" className="nav-link-corporate" onClick={() => setMobileMenuOpen(false)}>
                             Services
                         </Link>

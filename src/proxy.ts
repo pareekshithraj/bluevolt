@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionCookieName, readSessionToken } from "@/lib/stores24/session";
 import { getEmployeeSessionCookieName, readEmployeeSessionToken } from "@/lib/employee/session";
 
 export const config = {
@@ -18,9 +17,8 @@ export const config = {
 export async function proxy(request: NextRequest) {
     const url = request.nextUrl.clone();
     const hostname = request.headers.get("host") || "";
-    const stores24External = "https://stores24.bluevolt.group";
 
-    // Extract subdomain: e.g. "stores24.bluevolt.group" -> "stores24"
+    // Extract subdomain: e.g. "lifeos.bluevolt.group" -> "lifeos"
     // Handle both production and local development
     const productionDomains = ["bluevolt.group", "bluevolt.in"];
     const localDomain = "localhost:3000";
@@ -35,14 +33,7 @@ export async function proxy(request: NextRequest) {
     }
 
     if (!subdomain && hostname.endsWith(`.${localDomain}`)) {
-        // Local dev: stores24.localhost:3000
         subdomain = hostname.replace(`.${localDomain}`, "");
-    }
-
-    // If stores24 still points here, send traffic to separate deployment.
-    if (subdomain === "stores24") {
-        const redirectUrl = new URL(`${stores24External}${url.pathname}${url.search}`);
-        return NextResponse.redirect(redirectUrl, 308);
     }
 
     // Route lifeos subdomain to locally hosted static app in /public/lifeos
@@ -98,47 +89,6 @@ export async function proxy(request: NextRequest) {
         return NextResponse.rewrite(url);
     }
 
-    if (url.pathname.startsWith("/stores24")) {
-        const session = await readSessionToken(request.cookies.get(getSessionCookieName())?.value);
-        const isLoginPage = url.pathname === "/stores24/login";
-        const isProtectedStores24Route =
-            url.pathname.startsWith("/stores24/dashboard") ||
-            url.pathname.startsWith("/stores24/products") ||
-            url.pathname.startsWith("/stores24/inventory") ||
-            url.pathname.startsWith("/stores24/sales") ||
-            url.pathname.startsWith("/stores24/purchases") ||
-            url.pathname.startsWith("/stores24/suppliers") ||
-            url.pathname.startsWith("/stores24/staff") ||
-            url.pathname.startsWith("/stores24/reports") ||
-            url.pathname.startsWith("/stores24/settings") ||
-            url.pathname.startsWith("/stores24/pos") ||
-            url.pathname.startsWith("/stores24/print-bill");
-        const isAdminRoute =
-            url.pathname.startsWith("/stores24/dashboard") ||
-            url.pathname.startsWith("/stores24/products") ||
-            url.pathname.startsWith("/stores24/inventory") ||
-            url.pathname.startsWith("/stores24/sales") ||
-            url.pathname.startsWith("/stores24/purchases") ||
-            url.pathname.startsWith("/stores24/suppliers") ||
-            url.pathname.startsWith("/stores24/staff") ||
-            url.pathname.startsWith("/stores24/reports") ||
-            url.pathname.startsWith("/stores24/settings");
-
-        if (isLoginPage && session) {
-            const destination = session.role === "Cashier" ? "/stores24/pos" : "/stores24/dashboard";
-            return NextResponse.redirect(new URL(destination, request.url));
-        }
-
-        if (isProtectedStores24Route && !session) {
-            const loginUrl = new URL("/stores24/login", request.url);
-            loginUrl.searchParams.set("next", url.pathname);
-            return NextResponse.redirect(loginUrl);
-        }
-
-        if (session?.role === "Cashier" && isAdminRoute) {
-            return NextResponse.redirect(new URL("/stores24/pos", request.url));
-        }
-    }
 
     if (url.pathname.startsWith("/employee")) {
         const session = await readEmployeeSessionToken(request.cookies.get(getEmployeeSessionCookieName())?.value);

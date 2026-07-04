@@ -5,7 +5,7 @@ import path from "node:path";
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { hashPassword, verifyPassword } from "@/lib/stores24/password";
+import { hashPassword, verifyPassword } from "@/lib/employee/password";
 import {
   clearEmployeeSession,
   getEmployeeSession,
@@ -159,8 +159,8 @@ function numberValue(value?: string): number {
 
 const localEmployeeStorePath = path.join(process.cwd(), ".bluevolt-employee-store.json");
 const localFallbackEnabled =
-  process.env.BLUEVOLT_ALLOW_LOCAL_FALLBACK === "true" ||
-  process.env.NODE_ENV !== "production";
+  process.env.NODE_ENV !== "production" &&
+  (process.env.BLUEVOLT_ALLOW_LOCAL_FALLBACK === "true" || process.env.NODE_ENV === "development");
 
 type LocalEmployeeUser = {
   id: number;
@@ -1009,6 +1009,7 @@ export async function loginEmployee(input: { email: string; password: string }) 
           },
         };
       }
+      return { success: false, error: "Invalid employee credentials." };
     }
     console.error("Employee login failed", error);
     return { success: false, error: friendlyEmployeeError(error, "Login failed. Please try again.") };

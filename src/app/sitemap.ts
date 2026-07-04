@@ -53,12 +53,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
             changeFrequency: 'monthly',
             priority: 0.9,
         },
-        {
-            url: `${baseUrl}/products/stores24`,
-            lastModified: new Date(),
-            changeFrequency: 'monthly',
-            priority: 0.9,
-        },
+
         {
             url: `${baseUrl}/blog`,
             lastModified: new Date(),

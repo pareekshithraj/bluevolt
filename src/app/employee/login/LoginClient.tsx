@@ -133,7 +133,7 @@ export default function LoginClient() {
     <main className={`${styles.login} ${theme === "light" ? styles.themeLight : styles.themeDark}`}>
       <div className={styles.loginCard} style={{ maxWidth: "440px", padding: "3rem" }}>
         <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-          <Image src="/logo.png" alt="BLUEVOLT Logo" width={80} height={40} style={{ margin: "0 auto 1.5rem" }} />
+          <Image src="/Assets/Logos/BLUEVOLT.png" alt="BLUEVOLT Logo" width={180} height={40} style={{ margin: "0 auto 1.5rem", objectFit: "contain" }} unoptimized />
           <h1 style={{ fontSize: "1.5rem", fontWeight: "600", color: "var(--text-primary)", marginBottom: "0.5rem" }}>
             Sign in to BLUEVOLT
           </h1>
@@ -143,7 +143,7 @@ export default function LoginClient() {
         </div>
 
         {error && (
-          <div style={{ backgroundColor: "var(--error-bg)", color: "var(--error-text)", border: "1px solid var(--error-border)", padding: "1rem", borderRadius: "8px", marginBottom: "1.5rem", fontSize: "0.85rem" }}>
+          <div style={{ backgroundColor: "rgba(239, 68, 68, 0.1)", color: "#ef4444", border: "1px solid rgba(239, 68, 68, 0.2)", padding: "1rem", borderRadius: "8px", marginBottom: "1.5rem", fontSize: "0.85rem" }}>
             {error}
           </div>
         )}

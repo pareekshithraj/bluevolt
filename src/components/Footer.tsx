@@ -50,7 +50,6 @@ export default function Footer() {
                         <h4>ECOSYSTEM</h4>
                         <ul>
                             <li><a href="https://schools24.in" target="_blank" rel="noopener noreferrer">Schools24</a></li>
-                            <li><a href="https://stores24.bluevolt.group" target="_blank" rel="noopener noreferrer">Stores24 ERP</a></li>
                             <li><Link href="/#ecosystem">Events24 <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.55rem', padding: '0.1rem 0.4rem', border: '1px solid var(--border-main)', marginLeft: '0.5rem', color: 'var(--text-primary)' }}>Beta</span></Link></li>
                         </ul>
                     </div>

@@ -448,7 +448,6 @@ export default function ContactPage() {
                       <option>Schools24</option>
                       <option>Events24</option>
                       <option>Life OS</option>
-                      <option>Stores24</option>
                     </select>
                   </div>
 

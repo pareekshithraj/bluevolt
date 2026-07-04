@@ -16,15 +16,7 @@ const DEFAULT_PROJECTS = [
     url: "https://schools24.in",
     passwordHash: "schools24",
   },
-  {
-    id: "stores24-erp",
-    name: "Stores24 POS Settlement Portal",
-    client: "Vemgal Mart Group",
-    status: "ACTIVE",
-    latency: "6.2ms",
-    url: "https://stores24.bluevolt.group",
-    passwordHash: "stores24",
-  },
+
   {
     id: "project-nexus",
     name: "Autonomous Logistics Node",

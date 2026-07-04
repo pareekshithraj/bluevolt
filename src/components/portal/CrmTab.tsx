@@ -10,6 +10,7 @@ import {
   saveCrmSheetRequest,
 } from "@/app/actions/employee-portal";
 import styles from "@/app/employee/portal.module.css";
+import Modal from "./Modal";
 
 type PortalData = Awaited<ReturnType<typeof getEmployeePortalData>>;
 
@@ -208,77 +209,13 @@ export default function CrmTab({
         <div className={styles.toolbar}>
           {canEditCrmSheet && (
             <>
-              <button className={styles.button} type="button" onClick={() => { setActiveCrmSheetId(null); setCrmPanel(crmPanel === "source" ? "none" : "source"); }}>Import sheet</button>
+              <button className={styles.button} type="button" onClick={() => { setActiveCrmSheetId(null); setActiveModal({ id: "create-crm-sheet" }); }}>Import sheet</button>
             </>
           )}
           {activeCrmSheet && <button className={styles.ghostButton} type="button" onClick={() => setActiveCrmSheetId(null)}>Back to list</button>}
         </div>
       </div>}
 
-      {!activeCrmSheet && canEditCrmSheet && crmPanel === "source" && (
-        <form className={`${styles.card} ${styles.span12} ${styles.formGrid}`} onSubmit={submit(saveCrmSheetRequest, () => setCrmPanel("none"))}>
-          <h2 className={`${styles.cardTitle} ${styles.fieldWide}`}>Create / Import CRM Sheet</h2>
-          <p className={`${styles.muted} ${styles.fieldWide}`}>Upload or paste Excel/CSV data. Roles with CRM Manage access can create and change sheets.</p>
-          <div className={`${styles.field} ${styles.fieldWide}`}>
-            <span className={styles.label}>Sheet Title</span>
-            <input className={styles.input} name="title" placeholder="e.g. May leads - Bengaluru" required />
-          </div>
-          <input type="hidden" name="sourceName" value="Imported Data" />
-          <input type="hidden" name="ownerRole" value={data.session.role} />
-          <label className={`${styles.field} ${styles.fieldWide}`}>
-            <span className={styles.label}>Visible Roles</span>
-            <select className={styles.select} name="audienceRoles" defaultValue="all">
-              {audienceRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
-            </select>
-          </label>
-          <label className={`${styles.field} ${styles.fieldWide}`}>
-            <span className={styles.label}>Visible Employees</span>
-            <select className={styles.select} name="audienceUsers" multiple size={Math.min(Math.max(assignableEmployees.length, 3), 8)}>
-              {assignableEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} ({employee.email})</option>)}
-            </select>
-            <span className={styles.muted}>Optional. Use Ctrl/Shift to select multiple people. They can see the sheet even if their role is not selected.</span>
-          </label>
-          <label className={`${styles.field} ${styles.fieldWide}`}>
-            <span className={styles.label}>Editor Roles</span>
-            <select className={styles.select} name="editorRoles" defaultValue={data.session.role}>
-              {audienceRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
-            </select>
-            <span className={styles.muted}>Editors can mark rows and edit cells. They are automatically kept visible.</span>
-          </label>
-          <label className={`${styles.field} ${styles.fieldWide}`}>
-            <span className={styles.label}>Editor Employees</span>
-            <select className={styles.select} name="editorUsers" multiple size={Math.min(Math.max(assignableEmployees.length, 3), 8)}>
-              {assignableEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} ({employee.email})</option>)}
-            </select>
-          </label>
-          <label className={`${styles.field} ${styles.fieldWide}`}>
-            <span className={styles.label}>Upload Excel / CSV</span>
-            <input className={styles.input} type="file" accept=".xlsx,.xls,.csv,.tsv,.txt" onChange={(event) => loadCrmSheetFile(event.target.files?.[0])} />
-            {crmSheetFileName && <span className={styles.muted}>{crmSheetFileName} loaded into the source box.</span>}
-          </label>
-          <label className={`${styles.field} ${styles.fieldWide}`}>
-            <span className={styles.label}>Paste Excel / CSV Rows</span>
-            <textarea className={styles.textarea} name="pasteData" value={crmSheetPaste} onChange={(event) => setCrmSheetPaste(event.target.value)} placeholder={"Company\tContact\tEmail\tPhone\tNext Action\nAcme Pvt Ltd\tRavi\travi@example.com\t9999999999\tCall today"} required />
-          </label>
-          {crmImportPreview && (
-            <div className={`${styles.importPreview} ${styles.fieldWide}`}>
-              <div>
-                <span className={styles.label}>Import Preview</span>
-                <strong>{crmImportPreview.rows} rows, {crmImportPreview.columns} columns</strong>
-              </div>
-              <div className={styles.miniStatGrid}>
-                <span>{crmImportPreview.phoneColumns} phone columns</span>
-                <span>{crmImportPreview.duplicatePhones} duplicate phones</span>
-                <span>{crmImportPreview.rows > 1000 ? "Large sheet: virtual scroll ready" : "Ready for quick import"}</span>
-              </div>
-            </div>
-          )}
-          <div className={`${styles.fieldWide}`} style={{ display: "flex", gap: 12 }}>
-            <button className={styles.button} type="submit" style={{ flex: 1 }}>Create Sheet</button>
-            <button className={styles.ghostButton} type="button" onClick={() => setCrmPanel("none")} style={{ flex: 1 }}>Cancel</button>
-          </div>
-        </form>
-      )}
 
       {!activeCrmSheet && (
         <div className={`${styles.card} ${styles.span12}`}>
@@ -368,10 +305,15 @@ export default function CrmTab({
 
         return (
           <div className={styles.fullSheetApp}>
-            <div className={styles.sheetAppHeader}>
-              <button className={styles.sheetLogoButton} type="button" onClick={() => setActiveCrmSheetId(null)} aria-label="Back to CRM sheets">
-                <Image src="/logo.png" alt="BLUEVOLT Logo" width={70} height={36} className={styles.bluevoltSheetLogo} />
-              </button>
+            <div className={styles.sheetAppHeader} style={{ display: "flex", gap: 16, alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button className={styles.sheetLogoButton} type="button" onClick={() => setActiveCrmSheetId(null)} aria-label="Back to CRM sheets">
+                  <Image src="/logo.png" alt="BLUEVOLT Logo" width={70} height={36} className={styles.bluevoltSheetLogo} />
+                </button>
+                <button className={styles.ghostButton} type="button" onClick={() => setActiveCrmSheetId(null)} style={{ padding: "6px 12px", minHeight: "unset", fontSize: "0.85rem" }}>
+                  &larr; Back to CRM
+                </button>
+              </div>
               <div className={styles.sheetTitleBlock}>
                 <div className={styles.sheetDocumentName}>{activeCrmSheet.title || "Untitled spreadsheet"} <span>*</span></div>
                 <div className={styles.sheetSubTitle}>{activeCrmSheet.sourceName || "BLUEVOLT CRM source"} - {doneRows}/{totalRows} done</div>
@@ -442,53 +384,9 @@ export default function CrmTab({
             </div>
 
             {canEditCrmSheet && (
-              <details className={styles.sheetAccessEditor}>
-                <summary>Edit sheet access</summary>
-                <form className={styles.sheetAccessForm} onSubmit={submit(saveCrmSheetRequest)}>
-                  <input type="hidden" name="id" value={activeCrmSheet.id} />
-                  <input type="hidden" name="sourceName" value={activeCrmSheet.sourceName || "Imported Data"} />
-                  <input type="hidden" name="pasteData" value="" />
-                  <label>
-                    <span className={styles.label}>Sheet title</span>
-                    <input className={styles.input} name="title" defaultValue={activeCrmSheet.title} required />
-                  </label>
-                  <label>
-                    <span className={styles.label}>Owner role</span>
-                    <select className={styles.select} name="ownerRole" defaultValue={activeCrmSheet.ownerRole || data.session.role}>
-                      {activeRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
-                    </select>
-                  </label>
-                  <label>
-                    <span className={styles.label}>Visible roles</span>
-                    <select className={styles.select} name="audienceRoles" defaultValue={activeCrmSheet.audienceRoles || "all"}>
-                      {audienceRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
-                    </select>
-                  </label>
-                  <label>
-                    <span className={styles.label}>Visible employees</span>
-                    <select className={styles.select} name="audienceUsers" multiple size={Math.min(Math.max(assignableEmployees.length, 3), 6)} defaultValue={(activeCrmSheet.audienceUsers || "").split(",").filter(Boolean)}>
-                      {assignableEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} ({employee.email})</option>)}
-                    </select>
-                  </label>
-                  <label>
-                    <span className={styles.label}>Editor roles</span>
-                    <select className={styles.select} name="editorRoles" defaultValue={activeCrmSheet.editorRoles || activeCrmSheet.ownerRole || data.session.role}>
-                      {audienceRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
-                    </select>
-                  </label>
-                  <label>
-                    <span className={styles.label}>Editor employees</span>
-                    <select className={styles.select} name="editorUsers" multiple size={Math.min(Math.max(assignableEmployees.length, 3), 6)} defaultValue={(activeCrmSheet.editorUsers || "").split(",").filter(Boolean)}>
-                      {assignableEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} ({employee.email})</option>)}
-                    </select>
-                  </label>
-                  <label className={styles.sheetAccessNotes}>
-                    <span className={styles.label}>Notes</span>
-                    <textarea className={styles.textarea} name="description" defaultValue={activeCrmSheet.description || ""} placeholder="Internal notes for this sheet" />
-                  </label>
-                  <button className={styles.button} type="submit">Save access</button>
-                </form>
-              </details>
+              <button className={styles.vercelButtonPrimary} style={{ margin: "16px 0", padding: "8px 12px", minHeight: "unset", width: "fit-content" }} type="button" onClick={() => setActiveModal({ id: "edit-crm-sheet", payload: activeCrmSheet })}>
+                Edit sheet access
+              </button>
             )}
 
             <div className={styles.sheetFormulaRow}>
@@ -621,7 +519,122 @@ export default function CrmTab({
             <div className={styles.sheetBottomBar}>
               <span className={styles.sheetTab}>Sheet1</span>
             </div>
+      {activeModal?.id === "create-crm-sheet" && (
+        <Modal title="Create / Import CRM Sheet" subtitle="Upload or paste Excel/CSV data. Roles with CRM Manage access can create and change sheets." onClose={() => setActiveModal(null)}>
+          <form className={styles.formGrid} onSubmit={submit(saveCrmSheetRequest, () => setActiveModal(null))}>
+          <div className={`${styles.field} ${styles.fieldWide}`}>
+            <span className={styles.label}>Sheet Title</span>
+            <input className={styles.input} name="title" placeholder="e.g. May leads - Bengaluru" required />
           </div>
+          <input type="hidden" name="sourceName" value="Imported Data" />
+          <input type="hidden" name="ownerRole" value={data.session.role} />
+          <label className={`${styles.field} ${styles.fieldWide}`}>
+            <span className={styles.label}>Visible Roles</span>
+            <select className={styles.select} name="audienceRoles" multiple size={Math.min(Math.max(audienceRoleOptions.length, 3), 8)} defaultValue={["all"]}>
+              {audienceRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+            </select>
+          </label>
+          <label className={`${styles.field} ${styles.fieldWide}`}>
+            <span className={styles.label}>Visible Employees</span>
+            <select className={styles.select} name="audienceUsers" multiple size={Math.min(Math.max(assignableEmployees.length, 3), 8)}>
+              {assignableEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} ({employee.email})</option>)}
+            </select>
+            <span className={styles.muted}>Optional. Use Ctrl/Shift to select multiple people. They can see the sheet even if their role is not selected.</span>
+          </label>
+          <label className={`${styles.field} ${styles.fieldWide}`}>
+            <span className={styles.label}>Editor Roles</span>
+            <select className={styles.select} name="editorRoles" multiple size={Math.min(Math.max(audienceRoleOptions.length, 3), 8)} defaultValue={[data.session.role]}>
+              {audienceRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+            </select>
+            <span className={styles.muted}>Editors can mark rows and edit cells. They are automatically kept visible.</span>
+          </label>
+          <label className={`${styles.field} ${styles.fieldWide}`}>
+            <span className={styles.label}>Editor Employees</span>
+            <select className={styles.select} name="editorUsers" multiple size={Math.min(Math.max(assignableEmployees.length, 3), 8)}>
+              {assignableEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} ({employee.email})</option>)}
+            </select>
+          </label>
+          <label className={`${styles.field} ${styles.fieldWide}`}>
+            <span className={styles.label}>Upload Excel / CSV</span>
+            <input className={styles.input} type="file" accept=".xlsx,.xls,.csv,.tsv,.txt" onChange={(event) => loadCrmSheetFile(event.target.files?.[0])} />
+            {crmSheetFileName && <span className={styles.muted}>{crmSheetFileName} loaded into the source box.</span>}
+          </label>
+          <label className={`${styles.field} ${styles.fieldWide}`}>
+            <span className={styles.label}>Paste Excel / CSV Rows</span>
+            <textarea className={styles.textarea} name="pasteData" value={crmSheetPaste} onChange={(event) => setCrmSheetPaste(event.target.value)} placeholder={"Company\tContact\tEmail\tPhone\tNext Action\nAcme Pvt Ltd\tRavi\travi@example.com\t9999999999\tCall today"} required />
+          </label>
+          {crmImportPreview && (
+            <div className={`${styles.importPreview} ${styles.fieldWide}`}>
+              <div>
+                <span className={styles.label}>Import Preview</span>
+                <strong>{crmImportPreview.rows} rows, {crmImportPreview.columns} columns</strong>
+              </div>
+              <div className={styles.miniStatGrid}>
+                <span>{crmImportPreview.phoneColumns} phone columns</span>
+                <span>{crmImportPreview.duplicatePhones} duplicate phones</span>
+                <span>{crmImportPreview.rows > 1000 ? "Large sheet: virtual scroll ready" : "Ready for quick import"}</span>
+              </div>
+            </div>
+          )}
+          <div className={`${styles.fieldWide}`} style={{ display: "flex", gap: 12 }}>
+            <button className={styles.button} type="submit" style={{ flex: 1 }}>Create Sheet</button>
+            <button className={styles.ghostButton} type="button" onClick={() => setCrmPanel("none")} style={{ flex: 1 }}>Cancel</button>
+          </div>
+            <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Create / Import Sheet</button>
+          </form>
+        </Modal>
+      )}
+
+      {activeModal?.id === "edit-crm-sheet" && activeModal.payload && (
+        <Modal title="Edit sheet access" subtitle="Update roles and users who can view/edit this sheet." onClose={() => setActiveModal(null)}>
+                <form className={styles.formGrid} onSubmit={submit(saveCrmSheetRequest, () => setActiveModal(null))}>
+                  <input type="hidden" name="id" value={activeCrmSheet.id} />
+                  <input type="hidden" name="sourceName" value={activeCrmSheet.sourceName || "Imported Data"} />
+                  <input type="hidden" name="pasteData" value="" />
+                  <label>
+                    <span className={styles.label}>Sheet title</span>
+                    <input className={styles.input} name="title" defaultValue={activeCrmSheet.title} required />
+                  </label>
+                  <label>
+                    <span className={styles.label}>Owner role</span>
+                    <select className={styles.select} name="ownerRole" defaultValue={activeCrmSheet.ownerRole || data.session.role}>
+                      {activeRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span className={styles.label}>Visible roles</span>
+                    <select className={styles.select} name="audienceRoles" multiple size={Math.min(Math.max(audienceRoleOptions.length, 3), 6)} defaultValue={(activeCrmSheet.audienceRoles || "all").split(",").filter(Boolean)}>
+                      {audienceRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span className={styles.label}>Visible employees</span>
+                    <select className={styles.select} name="audienceUsers" multiple size={Math.min(Math.max(assignableEmployees.length, 3), 6)} defaultValue={(activeCrmSheet.audienceUsers || "").split(",").filter(Boolean)}>
+                      {assignableEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} ({employee.email})</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span className={styles.label}>Editor roles</span>
+                    <select className={styles.select} name="editorRoles" multiple size={Math.min(Math.max(audienceRoleOptions.length, 3), 6)} defaultValue={(activeCrmSheet.editorRoles || activeCrmSheet.ownerRole || data.session.role).split(",").filter(Boolean)}>
+                      {audienceRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span className={styles.label}>Editor employees</span>
+                    <select className={styles.select} name="editorUsers" multiple size={Math.min(Math.max(assignableEmployees.length, 3), 6)} defaultValue={(activeCrmSheet.editorUsers || "").split(",").filter(Boolean)}>
+                      {assignableEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} ({employee.email})</option>)}
+                    </select>
+                  </label>
+                  <label className={styles.sheetAccessNotes}>
+                    <span className={styles.label}>Notes</span>
+                    <textarea className={styles.textarea} name="description" defaultValue={activeCrmSheet.description || ""} placeholder="Internal notes for this sheet" />
+                  </label>
+                  <button className={styles.button} type="submit">Save access</button>
+          <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Save Changes</button>
+          </form>
+        </Modal>
+      )}
+    </div>
         );
       })()}
     </section>

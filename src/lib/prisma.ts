@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
@@ -40,41 +41,21 @@ function createUnavailablePrismaClient(reason: string): PrismaClient {
   });
 }
 
-function normalizeDatabaseUrlForPg(value: string): string {
-  const trimmed = value.trim();
-  try {
-    const url = new URL(trimmed);
-    const sslMode = url.searchParams.get("sslmode");
-    if (sslMode && ["prefer", "require", "verify-ca"].includes(sslMode) && !url.searchParams.has("uselibpqcompat")) {
-      url.searchParams.set("uselibpqcompat", "true");
-    }
-    return url.toString();
-  } catch {
-    return trimmed;
-  }
-}
 
-function sslFromDatabaseUrl(value: string) {
-  try {
-    const url = new URL(value);
-    const sslMode = url.searchParams.get("sslmode");
-    if (!sslMode || sslMode === "disable") return undefined;
-    return { rejectUnauthorized: sslMode === "verify-full" };
-  } catch {
-    return undefined;
-  }
-}
 
 // Keep database failures short and clear in the UI instead of waiting on long network retries.
 const createPrismaClient = () => {
   if (!databaseUrl) return createUnavailablePrismaClient("DATABASE_URL is not set");
 
+  const isServerless = Boolean(process.env.VERCEL || process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME);
+  const cleanConnectionString = databaseUrl.replace(/[\?&]sslmode=[^&]*/g, "");
+
   const pool = new Pool({
-    connectionString: normalizeDatabaseUrlForPg(databaseUrl),
-    ssl: sslFromDatabaseUrl(databaseUrl),
-    connectionTimeoutMillis: 5000,
-    idleTimeoutMillis: 10000,
-    max: 5,
+    connectionString: cleanConnectionString,
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 2000, // Detect connectivity issues quickly on serverless cold starts
+    idleTimeoutMillis: 15000,
+    max: isServerless ? 1 : 5, // Limit to 1 connection per serverless function instance to prevent DB pool exhaustion
   });
   const adapter = new PrismaPg(pool);
   return new PrismaClient({ adapter });

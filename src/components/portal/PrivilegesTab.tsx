@@ -1,7 +1,8 @@
 "use client";
 
 import React, { FormEvent, useState } from "react";
-import { ClipboardList, Handshake, PenLine, Search, Shield, Star, UserCheck, Users } from "lucide-react";
+import { ClipboardList, Handshake, PenLine, Search, Shield, Star, UserCheck, Users, LayoutGrid, List } from "lucide-react";
+import Modal from "./Modal";
 import {
   saveEmployeeRoleDefinition,
   deleteEmployeeRoleDefinition,
@@ -105,6 +106,9 @@ export default function PrivilegesTab({
   simplePortalError,
 }: PrivilegesTabProps) {
   const [auditSearch, setAuditSearch] = useState("");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [isCreateRoleModalOpen, setIsCreateRoleModalOpen] = useState(false);
+  const [activeEditRoleKey, setActiveEditRoleKey] = useState<string | null>(null);
 
   const employees = data.users;
   const roleDefinitions = data.roleDefinitions || [];
@@ -201,91 +205,17 @@ export default function PrivilegesTab({
   });
 
   return (
-    <section className={styles.grid}>
-      <div className={`${styles.dashboardHero} ${styles.span12}`}>
-        <div>
-          <div className={styles.eyebrow}>Privilege Matrix</div>
-          <h1 className={styles.heroTitle}><Shield size={24} style={{ marginRight: 8, verticalAlign: "middle" }} /> Role & Feature Authorization Control</h1>
-          <p className={styles.muted}>Manage roles, map granular workspace features, and review security audits.</p>
-        </div>
-      </div>
-
-      {/* Left Column: Role Directory (span 4) */}
-      <div className={`${styles.card} ${styles.span4}`} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2 className={styles.cardTitle} style={{ margin: 0 }}>Role Directory</h2>
-          <button
-            className={styles.button}
-            type="button"
-            onClick={() => setIsCreatingRole(true)}
-            style={{ minHeight: 34, padding: "0 14px", fontSize: "0.85rem", background: "linear-gradient(135deg, #635bff, #4f46e5)" }}
-          >
-            + Create Role
+    <div className={styles.vercelDashboard}>
+      <div className={styles.vercelToolbar}>
+        <div className={styles.vercelBreadcrumbProject}>Role & Feature Authorization</div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button className={styles.ghostButton} style={{ padding: "8px", minHeight: "unset" }} onClick={() => setViewMode(viewMode === "grid" ? "list" : "grid")} title="Toggle View">
+            {viewMode === "grid" ? <List size={18} /> : <LayoutGrid size={18} />}
           </button>
+          <button className={styles.vercelButtonPrimary} style={{ margin: 0, minHeight: "unset", padding: "8px 12px" }} onClick={() => setIsCreateRoleModalOpen(true)}>Create Role +</button>
         </div>
-        <div className={styles.roleDirectoryList}>
-          {roleDefinitions.map((role) => {
-            const isSelected = selectedRoleKey === role.key && !isCreatingRole;
-            const totalFeatures = EMPLOYEE_PORTAL_FEATURES.length;
-            const roleType = roleDashboardType(role.key, role.dashboardType);
-            const featuresCount = role.key === "super_admin" || permanentFullAccessRoleKeys.has(role.key) ? totalFeatures : featureAccessSet(role.featureAccess).size;
-            const progressPct = Math.round((featuresCount / totalFeatures) * 100);
-            const assignedCount = employees.filter((user) => user.role === role.key).length;
-            return (
-              <button
-                key={role.key}
-                onClick={() => {
-                  setSelectedRoleKey(role.key);
-                  setIsCreatingRole(false);
-                }}
-                className={`${styles.roleItemCard} ${isSelected ? styles.roleItemCardActive : ""}`}
-                type="button"
-              >
-                <div className={styles.roleCardHeader}>
-                  <div className={styles.roleCardTitleGroup}>
-                    <span className={styles.roleIconWrapper}>{getRoleIcon(role.key)}</span>
-                    <strong style={{ fontSize: "0.95rem", color: isSelected ? "var(--text-brand)" : "var(--text-primary)" }}>{role.label}</strong>
-                  </div>
-                  <span className={role.status === "Active" ? `${styles.pill} ${styles.pillSuccess}` : `${styles.pill} ${styles.pillMuted}`} style={{ fontSize: "0.65rem", padding: "2px 6px" }}>
-                    {role.status}
-                  </span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.76rem", width: "100%", paddingLeft: 42 }}>
-                  <code style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>{role.key}</code>
-                  <span style={{ color: isSelected ? "var(--text-brand)" : "var(--text-muted)", fontWeight: 600 }}>{assignedCount} mapped</span>
-                </div>
-                <div style={{ width: "100%", paddingLeft: 42, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <span className={roleType === "superior" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>
-                    {roleType === "superior" ? "Superior dashboard" : "Workspace dashboard"}
-                  </span>
-                </div>
-                <div style={{ width: "100%", paddingLeft: 42 }}>
-                  <div className={styles.progressBarContainer}>
-                    <div className={styles.progressBarFill} style={{ width: `${progressPct}%` }} />
-                  </div>
-                  <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", gap: 12, fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                    <span>{featuresCount}/{totalFeatures} features</span>
-                    <span>{role.status}</span>
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Right Column: Detail Editor / Create Form (span 8) */}
-      <div className={`${styles.card} ${styles.span8}`}>
-        {isCreatingRole ? (
-          <form key="create-role" onSubmit={submitRole} className={styles.formGrid}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gridColumn: "1 / -1", marginBottom: 12, borderBottom: "1px solid var(--border-color)", paddingBottom: 12 }}>
-              <div>
-                <h2 className={styles.cardTitle} style={{ margin: 0 }}>Create Custom Role</h2>
-                <p className={styles.muted} style={{ margin: "4px 0 0", fontSize: "0.85rem" }}>Define a new role and select its portal privileges.</p>
-              </div>
-              <button className={styles.ghostButton} type="button" onClick={() => setIsCreatingRole(false)} style={{ minHeight: 34, padding: "0 14px", fontSize: "0.85rem" }}>Cancel</button>
-            </div>
-
+        <Modal isOpen={isCreateRoleModalOpen} onClose={() => setIsCreateRoleModalOpen(false)} title="Create Custom Role" maxWidth="650px">
+          <form key="create-role" onSubmit={(e) => { submitRole(e); setIsCreateRoleModalOpen(false); }} className={styles.formGrid}>
             <Field label="Role Name" name="label" placeholder="Content Lead" required />
             <Field label="Role Key" name="key" placeholder="content_lead" />
             <Field label="Status" name="status" options={["Active", "Inactive"]} />
@@ -323,156 +253,221 @@ export default function PrivilegesTab({
                 ))}
               </div>
             </div>
-
             <button className={`${styles.button} ${styles.fieldWide}`} type="submit" style={{ marginTop: 16 }}>Save Role</button>
           </form>
-        ) : activeRole ? (
-          <form key={`edit-role-${activeRole.key}`} onSubmit={submitRole} className={styles.formGrid}>
-            <input type="hidden" name="key" value={activeRole.key} />
-            <input type="hidden" name="label" value={activeRole.label} />
-            {dashboardLockedRoleKeys.has(activeRole.key) && <input type="hidden" name="dashboardType" value={roleDashboardType(activeRole.key, activeRole.dashboardType)} />}
-
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gridColumn: "1 / -1", marginBottom: 12, borderBottom: "1px solid var(--border-color)", paddingBottom: 12 }}>
-              <div>
-                <h2 className={styles.cardTitle} style={{ margin: 0 }}>Privilege Editor: {activeRole.label}</h2>
-                <p className={styles.muted} style={{ margin: "4px 0 0", fontSize: "0.85rem" }}>
-                  {activeRole.key === "super_admin"
-                    ? "Super Admin has full system capabilities."
-                    : `Modify features mapped to the ${activeRole.label} role.`
-                  }
-                </p>
-              </div>
-              <span className={styles.pill} style={{ fontFamily: "var(--font-mono)" }}>{activeRole.key}</span>
-            </div>
-
-            {activeRoleIsProtected && (
-              <div className={styles.systemAlertBanner}>
-                <Shield size={20} />
-                <div className={styles.systemAlertContent}>
-                  <strong>Protected System Role ({activeRole.label})</strong>
-                  <p>
-                    {permanentFullAccessRoleKeys.has(activeRole.key)
-                      ? "Director and Director / Authorized Signatory always keep full portal access, document approval, and signature rights."
-                      : "This is a system-protected access role. Role identity is locked, but dashboard type and mapped feature capabilities can still be modified."}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <div className={styles.field}>
-              <span className={styles.label}>Role Name</span>
-              <input className={styles.input} name="label_display" value={activeRole.label} disabled style={{ opacity: 0.8 }} />
-            </div>
-            <div className={styles.field}>
-              <span className={styles.label}>Status</span>
-              <select
-                className={styles.select}
-                name="status"
-                defaultValue={activeRole.status}
-                disabled={activeRoleIsProtected}
-              >
-                <option>Active</option>
-                <option>Inactive</option>
-              </select>
-            </div>
-            <div className={styles.field}>
-              <span className={styles.label}>Dashboard Experience</span>
-              <select
-                className={styles.select}
-                name="dashboardType"
-                defaultValue={roleDashboardType(activeRole.key, activeRole.dashboardType)}
-                disabled={dashboardLockedRoleKeys.has(activeRole.key)}
-              >
-                <option value="workspace">Workspace dashboard for employees/interns</option>
-                <option value="superior">Superior dashboard for directors/admins</option>
-              </select>
-            </div>
-
-            <div className={`${styles.field} ${styles.fieldWide}`}>
-              <span className={styles.label}>Description</span>
-              <textarea
-                className={styles.textarea}
-                name="description"
-                defaultValue={activeRole.description}
-                disabled={activeRoleIsProtected}
-                placeholder="Role description..."
-              />
-            </div>
-
-            <div className={`${styles.field} ${styles.fieldWide}`}>
-              <span className={styles.label}>Access Notes / Restrictions</span>
-              <textarea
-                className={styles.textarea}
-                name="permissions"
-                defaultValue={activeRole.permissions}
-                disabled={activeRoleIsProtected}
-                placeholder="Restrictions..."
-              />
-            </div>
-
-            {/* Privilege Mapping Categories */}
-            <div className={`${styles.field} ${styles.fieldWide}`} style={{ marginTop: 12 }}>
-              <span className={styles.label} style={{ marginBottom: 12, display: "block" }}>Feature Privilege Mapping</span>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                {featureGroups.map((group) => (
-                  <div key={group.title} style={{ background: "var(--bg-shell)", borderRadius: 16, padding: 18, border: "1px solid var(--border-color)" }}>
-                    <strong style={{ fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-brand)", display: "block", marginBottom: 12 }}>
-                      {group.title}
-                    </strong>
-                    <div className={styles.accessGrid}>
-                      {group.features.map((feature) => (
-                        <div className={styles.accessOption} key={feature.id} style={{ background: "var(--bg-card)", padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
-                            <strong style={{ fontSize: "0.9rem", color: "var(--text-primary)" }}>{feature.label}</strong>
-                            <small style={{ fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: 1.35 }}>{feature.description}</small>
-                          </div>
-                          <label className={styles.toggleSwitch}>
-                            <input
-                              type="checkbox"
-                              name="featureAccess"
-                              value={feature.id}
-                              defaultChecked={activeRole.key === "super_admin" || permanentFullAccessRoleKeys.has(activeRole.key) || selectedFeatures.has(feature.id)}
-                              disabled={activeRole.key === "super_admin" || permanentFullAccessRoleKeys.has(activeRole.key)}
-                            />
-                            <span className={styles.switchSlider} />
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {activeRole.key !== "super_admin" && (
-              <div className={`${styles.fieldWide} ${styles.toolbar}`} style={{ marginTop: 16 }}>
-                <button className={styles.button} type="submit">
-                  Update Privileges
-                </button>
-                {!protectedRoleKeys.has(activeRole.key) && (
-                  <button
-                    className={styles.ghostButton}
-                    type="button"
-                    onClick={() => {
-                      if (!confirm(`Delete the ${activeRole.label} role? This cannot be undone.`)) return;
-                      setSelectedRoleKey("super_admin");
-                      runAction(() => deleteEmployeeRoleDefinition({ key: activeRole.key }));
-                    }}
-                  >
-                    Delete Custom Role
-                  </button>
-                )}
-              </div>
-            )}
-          </form>
-        ) : (
-          <div className={styles.emptyState}>Select a role from the directory to edit.</div>
-        )}
+        </Modal>
       </div>
 
-      {/* Bottom Row: Access Audit (span 12) */}
-      <div className={`${styles.card} ${styles.span12}`}>
+      <div className={viewMode === "grid" ? styles.vercelProjectsGrid : styles.vercelProjectsList}>
+        {roleDefinitions.map((role) => {
+          const totalFeatures = EMPLOYEE_PORTAL_FEATURES.length;
+          const roleType = roleDashboardType(role.key, role.dashboardType);
+          const featuresCount = role.key === "super_admin" || permanentFullAccessRoleKeys.has(role.key) ? totalFeatures : featureAccessSet(role.featureAccess).size;
+          const progressPct = Math.round((featuresCount / totalFeatures) * 100);
+          const assignedCount = employees.filter((user) => user.role === role.key).length;
+          const isProtected = protectedRoleKeys.has(role.key);
+          const roleFeatures = featureAccessSet(role.featureAccess);
+
+          return (
+            viewMode === "list" ? (
+              <div className={styles.vercelListRow} key={role.key} onClick={() => setActiveEditRoleKey(role.key)} style={{ cursor: "pointer" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                  <div className={styles.roleIconWrapper}>{getRoleIcon(role.key)}</div>
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{role.label} <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem", color: "var(--text-muted)", marginLeft: 8 }}>{role.key}</span></div>
+                    <div className={styles.muted} style={{ fontSize: "0.8rem", marginTop: 2 }}>{assignedCount} mapped users &middot; {roleType === "superior" ? "Superior" : "Workspace"}</div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                  <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{featuresCount}/{totalFeatures}</span>
+                  <span className={role.status === "Active" ? styles.vercelCardTag : `${styles.vercelCardTag} ${styles.muted}`}>{role.status}</span>
+                </div>
+              </div>
+            ) : (
+            <div className={styles.vercelProjectCard} key={role.key} style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+              <div className={styles.vercelProjectHeader}>
+                <div className={styles.vercelProjectMeta} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className={styles.roleIconWrapper}>{getRoleIcon(role.key)}</span>
+                  <div>
+                    <h4>{role.label}</h4>
+                    <span style={{ fontFamily: "var(--font-mono)" }}>{role.key}</span>
+                  </div>
+                </div>
+                <span className={role.status === "Active" ? styles.vercelCardTag : `${styles.vercelCardTag} ${styles.muted}`}>{role.status}</span>
+              </div>
+              
+              <div className={styles.vercelProjectDesc} style={{ flex: 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.76rem", width: "100%", marginBottom: 12, minHeight: 20 }}>
+                  <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>{assignedCount} mapped users</span>
+                  <span className={roleType === "superior" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>
+                    {roleType === "superior" ? "Superior" : "Workspace"}
+                  </span>
+                </div>
+                
+                <div style={{ width: "100%" }}>
+                  <div className={styles.progressBarContainer}>
+                    <div className={styles.progressBarFill} style={{ width: `${progressPct}%`, background: "var(--text-brand)" }} />
+                  </div>
+                  <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", gap: 12, fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                    <span>{featuresCount}/{totalFeatures} features assigned</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className={styles.vercelProjectFooter} style={{ flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+                <button className={styles.ghostButton} style={{ width: "100%" }} onClick={() => setActiveEditRoleKey(role.key)}>Edit Role Config</button>
+              </div>
+            </div>
+            )
+          );
+        })}
+      </div>
+
+      {activeEditRoleKey && (
+        <Modal
+          isOpen={!!activeEditRoleKey}
+          onClose={() => setActiveEditRoleKey(null)}
+          title={`Edit Role: ${roleDefinitions.find(r => r.key === activeEditRoleKey)?.label || ""}`}
+          maxWidth="700px"
+        >
+          {(() => {
+            const role = roleDefinitions.find(r => r.key === activeEditRoleKey);
+            if (!role) return null;
+            const isProtected = protectedRoleKeys.has(role.key);
+            const roleFeatures = featureAccessSet(role.featureAccess);
+            return (
+              <form key={`edit-role-${role.key}`} onSubmit={(e) => {
+                submitRole(e);
+                setActiveEditRoleKey(null);
+              }} className={styles.formGrid} style={{ marginTop: 8 }}>
+                <input type="hidden" name="key" value={role.key} />
+                <input type="hidden" name="label" value={role.label} />
+                {dashboardLockedRoleKeys.has(role.key) && <input type="hidden" name="dashboardType" value={roleDashboardType(role.key, role.dashboardType)} />}
+
+                {isProtected && (
+                  <div className={styles.systemAlertBanner} style={{ gridColumn: "1 / -1" }}>
+                    <Shield size={20} />
+                    <div className={styles.systemAlertContent}>
+                      <strong>Protected System Role</strong>
+                      <p>
+                        {permanentFullAccessRoleKeys.has(role.key)
+                          ? "Director and Director / Authorized Signatory always keep full portal access, document approval, and signature rights."
+                          : "This is a system-protected access role. Role identity is locked, but dashboard type and mapped feature capabilities can still be modified."}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className={styles.field}>
+                  <span className={styles.label}>Role Name</span>
+                  <input className={styles.input} name="label_display" value={role.label} disabled style={{ opacity: 0.8 }} />
+                </div>
+                <div className={styles.field}>
+                  <span className={styles.label}>Status</span>
+                  <select
+                    className={styles.select}
+                    name="status"
+                    defaultValue={role.status}
+                    disabled={isProtected}
+                  >
+                    <option>Active</option>
+                    <option>Inactive</option>
+                  </select>
+                </div>
+                <div className={styles.field}>
+                  <span className={styles.label}>Dashboard Experience</span>
+                  <select
+                    className={styles.select}
+                    name="dashboardType"
+                    defaultValue={roleDashboardType(role.key, role.dashboardType)}
+                    disabled={dashboardLockedRoleKeys.has(role.key)}
+                  >
+                    <option value="workspace">Workspace dashboard for employees/interns</option>
+                    <option value="superior">Superior dashboard for directors/admins</option>
+                  </select>
+                </div>
+
+                <div className={`${styles.field} ${styles.fieldWide}`}>
+                  <span className={styles.label}>Description</span>
+                  <textarea
+                    className={styles.textarea}
+                    name="description"
+                    defaultValue={role.description}
+                    disabled={isProtected}
+                    placeholder="Role description..."
+                  />
+                </div>
+
+                <div className={`${styles.field} ${styles.fieldWide}`}>
+                  <span className={styles.label}>Access Notes / Restrictions</span>
+                  <textarea
+                    className={styles.textarea}
+                    name="permissions"
+                    defaultValue={role.permissions}
+                    disabled={isProtected}
+                    placeholder="Restrictions..."
+                  />
+                </div>
+
+                <div className={`${styles.field} ${styles.fieldWide}`} style={{ marginTop: 12 }}>
+                  <span className={styles.label} style={{ marginBottom: 12, display: "block" }}>Feature Privilege Mapping</span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                    {featureGroups.map((group) => (
+                      <div key={group.title} style={{ background: "var(--bg-shell)", borderRadius: 12, padding: 16, border: "1px solid var(--border-color)" }}>
+                        <strong style={{ fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-brand)", display: "block", marginBottom: 12 }}>
+                          {group.title}
+                        </strong>
+                        <div className={styles.accessGrid}>
+                          {group.features.map((feature) => (
+                            <div className={styles.accessOption} key={feature.id} style={{ background: "var(--bg-card)", padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                                <strong style={{ fontSize: "0.85rem", color: "var(--text-primary)" }}>{feature.label}</strong>
+                                <small style={{ fontSize: "0.75rem", color: "var(--text-muted)", lineHeight: 1.35 }}>{feature.description}</small>
+                              </div>
+                              <label className={styles.toggleSwitch}>
+                                <input
+                                  type="checkbox"
+                                  name="featureAccess"
+                                  value={feature.id}
+                                  defaultChecked={role.key === "super_admin" || permanentFullAccessRoleKeys.has(role.key) || roleFeatures.has(feature.id)}
+                                  disabled={role.key === "super_admin" || permanentFullAccessRoleKeys.has(role.key)}
+                                />
+                                <span className={styles.switchSlider} />
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className={`${styles.fieldWide} ${styles.toolbar}`} style={{ marginTop: 16 }}>
+                  <button className={styles.button} type="submit">
+                    Update Privileges
+                  </button>
+                  {!isProtected && (
+                    <button
+                      className={styles.ghostButton}
+                      type="button"
+                      onClick={() => {
+                        if (!confirm(`Delete the ${role.label} role? This cannot be undone.`)) return;
+                        runAction(() => deleteEmployeeRoleDefinition({ key: role.key }));
+                        setActiveEditRoleKey(null);
+                      }}
+                      style={{ color: "#ef4444" }}
+                    >
+                      Delete Custom Role
+                    </button>
+                  )}
+                </div>
+              </form>
+            );
+          })()}
+        </Modal>
+      )}
+
+      <div className={styles.vercelCard} style={{ marginTop: 32 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 20, marginBottom: 16, flexWrap: "wrap" }}>
           <div>
             <h2 className={styles.cardTitle} style={{ margin: 0 }}>Access Security Audit</h2>
@@ -535,6 +530,6 @@ export default function PrivilegesTab({
           )}
         </div>
       </div>
-    </section>
+    </div>
   );
 }

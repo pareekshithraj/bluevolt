@@ -10,6 +10,7 @@ import {
   appointApplicantAsEmployee,
 } from "@/app/actions/employee-portal";
 import styles from "@/app/employee/portal.module.css";
+import Modal from "@/components/portal/Modal";
 
 type PortalData = Awaited<ReturnType<typeof getEmployeePortalData>>;
 
@@ -81,6 +82,7 @@ export default function ApplicantsTab({
 }: ApplicantsTabProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [appointingApplicant, setAppointingApplicant] = useState<PortalData["applicants"][number] | null>(null);
+  const [editingApplicant, setEditingApplicant] = useState<PortalData["applicants"][number] | null>(null);
 
   const pendingApplicants = data.applicants.filter((applicant) => !["Offer", "Appointed", "Rejected"].includes(applicant.stage));
   const approvedApplicants = data.applicants.filter((applicant) => ["Offer", "Appointed"].includes(applicant.stage));
@@ -104,166 +106,166 @@ export default function ApplicantsTab({
   }));
 
   return (
-    <section className={styles.grid}>
-      <div className={`${styles.dashboardHero} ${styles.span12}`}>
-        <div>
-          <div className={styles.eyebrow}>Hiring Console</div>
-          <h1 className={styles.heroTitle}><Users size={24} style={{ marginRight: 8, verticalAlign: "middle" }} /> Recruitment decisions without follow-up data entry.</h1>
-          <p className={styles.muted}>Applicants submit role, type, availability, links, and expectations up front. Admin can accept, reject, or edit only when needed.</p>
-        </div>
-        <div className={styles.heroActions}>
-          <button className={styles.button} type="button" onClick={copyApplicationLink}>Copy WhatsApp Link</button>
-          <a className={styles.ghostButton} href={applicationLink} target="_blank" rel="noopener noreferrer">View Public Form</a>
+    <div className={styles.vercelDashboard}>
+      <div className={styles.vercelToolbar}>
+        <div className={styles.vercelBreadcrumbProject}>Hiring Console</div>
+        <div style={{ flex: 1 }} />
+        <div className={styles.vercelToolbarActions}>
+          <button className={styles.ghostButton} type="button" onClick={copyApplicationLink}>Copy Link</button>
+          <a className={styles.ghostButton} href={applicationLink} target="_blank" rel="noopener noreferrer">Public Form</a>
+          <button className={styles.ghostButton} type="button" onClick={() => downloadCsv("bluevolt-applicants.csv", applicantRows)}>Export CSV</button>
         </div>
       </div>
 
-      <div className={`${styles.card} ${styles.metricCard} ${styles.span3}`}>
-        <span className={styles.muted}>Total Applications</span>
-        <span className={styles.metricValue}>{data.applicants.length}</span>
-      </div>
-      <div className={`${styles.card} ${styles.metricCard} ${styles.span3}`}>
-        <span className={styles.muted}>Awaiting Review</span>
-        <span className={styles.metricValue}>{pendingApplicants.length}</span>
-      </div>
-      <div className={`${styles.card} ${styles.metricCard} ${styles.span3}`}>
-        <span className={styles.muted}>Approved</span>
-        <span className={styles.metricValue}>{approvedApplicants.length}</span>
-      </div>
-      <div className={`${styles.card} ${styles.metricCard} ${styles.span3}`}>
-        <span className={styles.muted}>Rejected</span>
-        <span className={styles.metricValue}>{rejectedApplicants.length}</span>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 20, marginBottom: 24 }}>
+        <div className={styles.vercelCard} style={{ padding: 24 }}>
+          <h2 className={styles.cardTitle}>Total Applications</h2>
+          <span className={styles.metricValue}>{data.applicants.length}</span>
+        </div>
+        <div className={styles.vercelCard} style={{ padding: 24 }}>
+          <h2 className={styles.cardTitle}>Awaiting Review</h2>
+          <span className={styles.metricValue}>{pendingApplicants.length}</span>
+        </div>
+        <div className={styles.vercelCard} style={{ padding: 24 }}>
+          <h2 className={styles.cardTitle}>Approved</h2>
+          <span className={styles.metricValue}>{approvedApplicants.length}</span>
+        </div>
+        <div className={styles.vercelCard} style={{ padding: 24 }}>
+          <h2 className={styles.cardTitle}>Rejected</h2>
+          <span className={styles.metricValue}>{rejectedApplicants.length}</span>
+        </div>
       </div>
 
-      <div className={`${styles.card} ${styles.span12}`}>
-        <div className={styles.sectionHeader}>
-          <div>
-            <h2 className={styles.cardTitle}>Applications</h2>
-            <p className={styles.muted}>{pendingApplicants.length} pending decisions. Accept creates the HR signal; reject closes the applicant cleanly.</p>
-          </div>
-          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+      <div className={styles.vercelContentGrid} style={{ display: "grid", gridTemplateColumns: "1fr", gap: 24, marginBottom: 24 }}>
+        <div className={styles.vercelCard}>
+          <div className={styles.sectionHeader} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <h2 className={styles.cardTitle} style={{ margin: 0 }}>Applications</h2>
+              <p className={styles.muted} style={{ margin: 0 }}>{pendingApplicants.length} pending decisions. Accept creates the HR signal; reject closes the applicant cleanly.</p>
+            </div>
             <input
               type="text"
               className={styles.input}
               placeholder="Search applications..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ maxWidth: 220, minHeight: 38, padding: "8px 12px" }}
+              style={{ maxWidth: 220, padding: "8px 12px" }}
             />
-            <button className={styles.ghostButton} type="button" onClick={() => downloadCsv("bluevolt-applicants.csv", applicantRows)} style={{ minHeight: 38, padding: "8px 14px" }}>Download CSV</button>
           </div>
-        </div>
-        <div className={styles.smartTable}>
-          <div className={styles.smartTableHeader}>
-            <span>Applicant</span>
-            <span>Role</span>
-            <span>Details</span>
-            <span>Submitted</span>
-            <span>Status</span>
-            <span>Action</span>
-          </div>
-          {filteredApplicants.length === 0 ? <div className={styles.emptyState}>No applications found.</div> : filteredApplicants.map((applicant) => (
-            <div className={styles.smartTableRow} key={applicant.id}>
-              <div className={styles.identityCell}>
-                <span className={styles.avatar}>{applicant.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
-                <span><strong>{applicant.name}</strong><small>{applicant.email}</small></span>
-              </div>
-              <span>{applicant.roleApplied}</span>
-              <span className={styles.muted}>{applicant.phone || "No phone"}{applicant.notes ? ` - ${applicant.notes.slice(0, 90)}` : ""}</span>
-              <span className={styles.muted}>{formatPortalDateTime(applicant.createdAt)}</span>
-              <span className={applicant.stage === "Offer" ? `${styles.pill} ${styles.pillSuccess}` : applicant.stage === "Rejected" ? `${styles.pill} ${styles.pillMuted}` : `${styles.pill} ${styles.pillWarn}`}>{applicant.stage}</span>
-              <span className={styles.actionStack}>
-                {applicant.stage !== "Offer" && applicant.stage !== "Appointed" && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "applicant", id: applicant.id.toString(), status: "Offer" }))}>Accept</button>}
-                {applicant.stage === "Offer" && (
-                  <button 
-                    className={styles.button} 
-                    type="button" 
-                    onClick={() => setAppointingApplicant(applicant)}
-                    style={{ background: "var(--accent-color)", color: "white" }}
-                  >
-                    Appoint as Employee
-                  </button>
-                )}
-                {applicant.stage !== "Rejected" && applicant.stage !== "Appointed" && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "applicant", id: applicant.id.toString(), status: "Rejected" }))}>Reject</button>}
-                <details className={styles.editPanel}>
-                  <summary>Edit</summary>
-                  <form className={styles.formGrid} onSubmit={submit(saveApplicant)}>
-                    <input type="hidden" name="id" value={applicant.id} />
-                    <Field label="Name" name="name" defaultValue={applicant.name} required />
-                    <Field label="Email" name="email" type="email" defaultValue={applicant.email} required />
-                    <Field label="Phone" name="phone" defaultValue={applicant.phone || ""} />
-                    <Field label="Role Applied" name="roleApplied" defaultValue={applicant.roleApplied} required />
-                    <Field label="Stage" name="stage" options={["New", "Screening", "Interview", "Offer", "Rejected"]} defaultValue={applicant.stage} />
-                    <Field label="Source" name="source" defaultValue={applicant.source} />
-                    <Field label="Meet URL" name="meetUrl" type="url" defaultValue={applicant.meetUrl || ""} wide />
-                    <Field label="Notes" name="notes" textarea defaultValue={applicant.notes || ""} wide />
-                    <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Applicant</button>
-                  </form>
-                </details>
-                <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "applicant", id: applicant.id.toString() }))}>Delete</button>
-              </span>
+          
+          <div className={styles.smartTable} style={{ marginTop: 16 }}>
+            <div className={styles.smartTableHeader}>
+              <span>Applicant</span>
+              <span>Role</span>
+              <span>Details</span>
+              <span>Submitted</span>
+              <span>Status</span>
+              <span>Action</span>
             </div>
-          ))}
+            {filteredApplicants.length === 0 ? <div className={styles.emptyState}>No applications found.</div> : filteredApplicants.map((applicant) => (
+              <div className={styles.smartTableRow} key={applicant.id}>
+                <div className={styles.identityCell}>
+                  <span className={styles.avatar}>{applicant.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
+                  <span><strong>{applicant.name}</strong><small>{applicant.email}</small></span>
+                </div>
+                <span>{applicant.roleApplied}</span>
+                <span className={styles.muted}>{applicant.phone || "No phone"}{applicant.notes ? ` - ${applicant.notes.slice(0, 90)}` : ""}</span>
+                <span className={styles.muted}>{formatPortalDateTime(applicant.createdAt)}</span>
+                <span className={applicant.stage === "Offer" ? `${styles.pill} ${styles.pillSuccess}` : applicant.stage === "Rejected" ? `${styles.pill} ${styles.pillMuted}` : `${styles.pill} ${styles.pillWarn}`}>{applicant.stage}</span>
+                <span className={styles.actionStack}>
+                  {applicant.stage !== "Offer" && applicant.stage !== "Appointed" && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "applicant", id: applicant.id.toString(), status: "Offer" }))}>Accept</button>}
+                  {applicant.stage === "Offer" && (
+                    <button 
+                      className={styles.button} 
+                      type="button" 
+                      onClick={() => setAppointingApplicant(applicant)}
+                      style={{ background: "var(--accent-color)", color: "white" }}
+                    >
+                      Appoint as Employee
+                    </button>
+                  )}
+                  {applicant.stage !== "Rejected" && applicant.stage !== "Appointed" && <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "applicant", id: applicant.id.toString(), status: "Rejected" }))}>Reject</button>}
+                  <button className={styles.ghostButton} type="button" onClick={() => setEditingApplicant(applicant)}>Edit</button>
+                  <button className={styles.ghostButton} type="button" onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "applicant", id: applicant.id.toString() }))}>Delete</button>
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div className={`${styles.card} ${styles.span6}`}>
-        <h2 className={styles.cardTitle}>Decision Trail</h2>
-        <p className={styles.muted}>Latest accept/reject decisions for audit and handover.</p>
-        <div className={styles.list}>
-          {[...approvedApplicants, ...rejectedApplicants].slice(0, 6).map((applicant) => (
-            <div className={styles.row} key={`decision-${applicant.id}`}>
-              <div className={styles.rowHeader}><strong>{applicant.name}</strong><span className={applicant.stage === "Offer" ? `${styles.pill} ${styles.pillSuccess}` : styles.pill}>{applicant.stage}</span></div>
-              <p className={styles.muted}>{applicant.roleApplied} - {formatPortalDateTime(applicant.updatedAt)}</p>
-            </div>
-          ))}
-          {approvedApplicants.length + rejectedApplicants.length === 0 && <div className={styles.emptyState}>No decisions recorded yet.</div>}
-        </div>
-      </div>
-      <div className={`${styles.card} ${styles.span6}`}>
-        <h2 className={styles.cardTitle}>Application Form Sharing</h2>
-        <p className={styles.muted}>Public link for WhatsApp groups, career pages, and manual sharing.</p>
-        <div className={styles.field}>
-          <span className={styles.label}>Direct Form URL</span>
-          <div className={styles.inlineForm}>
-            <input className={styles.input} value={applicationLink} readOnly />
-            <button className={styles.button} type="button" onClick={copyApplicationLink}>Copy Link</button>
+      <div className={styles.vercelContentGrid} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+        <div className={styles.vercelCard}>
+          <div className={styles.sectionHeader}>
+            <h2 className={styles.cardTitle} style={{ margin: 0 }}>Decision Trail</h2>
           </div>
-        </div>
-        <div className={styles.field}>
-          <span className={styles.label}>Embed Code</span>
-          <textarea className={styles.textarea} value={`<iframe src="${applicationLink}?embed=1" width="100%" height="980" style="border:0;" loading="lazy"></iframe>`} readOnly />
-        </div>
-      </div>
-      {appointingApplicant && (
-        <div className={styles.modalOverlay} role="dialog" aria-modal="true" aria-label="Appoint as Employee">
-          <div className={styles.modalPanel} style={{ maxWidth: 500 }}>
-            <div className={styles.modalHeader}>
-              <div>
-                <h2 className={styles.cardTitle}>Appoint as Employee</h2>
-                <p className={styles.muted}>Onboard {appointingApplicant.name} to the active employee list. Default password is abc123.</p>
+          <div className={styles.list}>
+            {[...approvedApplicants, ...rejectedApplicants].slice(0, 6).map((applicant) => (
+              <div className={styles.row} key={`decision-${applicant.id}`}>
+                <div className={styles.rowHeader}><strong>{applicant.name}</strong><span className={applicant.stage === "Offer" ? `${styles.pill} ${styles.pillSuccess}` : styles.pill}>{applicant.stage}</span></div>
+                <p className={styles.muted}>{applicant.roleApplied} - {formatPortalDateTime(applicant.updatedAt)}</p>
               </div>
-              <button className={styles.refreshIconButton} type="button" onClick={() => setAppointingApplicant(null)} aria-label="Close"><X size={18} /></button>
-            </div>
-            <form className={styles.formGrid} onSubmit={submit((values) => appointApplicantAsEmployee({
-              applicantId: appointingApplicant.id.toString(),
-              departmentId: values.departmentId,
-              title: values.title,
-              workStartTime: values.workStartTime,
-              workEndTime: values.workEndTime,
-            }), () => setAppointingApplicant(null))}>
-              <Field label="Title" name="title" defaultValue={appointingApplicant.roleApplied || "Team Member"} required />
-              <Field 
-                label="Department" 
-                name="departmentId" 
-                options={[{ label: "No department", value: "" }, ...data.departments.map((d) => ({ label: d.name, value: d.id.toString() }))]} 
-              />
-              <Field label="Work Starts" name="workStartTime" type="time" defaultValue="09:00" required />
-              <Field label="Work Ends" name="workEndTime" type="time" defaultValue="18:00" required />
-              <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Approve & Appoint</button>
-            </form>
+            ))}
+            {approvedApplicants.length + rejectedApplicants.length === 0 && <div className={styles.emptyState}>No decisions recorded yet.</div>}
           </div>
         </div>
+        
+        <div className={styles.vercelCard}>
+          <div className={styles.sectionHeader}>
+            <h2 className={styles.cardTitle} style={{ margin: 0 }}>Application Form Sharing</h2>
+          </div>
+          <div className={styles.field}>
+            <span className={styles.label}>Direct Form URL</span>
+            <div className={styles.inlineForm}>
+              <input className={styles.input} value={applicationLink} readOnly />
+              <button className={styles.button} type="button" onClick={copyApplicationLink}>Copy Link</button>
+            </div>
+          </div>
+          <div className={styles.field} style={{ marginTop: 16 }}>
+            <span className={styles.label}>Embed Code</span>
+            <textarea className={styles.textarea} value={`<iframe src="${applicationLink}?embed=1" width="100%" height="980" style="border:0;" loading="lazy"></iframe>`} readOnly />
+          </div>
+        </div>
+      </div>
+
+      {appointingApplicant && (
+        <Modal title="Appoint as Employee" subtitle={`Onboard ${appointingApplicant.name} to the active employee list. Default password is abc123.`} onClose={() => setAppointingApplicant(null)}>
+          <form className={styles.formGrid} onSubmit={submit((values) => appointApplicantAsEmployee({
+            applicantId: appointingApplicant.id.toString(),
+            departmentId: values.departmentId,
+            title: values.title,
+            workStartTime: values.workStartTime,
+            workEndTime: values.workEndTime,
+          }), () => setAppointingApplicant(null))}>
+            <Field label="Title" name="title" defaultValue={appointingApplicant.roleApplied || "Team Member"} required />
+            <Field 
+              label="Department" 
+              name="departmentId" 
+              options={[{ label: "No department", value: "" }, ...data.departments.map((d) => ({ label: d.name, value: d.id.toString() }))]} 
+            />
+            <Field label="Work Starts" name="workStartTime" type="time" defaultValue="09:00" required />
+            <Field label="Work Ends" name="workEndTime" type="time" defaultValue="18:00" required />
+            <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Approve & Appoint</button>
+          </form>
+        </Modal>
       )}
-    </section>
+
+      {editingApplicant && (
+        <Modal title="Edit Applicant" subtitle="Update applicant details." onClose={() => setEditingApplicant(null)}>
+          <form className={styles.formGrid} onSubmit={submit(saveApplicant, () => setEditingApplicant(null))}>
+            <input type="hidden" name="id" value={editingApplicant.id} />
+            <Field label="Name" name="name" defaultValue={editingApplicant.name} required />
+            <Field label="Email" name="email" type="email" defaultValue={editingApplicant.email} required />
+            <Field label="Phone" name="phone" defaultValue={editingApplicant.phone || ""} />
+            <Field label="Role Applied" name="roleApplied" defaultValue={editingApplicant.roleApplied} required />
+            <Field label="Stage" name="stage" options={["New", "Screening", "Interview", "Offer", "Rejected"]} defaultValue={editingApplicant.stage} />
+            <Field label="Source" name="source" defaultValue={editingApplicant.source} />
+            <Field label="Meet URL" name="meetUrl" type="url" defaultValue={editingApplicant.meetUrl || ""} wide />
+            <Field label="Notes" name="notes" textarea defaultValue={editingApplicant.notes || ""} wide />
+            <button className={`${styles.button} ${styles.fieldWide}`} type="submit">Update Applicant</button>
+          </form>
+        </Modal>
+      )}
+    </div>
   );
 }

@@ -11,10 +11,9 @@ import ConsentAnalytics from "@/components/ConsentAnalytics";
 
 export default function AppChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const isStores24 = pathname.startsWith("/stores24");
   const isEmployeePortal = pathname.startsWith("/employee");
 
-  if (isStores24 || isEmployeePortal) {
+  if (isEmployeePortal) {
     return <>{children}</>;
   }
 

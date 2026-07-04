@@ -12,7 +12,14 @@ export interface EmployeeSession {
 }
 
 function getSecret(): string {
-  return process.env.AUTH_SECRET || process.env.DATABASE_URL || "bluevolt-employee-session-secret";
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("FATAL: AUTH_SECRET environment variable must be set in production.");
+    }
+    return "bluevolt-employee-session-secret-fallback-key-should-be-long-and-secure-for-development-purposes";
+  }
+  return secret;
 }
 
 function encode(value: string): string {

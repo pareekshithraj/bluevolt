@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeSession, hasEmployeeRole } from "@/lib/employee/session";
-import { hashPassword } from "@/lib/stores24/password";
+import { hashPassword } from "@/lib/employee/password";
 
 export async function POST(request: NextRequest) {
   const session = await getEmployeeSession();

@@ -63,7 +63,7 @@ const createPrismaClient = () => {
 
   const pool = new Pool({
     connectionString: cleanConnectionString,
-    ssl: isSupabase ? { rejectUnauthorized: true } : { rejectUnauthorized: false },
+    ssl: { rejectUnauthorized: false },
     connectionTimeoutMillis: 15000, // Detect connectivity issues quickly on serverless cold starts
     idleTimeoutMillis: 15000,
     max: isServerless ? 1 : 5, // Limit to 1 connection per serverless function instance to prevent DB pool exhaustion

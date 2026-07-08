@@ -989,7 +989,7 @@ export async function loginEmployee(input: { email: string; password: string }) 
       } catch (fallbackError) {
         console.error("Local employee fallback failed:", fallbackError);
       }
-      return { success: false, error: "Invalid employee credentials." };
+      return { success: false, error: "Database is currently unreachable. Login is temporarily unavailable." };
     }
     console.error("Employee login failed", error);
     return { success: false, error: friendlyEmployeeError(error, "Login failed. Please try again.") };

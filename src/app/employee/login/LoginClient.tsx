@@ -6,22 +6,6 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Lock, Mail, ShieldCheck } from "lucide-react";
 import styles from "../portal.module.css";
 
-function simpleLoginError(message?: string) {
-  const text = (message || "").toLowerCase();
-  if (
-    text.includes("prisma") ||
-    text.includes("database") ||
-    text.includes("can't reach") ||
-    text.includes("supabase.co") ||
-    text.includes("neon.tech") ||
-    text.includes("connection") ||
-    text.includes("timeout")
-  ) {
-    return "The employee portal is temporarily unavailable. Please try again in a minute.";
-  }
-  return message || "Login failed. Please try again.";
-}
-
 export default function LoginClient() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -109,7 +93,7 @@ export default function LoginClient() {
         }
 
         if (response.status >= 500) {
-          setError(simpleLoginError(result.error));
+          setError(result.error || "Login failed. Please try again.");
           return;
         }
 
@@ -119,7 +103,7 @@ export default function LoginClient() {
             setLockoutUntil(Date.now() + 60000);
             setError("Too many failed attempts. Please wait 1 minute before trying again.");
           } else {
-            setError(simpleLoginError(result.error));
+            setError(result.error || "Login failed. Please try again.");
           }
           return nextAttempts;
         });

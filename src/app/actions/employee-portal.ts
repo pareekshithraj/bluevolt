@@ -12,6 +12,7 @@ import {
   hasEmployeeRole,
   setEmployeeSession,
 } from "@/lib/employee/session";
+import { friendlyEmployeeError } from "@/lib/employee/errors";
 import {
   DEFAULT_ROLE_FEATURE_ACCESS,
   EMPLOYEE_PORTAL_FEATURES,
@@ -352,15 +353,17 @@ function isDatabaseUnavailable(error: unknown): boolean {
   return [
     "database_url is not set",
     "p1001",
+    "p1011",
     "econnrefused",
     "enotfound",
-    "connection timeout",
-    "timeout expired",
+    "connection",
+    "timeout",
     "can't reach database",
-    "connection terminated",
     "supabase.co",
     "neon.tech",
     "database",
+    "prisma",
+    "tls",
   ].some((entry) => text.toLowerCase().includes(entry));
 }
 
@@ -893,34 +896,6 @@ function googleCalendarUrl(input: {
   return url.toString();
 }
 
-function friendlyEmployeeError(error: unknown, fallback = "Something went wrong. Please try again."): string {
-  const message = error instanceof Error ? error.message : String(error || "");
-  const lower = message.toLowerCase();
-
-  if (
-    lower.includes("prisma") ||
-    lower.includes("database") ||
-    lower.includes("can't reach database") ||
-    lower.includes("connection") ||
-    lower.includes("supabase.co") ||
-    lower.includes("neon.tech") ||
-    lower.includes("timeout") ||
-    lower.includes("p1001")
-  ) {
-    return "The employee portal is temporarily unavailable. Please try again in a minute.";
-  }
-
-  if (lower.includes("employee login required")) {
-    return "Please log in again to continue.";
-  }
-
-  if (lower.includes("inactive")) {
-    return "This employee account is inactive.";
-  }
-
-  return fallback;
-}
-
 async function requireEmployee() {
   const session = await getEmployeeSession();
   if (!session) throw new Error("Employee login required.");
@@ -989,25 +964,30 @@ export async function loginEmployee(input: { email: string; password: string }) 
       },
     };
   } catch (error) {
+    console.error("DEBUG: Original login error caught in employee-portal action:", error);
     if (isDatabaseUnavailable(error)) {
-      const localUser = await loginLocalEmployee(email, input.password);
-      if (localUser) {
-        await setEmployeeSession({
-          userId: localUser.id.toString(),
-          email: localUser.email,
-          name: localUser.name,
-          role: localUser.role,
-        });
-        return {
-          success: true,
-          redirectTo: "/employee/portal",
-          user: {
-            id: localUser.id,
+      try {
+        const localUser = await loginLocalEmployee(email, input.password);
+        if (localUser) {
+          await setEmployeeSession({
+            userId: localUser.id.toString(),
             email: localUser.email,
             name: localUser.name,
             role: localUser.role,
-          },
-        };
+          });
+          return {
+            success: true,
+            redirectTo: "/employee/portal",
+            user: {
+              id: localUser.id,
+              email: localUser.email,
+              name: localUser.name,
+              role: localUser.role,
+            },
+          };
+        }
+      } catch (fallbackError) {
+        console.error("Local employee fallback failed:", fallbackError);
       }
       return { success: false, error: "Invalid employee credentials." };
     }
@@ -1055,8 +1035,73 @@ async function getLocalEmployeePortalData(_sortResources = "newest", activeTab =
   const session = await getEmployeeSession();
   if (!session) throw new Error("Employee login required.");
 
-  const store = await readLocalEmployeeStore();
   const now = new Date();
+  
+  if (!localFallbackEnabled) {
+    // In production, we cannot read the local store json file.
+    // We just return an empty offline shell from the session cookie data.
+    const roleDefinitions = defaultRoleDefinitions();
+    return {
+      session,
+      mustChangePassword: false,
+      capabilities: capabilitiesForRole(session.role, roleDefinitions),
+      users: [{
+        id: Number(session.userId),
+        name: session.name,
+        email: session.email,
+        password: "",
+        role: session.role,
+        department: "General",
+        departmentId: null,
+        managerId: null,
+        title: "Team Member",
+        employeeType: "Full-time",
+        compensationStatus: "Paid",
+        status: "Active",
+        employmentStart: null,
+        employmentEnd: null,
+        workStartTime: "09:00",
+        workEndTime: "18:00",
+        lastLogin: now,
+        lastSeenAt: now,
+        createdAt: now,
+        updatedAt: now,
+        isOnline: true,
+        isWithinWorkHours: true,
+        durationLabel: "New",
+      }],
+      crmRecords: [],
+      crmSheets: [],
+      applicants: [],
+      meetings: [],
+      resources: [],
+      attendance: [],
+      leaveRequests: [],
+      tasks: [],
+      payrollInputs: [],
+      reviews: [],
+      documents: [],
+      announcements: [],
+      comments: [],
+      departments: [],
+      roleDefinitions,
+      notifications: [{
+        id: 1,
+        employeeId: Number(session.userId),
+        title: "Database Unavailable",
+        body: "The cloud database is currently unreachable. You are viewing the offline portal shell.",
+        targetRoles: "all",
+        readAt: null,
+        createdBy: null,
+        createdAt: now,
+      }],
+      expenses: [],
+      auditEvents: [],
+      chatMessages: [],
+    };
+  }
+
+  const store = await readLocalEmployeeStore();
   const userIndex = store.users.findIndex((employee) => employee.id === Number(session.userId));
   if (userIndex === -1 || store.users[userIndex].status !== "Active") {
     await clearEmployeeSession();

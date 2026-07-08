@@ -23,5 +23,5 @@ export function verifyPassword(password: string, storedPassword: string): boolea
     return timingSafeEqual(derivedHash, existingBuffer);
   }
 
-  return storedPassword === password;
+  return false;
 }

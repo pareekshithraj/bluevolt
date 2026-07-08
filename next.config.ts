@@ -2,6 +2,14 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // This project lives inside a OneDrive-synced folder. OneDrive locks and
+  // re-syncs files under .next/cache, corrupting webpack's persistent cache
+  // (missing *.pack.gz) and crashing dev with unhandledRejection. Disabling the
+  // filesystem cache in dev removes those files entirely and stops the crashes.
+  webpack: (config, { dev }) => {
+    if (dev) config.cache = false;
+    return config;
+  },
   eslint: {
     ignoreDuringBuilds: false,
   },

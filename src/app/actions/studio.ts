@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { getStudioSession, setStudioSession, clearStudioSession } from "@/lib/studio/session";
 
 export interface StudioProjectData {
   id: string;
@@ -21,7 +22,7 @@ const DEFAULT_PROJECTS = [
     status: "ACTIVE",
     latency: "4.8ms",
     url: "https://schools24.in",
-    passwordHash: "configured-in-admin",
+    passwordHash: "schools24",
   },
   {
     id: "project-nexus",
@@ -30,9 +31,17 @@ const DEFAULT_PROJECTS = [
     status: "PENDING",
     latency: "--",
     url: "https://bluevolt.group",
-    passwordHash: "configured-in-admin",
+    passwordHash: "nexus24",
   }
 ];
+
+async function requireStudioAdmin() {
+  const session = await getStudioSession();
+  if (!session) {
+    throw new Error("ACCESS DENIED. Studio admin session required.");
+  }
+  return session;
+}
 
 export async function authenticateStudioAdmin(input: {
   email: string;
@@ -50,11 +59,56 @@ export async function authenticateStudioAdmin(input: {
     return { success: false, message: "ACCESS DENIED. INVALID SECURITY SIGNATURE NODE." };
   }
 
+  await setStudioSession(email);
   return { success: true };
 }
 
-// Fetch all studio projects from the configured cloud database
+export async function logoutStudioAdmin(): Promise<{ success: boolean }> {
+  await clearStudioSession();
+  return { success: true };
+}
+
+// Fetch all studio projects for public site (hides passwordHash)
+export async function getPublicStudioProjects(): Promise<StudioProjectData[]> {
+  try {
+    const projects = await prisma.studioProject.findMany({
+      orderBy: { createdAt: "asc" }
+    });
+
+    return projects.map((p) => ({
+      id: p.id,
+      client: p.client,
+      name: p.name,
+      url: p.url,
+      passwordHash: "", // Hidden
+      status: p.status,
+      latency: p.latency
+    }));
+  } catch (error) {
+    console.error("Error fetching public studio projects:", error);
+    return [];
+  }
+}
+
+// Verify a project's password on the server side
+export async function verifyStudioProjectPassword(input: {
+  id: string;
+  passwordHash: string;
+}): Promise<{ success: boolean }> {
+  try {
+    const project = await prisma.studioProject.findUnique({
+      where: { id: input.id }
+    });
+    if (!project) return { success: false };
+    return { success: project.passwordHash === input.passwordHash };
+  } catch {
+    return { success: false };
+  }
+}
+
+// Fetch all studio projects from the configured cloud database (Admin version)
 export async function getStudioProjects(): Promise<StudioProjectData[]> {
+  await requireStudioAdmin();
   try {
     const projects = await prisma.studioProject.findMany({
       orderBy: { createdAt: "asc" }
@@ -71,12 +125,13 @@ export async function getStudioProjects(): Promise<StudioProjectData[]> {
     }));
   } catch (error) {
     console.error("Error fetching studio projects from cloud database:", error);
-    return [];
+    throw new Error("Database connection failed. Please check backend configuration.");
   }
 }
 
 // Manually seed/restore default projects in the database
 export async function seedStudioProjects(): Promise<{ success: boolean; message: string }> {
+  await requireStudioAdmin();
   try {
     // Delete any existing projects to prevent duplicate keys
     await prisma.studioProject.deleteMany({});
@@ -96,6 +151,7 @@ export async function seedStudioProjects(): Promise<{ success: boolean; message:
 
 // Add or update a studio project in the configured cloud database
 export async function saveStudioProject(data: StudioProjectData): Promise<{ success: boolean; message: string }> {
+  await requireStudioAdmin();
   try {
     await prisma.studioProject.upsert({
       where: { id: data.id },
@@ -129,8 +185,9 @@ export async function saveStudioProject(data: StudioProjectData): Promise<{ succ
 
 // Delete a studio project from the configured cloud database
 export async function deleteStudioProject(id: string): Promise<{ success: boolean; message: string }> {
+  await requireStudioAdmin();
   try {
-    await prisma.studioProject.delete({
+    await prisma.studioProject.deleteMany({
       where: { id }
     });
 

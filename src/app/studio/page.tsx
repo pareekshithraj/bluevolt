@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, Lock, Play, ShieldCheck, X, AlertTriangle } from "lucide-react";
-import { getStudioProjects, StudioProjectData } from "@/app/actions/studio";
+import { getPublicStudioProjects, verifyStudioProjectPassword, StudioProjectData } from "@/app/actions/studio";
 import styles from "./page.module.css";
 
 const DEFAULT_PROJECTS = [
@@ -39,7 +39,7 @@ export default function StudioPage() {
   // Load from Cloud Database on mount
   useEffect(() => {
     setMounted(true);
-    getStudioProjects().then((data) => {
+    getPublicStudioProjects().then((data) => {
       setProjects(data);
     }).catch((err) => {
       console.error("Failed to load studio projects from database, using fallback", err);
@@ -62,11 +62,12 @@ export default function StudioPage() {
     setSuccessMsg("");
   };
 
-  const handleVerifyPassword = (e: React.FormEvent) => {
+  const handleVerifyPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProject) return;
 
-    if (passwordInput === selectedProject.passwordHash) {
+    const result = await verifyStudioProjectPassword({ id: selectedProject.id, passwordHash: passwordInput });
+    if (result.success) {
       setSuccessMsg("Access granted. Redirecting...");
       setErrorMsg("");
       

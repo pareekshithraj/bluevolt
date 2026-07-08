@@ -341,21 +341,20 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
 
-  const [theme, setTheme] = useState<"dark" | "light">(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("bluevolt-theme");
-      if (saved === "light" || saved === "dark") return saved;
-    }
-    return "dark";
-  });
-
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [now, setNow] = useState(new Date());
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("bluevolt-sidebar-collapsed") === "true";
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("bluevolt-theme");
+    if (savedTheme === "light" || savedTheme === "dark") {
+      setTheme(savedTheme);
     }
-    return false;
-  });
+    const savedSidebar = localStorage.getItem("bluevolt-sidebar-collapsed");
+    if (savedSidebar === "true") {
+      setSidebarCollapsed(true);
+    }
+  }, []);
 
   const toggleSidebar = () => {
     setSidebarCollapsed((prev) => {
@@ -1893,6 +1892,8 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
             submit={submit}
             handleCellChange={handleCellChange}
             handleRowStatusChange={handleCrmRowStatusChange}
+            activeModal={activeModal}
+            setActiveModal={setActiveModal}
           />
         )}
 
@@ -1934,8 +1935,8 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                       <div className={styles.rowHeader}><strong>{document.title}</strong><span className={styles.pill}>{document.documentType}</span></div>
                       <p className={styles.muted}>{document.employeeName || "General document"} - {documentWorkflowStatus(document.notes)} - {cleanDocumentNotes(document.notes) || "Pending signatory action."}</p>
                       <div className={styles.toolbar}>
-                        <a className={styles.ghostButton} href={document.fileUrl} target="_blank" rel="noopener noreferrer">View File</a>
-                        <button className={styles.ghostButton} type="button" onClick={() => runAction(() => approveEmployeeDocument({ id: document.id.toString(), note: `Approved via portal by ${data.session.name}` }))}>Approve</button>
+                        <a className={styles.ghostButton} href={document.url} target="_blank" rel="noopener noreferrer">View File</a>
+                        <button className={styles.ghostButton} type="button" onClick={() => runAction(() => approveEmployeeDocument({ id: document.id.toString() }))}>Approve</button>
                         <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "document", id: document.id.toString(), status: "Rejected" }))}>Reject</button>
                       </div>
                     </div>
@@ -1952,9 +1953,9 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   {pendingCrmSheets.length === 0 ? <div className={styles.emptyState}>No CRM requests.</div> : pendingCrmSheets.map((sheet) => (
                     <div className={styles.row} key={`approval-crm-${sheet.id}`}>
                       <div className={styles.rowHeader}><strong>{sheet.title}</strong><span className={styles.pill}>{sheet.status}</span></div>
-                      <p className={styles.muted}>Role: {displayRole(sheet.ownerRole)} - Requested By: {sheet.employeeName}</p>
+                      <p className={styles.muted}>Role: {displayRole(sheet.ownerRole)} - Requested By: {sheet.requestedByName || "Unknown"}</p>
                       <div className={styles.toolbar}>
-                        <button className={styles.ghostButton} type="button" onClick={() => runAction(() => approveCrmSheet({ id: sheet.id.toString(), approvedBy: data.session.name }))}>Approve Upload</button>
+                        <button className={styles.ghostButton} type="button" onClick={() => runAction(() => approveCrmSheet({ id: sheet.id.toString(), status: "Approved" }))}>Approve Upload</button>
                         <button className={styles.ghostButton} type="button" onClick={() => runAction(() => updateEmployeeRecordStatus({ entityType: "crmSheet", id: sheet.id.toString(), status: "Rejected" }))}>Reject</button>
                       </div>
                     </div>
@@ -2246,9 +2247,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
               <div className={styles.vercelBreadcrumbProject}>Salary Management</div>
               <div style={{ flex: 1 }} />
               <button className={styles.ghostButton} type="button" onClick={() => downloadCsv("bluevolt-payroll.csv", payrollRows)} style={{ padding: "6px 12px", minHeight: "unset", fontSize: "0.85rem" }}>Export CSV</button>
-              {data.capabilities.canManagePayroll && (
-                {/* UNKNOWN FORM: unknown */}
-              )}
+              {data.capabilities.canManagePayroll && null}
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 20, marginBottom: 24 }}>
@@ -2301,9 +2300,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                     <span className={styles.pill} style={{ justifySelf: "flex-start", background: "var(--bg-shell)" }}>{payroll.payType}</span>
                     <strong style={{ fontSize: "1.05rem", fontFamily: "var(--font-mono)" }}>Rs. {formatPortalNumber(payroll.amount)}</strong>
                     <span className={payroll.status === "Paid" ? `${styles.pill} ${styles.pillSuccess}` : payroll.status === "Hold" ? `${styles.pill} ${styles.pillWarn}` : styles.pill}>{payroll.status}</span>
-                    {data.capabilities.canManagePayroll && (
-                {/* UNKNOWN FORM: unknown */}
-                    )}
+                    {data.capabilities.canManagePayroll && null}
                   </div>
                 ))}
               </div>
@@ -2360,9 +2357,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
             <div className={styles.vercelToolbar}>
               <div className={styles.vercelBreadcrumbProject}>Performance Reviews</div>
               <div style={{ flex: 1 }} />
-              {data.capabilities.canReviewPerformance && (
-                {/* UNKNOWN FORM: unknown */}
-              )}
+              {data.capabilities.canReviewPerformance && null}
             </div>
 
             <div className={styles.vercelProjectsGrid}>
@@ -2383,9 +2378,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                   </div>
                   <div className={styles.vercelProjectFooter} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                     <span className={review.status === "Final" ? `${styles.pill} ${styles.pillSuccess}` : styles.pill}>{review.status}</span>
-                    {data.capabilities.canReviewPerformance && (
-                {/* UNKNOWN FORM: unknown */}
-                    )}
+                    {data.capabilities.canReviewPerformance && null}
                   </div>
                 </div>
               ))}
@@ -2398,9 +2391,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
             <div className={styles.vercelToolbar}>
               <div className={styles.vercelBreadcrumbProject}>Employee Documents</div>
               <div style={{ flex: 1 }} />
-              {data.capabilities.canManageDocuments && (
-                {/* UNKNOWN FORM: unknown */}
-              )}
+              {data.capabilities.canManageDocuments && null}
             </div>
 
             <div className={styles.vercelProjectsGrid}>
@@ -2427,9 +2418,7 @@ export default function PortalClient({ initialData }: { initialData: PortalData 
                       <button className={styles.button} type="button" style={{ fontSize: "0.75rem", padding: "4px 10px", minHeight: "unset", background: "#10b981", color: "white", borderColor: "#10b981" }} onClick={() => runAction(() => approveEmployeeDocument({ id: document.id.toString() }))}>Approve</button>
                     )}
                     {data.capabilities.canManageDocuments && <button className={styles.ghostButton} type="button" style={{ fontSize: "0.75rem", padding: "4px 10px", minHeight: "unset", color: "#ef4444" }} onClick={() => runAction(() => deleteEmployeeEntity({ entityType: "document", id: document.id.toString() }))}>Delete</button>}
-                    {data.capabilities.canManageDocuments && (
-                {/* UNKNOWN FORM: unknown */}
-                    )}
+                    {data.capabilities.canManageDocuments && null}
                   </div>
                 </div>
               ))}

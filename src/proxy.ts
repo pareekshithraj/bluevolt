@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getEmployeeSessionCookieName, readEmployeeSessionToken } from "@/lib/employee/session";
+import { getEmployeeSessionCookieName, readEmployeeSessionToken, createEmployeeSessionToken } from "@/lib/employee/session";
 
 export const config = {
     matcher: [
@@ -91,7 +91,8 @@ export async function proxy(request: NextRequest) {
 
 
     if (url.pathname.startsWith("/employee")) {
-        const session = await readEmployeeSessionToken(request.cookies.get(getEmployeeSessionCookieName())?.value);
+        const token = request.cookies.get(getEmployeeSessionCookieName())?.value;
+        const session = await readEmployeeSessionToken(token);
         const isLoginPage = url.pathname === "/employee/login";
         const isProtectedEmployeeRoute = url.pathname.startsWith("/employee/portal");
 
@@ -101,6 +102,29 @@ export async function proxy(request: NextRequest) {
 
         if (isProtectedEmployeeRoute && !session) {
             return NextResponse.redirect(new URL("/employee/login", request.url));
+        }
+
+        // Silent session refresh if active in portal and session is expiring soon
+        if (session && !isLoginPage) {
+            const timeRemaining = session.expiresAt - Date.now();
+            const REFRESH_THRESHOLD_MS = 1000 * 60 * 30; // 30 minutes
+            if (timeRemaining > 0 && timeRemaining < REFRESH_THRESHOLD_MS) {
+                const response = NextResponse.next();
+                const newToken = await createEmployeeSessionToken({
+                    userId: session.userId,
+                    email: session.email,
+                    name: session.name,
+                    role: session.role,
+                });
+                response.cookies.set(getEmployeeSessionCookieName(), newToken, {
+                    httpOnly: true,
+                    sameSite: "strict",
+                    secure: process.env.NODE_ENV === "production",
+                    path: "/",
+                    maxAge: 60 * 60 * 2, // 2 hours
+                });
+                return response;
+            }
         }
     }
 

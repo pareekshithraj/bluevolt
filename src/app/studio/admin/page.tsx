@@ -19,6 +19,7 @@ import {
   deleteStudioProject, 
   seedStudioProjects,
   authenticateStudioAdmin,
+  logoutStudioAdmin,
   StudioProjectData 
 } from "@/app/actions/studio";
 import styles from "./page.module.css";
@@ -67,6 +68,7 @@ export default function AdminPage() {
   const [editingProject, setEditingProject] = useState<StudioProjectData | null>(null);
   const [formSuccess, setFormSuccess] = useState("");
   const [formError, setFormError] = useState("");
+  const [dbError, setDbError] = useState(false);
   
   // Toggle password visibility in dashboard lists
   const [visiblePasswords, setVisiblePasswords] = useState<{ [key: string]: boolean }>({});
@@ -75,24 +77,43 @@ export default function AdminPage() {
   useEffect(() => {
     setMounted(true);
     
-    // Check session authentication
-    const authSession = sessionStorage.getItem("bluevolt_admin_logged_in");
-    if (authSession === "true") {
-      setIsLoggedIn(true);
-    }
-    
-    // Load projects from cloud database
-    refreshProjects();
+    // Load projects and verify session
+    getStudioProjects()
+      .then((data) => {
+        setProjects(data);
+        setIsLoggedIn(true);
+        sessionStorage.setItem("bluevolt_admin_logged_in", "true");
+        setDbError(false);
+      })
+      .catch((err) => {
+        const errMsg = err instanceof Error ? err.message : String(err || "");
+        if (errMsg.includes("ACCESS DENIED")) {
+          setIsLoggedIn(false);
+          sessionStorage.removeItem("bluevolt_admin_logged_in");
+        } else {
+          setIsLoggedIn(true);
+          setProjects(DEFAULT_PROJECTS);
+          setDbError(true);
+        }
+      });
   }, []);
 
   const refreshProjects = () => {
     getStudioProjects()
       .then((data) => {
         setProjects(data);
+        setDbError(false);
       })
       .catch((err) => {
         console.error("Failed to load studio projects from database", err);
-        setProjects(DEFAULT_PROJECTS);
+        const errMsg = err instanceof Error ? err.message : String(err || "");
+        if (errMsg.includes("ACCESS DENIED")) {
+          setIsLoggedIn(false);
+          sessionStorage.removeItem("bluevolt_admin_logged_in");
+        } else {
+          setProjects(DEFAULT_PROJECTS);
+          setDbError(true);
+        }
       });
   };
 
@@ -106,12 +127,14 @@ export default function AdminPage() {
       setIsLoggedIn(true);
       setLoginEmail("");
       setLoginPassword("");
+      refreshProjects();
     } else {
       setLoginError(result.message || "Invalid email or password.");
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await logoutStudioAdmin();
     sessionStorage.removeItem("bluevolt_admin_logged_in");
     setIsLoggedIn(false);
     setEditingProject(null);
@@ -327,6 +350,13 @@ export default function AdminPage() {
                 </button>
               </div>
             </header>
+
+            {dbError && (
+              <div className={styles.errorBanner} style={{ marginBottom: "1.5rem", maxWidth: "100%" }}>
+                <AlertTriangle size={16} />
+                <span><strong>DATABASE OFFLINE:</strong> Cloud database connection is unavailable. Displaying local offline presets. Seeding or modifications will fail until connection is restored.</span>
+              </div>
+            )}
 
             {/* Dashboard Grid */}
             <div className={styles.dashGrid}>

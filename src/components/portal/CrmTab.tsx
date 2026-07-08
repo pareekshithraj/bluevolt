@@ -35,6 +35,8 @@ interface CrmTabProps {
   submit: <T extends Record<string, string>>(handler: (payload: T) => Promise<{ success: boolean; error?: string }>, cb?: () => void) => (e: React.FormEvent<HTMLFormElement>) => void;
   handleCellChange: (rowId: number, colName: string, newValue: string) => void;
   handleRowStatusChange: (rowId: number, status: string) => void;
+  activeModal: { id: string; payload?: unknown } | null;
+  setActiveModal: (modal: { id: string; payload?: unknown } | null) => void;
 }
 
 export default function CrmTab({
@@ -50,6 +52,8 @@ export default function CrmTab({
   submit,
   handleCellChange,
   handleRowStatusChange,
+  activeModal,
+  setActiveModal,
 }: CrmTabProps) {
   const [crmSheetPaste, setCrmSheetPaste] = useState("");
   const [crmSheetFileName, setCrmSheetFileName] = useState("");
@@ -585,7 +589,7 @@ export default function CrmTab({
         </Modal>
       )}
 
-      {activeModal?.id === "edit-crm-sheet" && activeModal.payload && (
+      {activeModal?.id === "edit-crm-sheet" && Boolean(activeModal.payload) && (
         <Modal title="Edit sheet access" subtitle="Update roles and users who can view/edit this sheet." onClose={() => setActiveModal(null)}>
                 <form className={styles.formGrid} onSubmit={submit(saveCrmSheetRequest, () => setActiveModal(null))}>
                   <input type="hidden" name="id" value={activeCrmSheet.id} />

@@ -2,6 +2,49 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeSession, hasEmployeeRole } from "@/lib/employee/session";
 import { hashPassword } from "@/lib/employee/password";
+import { EMPLOYEE_ROLES } from "@/lib/employee/roles";
+
+function parseCSV(text: string): string[][] {
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentVal = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+
+    if (char === '"') {
+      if (inQuotes && text[i + 1] === '"') {
+        currentVal += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      currentRow.push(currentVal);
+      currentVal = "";
+    } else if ((char === '\r' || char === '\n') && !inQuotes) {
+      if (char === '\r' && text[i + 1] === '\n') {
+        i++;
+      }
+      if (currentRow.length > 0 || currentVal !== "") {
+        currentRow.push(currentVal);
+        rows.push(currentRow.map((val) => val.trim()));
+        currentRow = [];
+        currentVal = "";
+      }
+    } else {
+      currentVal += char;
+    }
+  }
+
+  if (currentRow.length > 0 || currentVal !== "") {
+    currentRow.push(currentVal);
+    rows.push(currentRow.map((val) => val.trim()));
+  }
+
+  return rows;
+}
 
 export async function POST(request: NextRequest) {
   const session = await getEmployeeSession();
@@ -16,21 +59,43 @@ export async function POST(request: NextRequest) {
   }
 
   const text = await file.text();
-  const [headerLine, ...lines] = text.split(/\r?\n/).filter(Boolean);
-  const headers = headerLine.split(",").map((value) => value.trim());
+  const rows = parseCSV(text);
+  if (rows.length === 0) {
+    return NextResponse.json({ success: false, error: "Empty CSV file." }, { status: 400 });
+  }
+
+  const [headers, ...dataRows] = rows;
   let imported = 0;
 
-  for (const line of lines) {
-    const cells = line.split(",").map((value) => value.trim());
+  // Fetch all allowed roles from database + config
+  const allowedRoles = new Set<string>(EMPLOYEE_ROLES);
+  try {
+    const dbRoles = await prisma.$queryRaw<{ key: string }[]>`SELECT "key" FROM "EmployeeRoleDefinition"`;
+    if (Array.isArray(dbRoles)) {
+      for (const r of dbRoles) {
+        allowedRoles.add(r.key);
+      }
+    }
+  } catch (e) {
+    console.warn("Failed to fetch dynamic roles from database, using static roles", e);
+  }
+
+  for (const cells of dataRows) {
     const row = Object.fromEntries(headers.map((header, index) => [header, cells[index] || ""]));
     if (!row.email || !row.name) continue;
     const email = row.email.toLowerCase();
+
+    let role = (row.role || "").trim();
+    if (!allowedRoles.has(role)) {
+      role = "employee";
+    }
+
     const existing = await prisma.employeeUser.findUnique({ where: { email } });
     const employee = await prisma.employeeUser.upsert({
-      where: { email: row.email.toLowerCase() },
+      where: { email },
       update: {
         name: row.name,
-        role: row.role || "employee",
+        role: role,
         department: row.department || "General",
         title: row.title || "Team Member",
         employeeType: row.employeeType || "Full-time",
@@ -40,7 +105,7 @@ export async function POST(request: NextRequest) {
         name: row.name,
         email,
         password: hashPassword(row.password || "ChangeMe123!"),
-        role: row.role || "employee",
+        role: role,
         department: row.department || "General",
         title: row.title || "Team Member",
         employeeType: row.employeeType || "Full-time",

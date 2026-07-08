@@ -1,13 +1,10 @@
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 
-const EMPLOYEE_SESSION_COOKIE = "bluevolt_employee_session";
+const STUDIO_SESSION_COOKIE = "bluevolt_studio_session";
 const SESSION_DURATION_MS = 1000 * 60 * 60 * 2; // 2 hours
 
-export interface EmployeeSession {
-  userId: string;
+export interface StudioSession {
   email: string;
-  name: string;
-  role: string;
   expiresAt: number;
 }
 
@@ -54,20 +51,16 @@ async function sign(payload: string): Promise<string> {
   return toBase64Url(new Uint8Array(signature));
 }
 
-export function getEmployeeSessionCookieName(): string {
-  return EMPLOYEE_SESSION_COOKIE;
-}
-
-export async function createEmployeeSessionToken(input: Omit<EmployeeSession, "expiresAt">): Promise<string> {
-  const session: EmployeeSession = {
-    ...input,
+export async function createStudioSessionToken(email: string): Promise<string> {
+  const session: StudioSession = {
+    email,
     expiresAt: Date.now() + SESSION_DURATION_MS,
   };
   const payload = encode(JSON.stringify(session));
   return `${payload}.${await sign(payload)}`;
 }
 
-export async function readEmployeeSessionToken(token?: string): Promise<EmployeeSession | null> {
+export async function readStudioSessionToken(token?: string): Promise<StudioSession | null> {
   if (!token) return null;
   const [payload, signature] = token.split(".");
   if (!payload || !signature) return null;
@@ -76,7 +69,7 @@ export async function readEmployeeSessionToken(token?: string): Promise<Employee
   if (signature !== expected) return null;
 
   try {
-    const session = JSON.parse(decode(payload)) as EmployeeSession;
+    const session = JSON.parse(decode(payload)) as StudioSession;
     if (!session.expiresAt || session.expiresAt <= Date.now()) return null;
     return session;
   } catch {
@@ -84,26 +77,15 @@ export async function readEmployeeSessionToken(token?: string): Promise<Employee
   }
 }
 
-export async function getEmployeeSession(): Promise<EmployeeSession | null> {
+export async function getStudioSession(): Promise<StudioSession | null> {
   const cookieStore = await cookies();
-  let token = cookieStore.get(EMPLOYEE_SESSION_COOKIE)?.value;
-  if (!token) {
-    try {
-      const headersList = await headers();
-      const authHeader = headersList.get("authorization");
-      if (authHeader && authHeader.startsWith("Bearer ")) {
-        token = authHeader.substring(7);
-      }
-    } catch {
-      // In some environments headers() might throw
-    }
-  }
-  return readEmployeeSessionToken(token);
+  const token = cookieStore.get(STUDIO_SESSION_COOKIE)?.value;
+  return readStudioSessionToken(token);
 }
 
-export async function setEmployeeSession(input: Omit<EmployeeSession, "expiresAt">) {
+export async function setStudioSession(email: string) {
   const cookieStore = await cookies();
-  cookieStore.set(EMPLOYEE_SESSION_COOKIE, await createEmployeeSessionToken(input), {
+  cookieStore.set(STUDIO_SESSION_COOKIE, await createStudioSessionToken(email), {
     httpOnly: true,
     sameSite: "strict",
     secure: process.env.NODE_ENV === "production",
@@ -112,11 +94,7 @@ export async function setEmployeeSession(input: Omit<EmployeeSession, "expiresAt
   });
 }
 
-export async function clearEmployeeSession() {
+export async function clearStudioSession() {
   const cookieStore = await cookies();
-  cookieStore.delete(EMPLOYEE_SESSION_COOKIE);
-}
-
-export function hasEmployeeRole(session: EmployeeSession, roles: string[]): boolean {
-  return session.role === "super_admin" || roles.includes(session.role);
+  cookieStore.delete(STUDIO_SESSION_COOKIE);
 }

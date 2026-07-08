@@ -9,10 +9,10 @@ const globalForPrisma = globalThis as unknown as {
 
 function configuredDatabaseUrl(): string | undefined {
   return (
+    process.env.DATABASE_URL ||
     process.env.POSTGRES_PRISMA_URL ||
     process.env.POSTGRES_URL ||
-    process.env.POSTGRES_URL_NON_POOLING ||
-    process.env.DATABASE_URL
+    process.env.POSTGRES_URL_NON_POOLING
   )?.trim();
 }
 
@@ -48,12 +48,23 @@ const createPrismaClient = () => {
   if (!databaseUrl) return createUnavailablePrismaClient("DATABASE_URL is not set");
 
   const isServerless = Boolean(process.env.VERCEL || process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME);
-  const cleanConnectionString = databaseUrl.replace(/[\?&]sslmode=[^&]*/g, "");
+  let cleanConnectionString = databaseUrl;
+  try {
+    const parsedUrl = new URL(databaseUrl);
+    parsedUrl.searchParams.delete("sslmode");
+    parsedUrl.searchParams.delete("pgbouncer");
+    parsedUrl.searchParams.delete("connection_limit");
+    cleanConnectionString = parsedUrl.toString();
+  } catch (e) {
+    cleanConnectionString = databaseUrl.replace(/[\?&]sslmode=[^&]*/g, "");
+  }
+
+  const isSupabase = databaseUrl.includes("supabase.com") || databaseUrl.includes("supabase.co");
 
   const pool = new Pool({
     connectionString: cleanConnectionString,
-    ssl: { rejectUnauthorized: false },
-    connectionTimeoutMillis: 2000, // Detect connectivity issues quickly on serverless cold starts
+    ssl: isSupabase ? { rejectUnauthorized: true } : { rejectUnauthorized: false },
+    connectionTimeoutMillis: 15000, // Detect connectivity issues quickly on serverless cold starts
     idleTimeoutMillis: 15000,
     max: isServerless ? 1 : 5, // Limit to 1 connection per serverless function instance to prevent DB pool exhaustion
   });

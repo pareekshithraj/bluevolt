@@ -14,6 +14,7 @@ import {
   approveEmployeeDocument,
   saveDepartment,
 } from "@/app/actions/employee-portal";
+import { friendlyEmployeeError } from "@/lib/employee/errors";
 
 export async function POST(request: Request) {
   try {
@@ -70,8 +71,9 @@ export async function POST(request: Request) {
     console.error("Employee operation failed", error);
     const message = error instanceof Error ? error.message : String(error);
     const isLoginRequired = message.toLowerCase().includes("login required");
+    const friendlyError = friendlyEmployeeError(error, "Operation failed. Please try again.");
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: friendlyError },
       { status: isLoginRequired ? 401 : 500 }
     );
   }

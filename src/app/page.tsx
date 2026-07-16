@@ -7,6 +7,7 @@ import HoverCard from "@/components/HoverCard";
 import InteractiveConsole from "@/components/InteractiveConsole";
 import Reveal from "@/components/Reveal";
 import StatsSection from "@/components/StatsSection";
+import LandingSlideshow from "@/components/LandingSlideshow";
 
 const heroSignals = [
   {
@@ -253,6 +254,26 @@ export default async function Home() {
           </div>
         </section>
       </div>
+
+      {/* Slideshow Showcase */}
+      <section 
+        className="slideshow-section" 
+        style={{
+          position: "relative",
+          padding: "4rem 24px",
+          background: "#030712",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          width: "100%"
+        }}
+      >
+        <div style={{ maxWidth: "1200px", width: "100%", position: "relative", zIndex: 10 }}>
+          <Reveal delay={0.2}>
+            <LandingSlideshow />
+          </Reveal>
+        </div>
+      </section>
 
       <div
         className="showcase-section"

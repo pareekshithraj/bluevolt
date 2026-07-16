@@ -25,7 +25,8 @@ export default function LandingSlideshow() {
       style={{
         position: 'relative',
         width: '100%',
-        height: '480px',
+        aspectRatio: '16 / 9',
+        maxHeight: '500px',
         overflow: 'hidden',
         borderRadius: '18px',
         border: '1px solid rgba(255, 255, 255, 0.1)',

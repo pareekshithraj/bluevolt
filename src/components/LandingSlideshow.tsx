@@ -5,8 +5,9 @@ import React, { useState, useEffect } from 'react';
 export default function LandingSlideshow() {
   const images = [
     '/publishing-hero.png',
-    'https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&q=80&w=1200',
-    'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?auto=format&fit=crop&q=80&w=1200'
+    '/Assets/img_1.png',
+    '/Assets/img_2.png',
+    '/Assets/img_3.png'
   ];
 
   const [activeIndex, setActiveIndex] = useState(0);
